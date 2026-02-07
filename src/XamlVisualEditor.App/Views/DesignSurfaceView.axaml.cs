@@ -1,17 +1,23 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using System.ComponentModel;
+using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Designer.Rendering;
+using XamlVisualEditor.Designer.Adorners;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Xaml.Ast;
@@ -32,6 +38,11 @@ public sealed partial class DesignSurfaceView : UserControl
     private bool _rebuildPending;
     private Panel? _canvas;
     private Control? _rootControl;
+    private DesignAdornerLayer? _adornerLayer;
+    private IDesignItem? _hoveredItem;
+    private DragState? _dragState;
+    private MarqueeState? _marqueeState;
+    private readonly SurfaceDropHandler _surfaceDropHandler = new();
 
     public DesignSurfaceView()
     {
@@ -51,6 +62,12 @@ public sealed partial class DesignSurfaceView : UserControl
             OnDrop,
             Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
             true);
+
+        AddHandler(
+            KeyDownEvent,
+            OnKeyDown,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
+            true);
     }
 
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -58,9 +75,18 @@ public sealed partial class DesignSurfaceView : UserControl
         _isLoaded = true;
 
         _canvas = this.FindControl<Panel>("DesignCanvas");
+        _adornerLayer = this.FindControl<DesignAdornerLayer>("AdornerLayer");
         if (_canvas is not null)
         {
             _canvas.PointerPressed += OnCanvasPointerPressed;
+            _canvas.PointerMoved += OnCanvasPointerMoved;
+            _canvas.PointerReleased += OnCanvasPointerReleased;
+            _canvas.PointerCaptureLost += OnCanvasPointerCaptureLost;
+        }
+
+        if (_adornerLayer is not null && _canvas is not null)
+        {
+            _adornerLayer.SetSurfaceRoot(_canvas);
         }
 
         // If a rebuild was requested before we were loaded, do it now
@@ -77,6 +103,8 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_currentVm is not null)
         {
             _currentVm.RebuildRequested -= OnRebuildRequested;
+            _currentVm.Selection.SelectionChanged -= OnSelectionChanged;
+            _currentVm.PropertyChanged -= OnDesignSurfacePropertyChanged;
         }
 
         _currentVm = DataContext as DesignSurfaceViewModel;
@@ -84,6 +112,8 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_currentVm is not null)
         {
             _currentVm.RebuildRequested += OnRebuildRequested;
+            _currentVm.Selection.SelectionChanged += OnSelectionChanged;
+            _currentVm.PropertyChanged += OnDesignSurfacePropertyChanged;
 
             // Trigger an initial rebuild if we're already loaded
             if (_isLoaded)
@@ -94,6 +124,96 @@ public sealed partial class DesignSurfaceView : UserControl
             {
                 _rebuildPending = true;
             }
+        }
+    }
+
+    private void OnSelectionChanged(IReadOnlyList<IDesignItem> selected)
+    {
+        Guid? selectedId = null;
+        if (_currentVm?.Selection.PrimarySelection is DesignItem primary)
+        {
+            selectedId = primary.AstNodeId;
+        }
+
+        UpdateSelectedNode(selectedId);
+
+        if (_adornerLayer is null)
+        {
+            return;
+        }
+
+        _adornerLayer.UpdateSelection(selected);
+    }
+
+    private void OnDesignSurfacePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DesignSurfaceViewModel.IsEditMode))
+        {
+            ApplyEditMode();
+        }
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_currentVm is null || !_currentVm.IsEditMode)
+        {
+            return;
+        }
+
+        if (_currentVm.Selection.PrimarySelection is not DesignItem primary)
+        {
+            return;
+        }
+
+        bool resize = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+        double step = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 10 : 1;
+
+        switch (e.Key)
+        {
+            case Key.Left:
+                if (resize)
+                {
+                    ResizeSelection(primary, -step, 0);
+                }
+                else
+                {
+                    NudgeSelection(-step, 0);
+                }
+                e.Handled = true;
+                break;
+            case Key.Right:
+                if (resize)
+                {
+                    ResizeSelection(primary, step, 0);
+                }
+                else
+                {
+                    NudgeSelection(step, 0);
+                }
+                e.Handled = true;
+                break;
+            case Key.Up:
+                if (resize)
+                {
+                    ResizeSelection(primary, 0, -step);
+                }
+                else
+                {
+                    NudgeSelection(0, -step);
+                }
+                e.Handled = true;
+                break;
+            case Key.Down:
+                if (resize)
+                {
+                    ResizeSelection(primary, 0, step);
+                }
+                else
+                {
+                    NudgeSelection(0, step);
+                }
+                e.Handled = true;
+                break;
         }
     }
 
@@ -117,6 +237,11 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
+        if (_currentVm is null || !_currentVm.IsEditMode)
+        {
+            return;
+        }
+
         if (!e.DataTransfer.Contains(DesignerDataFormats.ToolboxItem))
         {
             return;
@@ -128,6 +253,11 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnDrop(object? sender, DragEventArgs e)
     {
+        if (_currentVm is null || !_currentVm.IsEditMode)
+        {
+            return;
+        }
+
         if (!e.DataTransfer.Contains(DesignerDataFormats.ToolboxItem))
         {
             return;
@@ -235,11 +365,30 @@ public sealed partial class DesignSurfaceView : UserControl
         canvas.Children.Add(tree);
         _rootControl = tree;
 
+        ApplyEditMode();
+
+        if (_adornerLayer is not null)
+        {
+            _adornerLayer.SetSurfaceRoot(canvas);
+            _adornerLayer.UpdateSelection(_currentVm?.Selection.SelectedItems ?? Array.Empty<IDesignItem>());
+        }
+
         // Build design item maps for selection sync
         Dictionary<Guid, DesignItem> itemMap = new();
         Dictionary<Control, DesignItem> controlMap = new();
         DesignItem rootItem = BuildDesignItemTree(doc.Root, tree, itemMap, controlMap);
         _currentVm?.SetDesignTree(rootItem, itemMap, controlMap);
+    }
+
+    private void ApplyEditMode()
+    {
+        if (_currentVm is null || _rootControl is null)
+        {
+            return;
+        }
+
+        bool interactive = !_currentVm.IsEditMode;
+        SetPreviewHitTest(_rootControl, interactive);
     }
 
     private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root)
@@ -342,30 +491,1145 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnCanvasPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_currentVm is null || _rootControl is null)
+        if (_currentVm is null || _rootControl is null || _canvas is null)
         {
             return;
+        }
+
+        if (!_currentVm.IsEditMode)
+        {
+            return;
+        }
+
+        Focus();
+
+        PointerPoint pointInfo = e.GetCurrentPoint(_canvas);
+        if (!pointInfo.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (_adornerLayer is not null)
+        {
+            ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(e.GetPosition(_adornerLayer));
+            if (handle is not null && _currentVm.Selection.PrimarySelection is DesignItem primary)
+            {
+                StartResize(primary, handle, e.GetPosition(_canvas));
+                e.Pointer.Capture(_canvas);
+                e.Handled = true;
+                return;
+            }
         }
 
         Point position = e.GetPosition(_rootControl);
         Control? hit = ControlFactory.HitTest(_rootControl, position);
         if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
         {
-            _currentVm.Selection.Select(item);
-            DesignerDocumentViewModel? docVm = FindDocumentViewModel();
-            if (docVm is not null)
-            {
-                docVm.SelectedNodeId = item.AstNodeId;
-            }
+            ApplySelection(item, e.KeyModifiers);
+            UpdateSelectedNode(item.AstNodeId);
+            StartDrag(item, e.GetPosition(_canvas));
+            e.Pointer.Capture(_canvas);
+            e.Handled = true;
             return;
         }
 
         _currentVm.Selection.ClearSelection();
-        DesignerDocumentViewModel? docVmClear = FindDocumentViewModel();
-        if (docVmClear is not null)
+        UpdateSelectedNode(null);
+        StartMarquee(e.GetPosition(_canvas), e.KeyModifiers);
+        e.Pointer.Capture(_canvas);
+    }
+
+    private void OnCanvasPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_currentVm is null || _rootControl is null || _canvas is null)
         {
-            docVmClear.SelectedNodeId = null;
+            return;
         }
+
+        if (!_currentVm.IsEditMode)
+        {
+            return;
+        }
+
+        if (_dragState is not null)
+        {
+            UpdateDragState(e.GetPosition(_canvas));
+            return;
+        }
+
+        if (_marqueeState is not null)
+        {
+            UpdateMarquee(e.GetPosition(_canvas));
+            return;
+        }
+
+        UpdateHover(e.GetPosition(_rootControl));
+    }
+
+    private void OnCanvasPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_currentVm is null || _canvas is null)
+        {
+            return;
+        }
+
+        if (_dragState is null)
+        {
+            if (_marqueeState is not null)
+            {
+                CommitMarqueeSelection();
+                _marqueeState = null;
+                e.Pointer.Capture(null);
+            }
+            return;
+        }
+
+        CommitDragState();
+        _dragState = null;
+        e.Pointer.Capture(null);
+    }
+
+    private void OnCanvasPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (_dragState is null)
+        {
+            if (_marqueeState is not null)
+            {
+                CommitMarqueeSelection();
+                _marqueeState = null;
+            }
+            return;
+        }
+
+        CommitDragState();
+        _dragState = null;
+    }
+
+    private void ApplySelection(DesignItem item, KeyModifiers modifiers)
+    {
+        bool toggle = modifiers.HasFlag(KeyModifiers.Control) || modifiers.HasFlag(KeyModifiers.Meta);
+        bool add = modifiers.HasFlag(KeyModifiers.Shift);
+
+        if (toggle)
+        {
+            _currentVm?.Selection.ToggleSelection(item);
+            return;
+        }
+
+        _currentVm?.Selection.Select(item, addToSelection: add);
+    }
+
+    private void UpdateSelectedNode(Guid? nodeId)
+    {
+        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+        if (docVm is not null)
+        {
+            docVm.SelectedNodeId = nodeId;
+        }
+    }
+
+    private void StartMarquee(Point startPoint, KeyModifiers modifiers)
+    {
+        _marqueeState = new MarqueeState
+        {
+            StartPoint = startPoint,
+            CurrentPoint = startPoint,
+            Additive = modifiers.HasFlag(KeyModifiers.Shift)
+        };
+
+        _adornerLayer?.UpdateSelectionBox(new Rect(startPoint, startPoint));
+    }
+
+    private void UpdateMarquee(Point currentPoint)
+    {
+        if (_marqueeState is null)
+        {
+            return;
+        }
+
+        _marqueeState.CurrentPoint = currentPoint;
+        Rect box = GetMarqueeRect(_marqueeState.StartPoint, _marqueeState.CurrentPoint);
+        _adornerLayer?.UpdateSelectionBox(box);
+    }
+
+    private void CommitMarqueeSelection()
+    {
+        if (_marqueeState is null || _currentVm is null || _canvas is null)
+        {
+            return;
+        }
+
+        Rect box = GetMarqueeRect(_marqueeState.StartPoint, _marqueeState.CurrentPoint);
+
+        if (!_marqueeState.Additive)
+        {
+            _currentVm.Selection.ClearSelection();
+        }
+
+        foreach (DesignItem item in _currentVm.ItemMap.Values)
+        {
+            Rect bounds = item.GetBoundsRelativeTo(_canvas);
+            if (bounds.Intersects(box))
+            {
+                _currentVm.Selection.Select(item, addToSelection: true);
+            }
+        }
+
+        _adornerLayer?.UpdateSelectionBox(null);
+    }
+
+    private static Rect GetMarqueeRect(Point start, Point end)
+    {
+        double x = Math.Min(start.X, end.X);
+        double y = Math.Min(start.Y, end.Y);
+        double w = Math.Abs(end.X - start.X);
+        double h = Math.Abs(end.Y - start.Y);
+        return new Rect(x, y, w, h);
+    }
+
+    private void NudgeSelection(double dx, double dy)
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        bool changed = false;
+        foreach (IDesignItem item in _currentVm.Selection.SelectedItems)
+        {
+            if (item is DesignItem designItem)
+            {
+                changed |= NudgeItem(designItem, dx, dy);
+            }
+        }
+
+        if (changed)
+        {
+            DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+            if (docVm?.SyncEngine.CurrentDocument is not null)
+            {
+                docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
+            }
+        }
+    }
+
+    private bool NudgeItem(DesignItem item, double dx, double dy)
+    {
+        if (item.VisualElement?.Parent is Canvas)
+        {
+            double left = GetAttachedDouble(item, "Canvas.Left") + dx;
+            double top = GetAttachedDouble(item, "Canvas.Top") + dy;
+            SetAttachedDouble(item, "Canvas.Left", left);
+            SetAttachedDouble(item, "Canvas.Top", top);
+            return true;
+        }
+
+        if (item.VisualElement?.Parent is Grid grid)
+        {
+            int row = GetAttachedInt(item, "Grid.Row");
+            int column = GetAttachedInt(item, "Grid.Column");
+            if (dy < 0)
+            {
+                row = Math.Max(0, row - 1);
+            }
+            else if (dy > 0)
+            {
+                row = Math.Min(grid.RowDefinitions.Count - 1, row + 1);
+            }
+
+            if (dx < 0)
+            {
+                column = Math.Max(0, column - 1);
+            }
+            else if (dx > 0)
+            {
+                column = Math.Min(grid.ColumnDefinitions.Count - 1, column + 1);
+            }
+
+            SetAttachedInt(item, "Grid.Row", row);
+            SetAttachedInt(item, "Grid.Column", column);
+            return true;
+        }
+
+        if (item.VisualElement?.Parent is DockPanel)
+        {
+            Avalonia.Controls.Dock dock = GetDockFromDirection(dx, dy);
+            SetAttachedString(item, "DockPanel.Dock", dock.ToString());
+            return true;
+        }
+
+        if (item.VisualElement?.Parent is StackPanel stack)
+        {
+            bool vertical = stack.Orientation == Orientation.Vertical;
+            int offset = vertical ? Math.Sign(dy) : Math.Sign(dx);
+            return MoveSibling(item, offset);
+        }
+
+        if (item.VisualElement?.Parent is WrapPanel or UniformGrid)
+        {
+            int offset = Math.Sign(dx != 0 ? dx : dy);
+            return MoveSibling(item, offset);
+        }
+
+        if (item.VisualElement?.Parent is Panel)
+        {
+            Thickness margin = GetThickness(item, "Margin");
+            Thickness updated = new(
+                margin.Left + dx,
+                margin.Top + dy,
+                margin.Right,
+                margin.Bottom);
+            SetThickness(item, "Margin", updated);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Avalonia.Controls.Dock GetDockFromDirection(double dx, double dy)
+    {
+        if (Math.Abs(dx) > Math.Abs(dy))
+        {
+            return dx < 0 ? Avalonia.Controls.Dock.Left : Avalonia.Controls.Dock.Right;
+        }
+
+        return dy < 0 ? Avalonia.Controls.Dock.Top : Avalonia.Controls.Dock.Bottom;
+    }
+
+    private bool MoveSibling(DesignItem item, int offset)
+    {
+        if (offset == 0)
+        {
+            return false;
+        }
+
+        if (item.Parent is not DesignItem parent)
+        {
+            return false;
+        }
+
+        ObservableCollection<MutableAstNode> siblings = parent.AstNode.Children;
+        int index = siblings.IndexOf(item.AstNode);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        int nextIndex = Math.Clamp(index + offset, 0, siblings.Count - 1);
+        if (nextIndex == index)
+        {
+            return false;
+        }
+
+        siblings.Move(index, nextIndex);
+        return true;
+    }
+
+    private void ResizeSelection(DesignItem primary, double deltaWidth, double deltaHeight)
+    {
+        double width = GetPropertyDouble(primary, "Width");
+        double height = GetPropertyDouble(primary, "Height");
+
+        width = Math.Max(1, width + deltaWidth);
+        height = Math.Max(1, height + deltaHeight);
+
+        SetPropertyDouble(primary, "Width", width);
+        SetPropertyDouble(primary, "Height", height);
+
+        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+        if (docVm?.SyncEngine.CurrentDocument is not null)
+        {
+            docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
+        }
+    }
+
+    private void UpdateHover(Point surfacePoint)
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        Control? hit = ControlFactory.HitTest(_rootControl!, surfacePoint);
+        IDesignItem? hover = null;
+        if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
+        {
+            hover = item;
+        }
+
+        if (!ReferenceEquals(_hoveredItem, hover))
+        {
+            _hoveredItem = hover;
+            _adornerLayer?.UpdateHover(_hoveredItem);
+        }
+    }
+
+    private void StartDrag(DesignItem item, Point startPoint)
+    {
+        DragState state = new()
+        {
+            Item = item,
+            StartPoint = startPoint,
+            LastPoint = startPoint,
+            Mode = GetDragMode(item),
+            StartBounds = item.GetBoundsRelativeTo(_canvas),
+            StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
+            StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
+        };
+
+        if (state.Mode == DragMode.Canvas && _currentVm is not null)
+        {
+            foreach (IDesignItem selection in _currentVm.Selection.SelectedItems)
+            {
+                if (selection is DesignItem selectedItem && selectedItem.VisualElement?.Parent is Canvas)
+                {
+                    double left = GetAttachedDouble(selectedItem, "Canvas.Left");
+                    double top = GetAttachedDouble(selectedItem, "Canvas.Top");
+                    state.StartPositions[selectedItem.AstNodeId] = new Point(left, top);
+                }
+            }
+
+            if (!state.StartPositions.ContainsKey(item.AstNodeId))
+            {
+                state.StartPositions[item.AstNodeId] = new Point(state.StartCanvasLeft, state.StartCanvasTop);
+            }
+        }
+
+        _dragState = state;
+    }
+
+    private void StartResize(DesignItem item, ResizeHandle handle, Point startPoint)
+    {
+        _dragState = new DragState
+        {
+            Item = item,
+            StartPoint = startPoint,
+            LastPoint = startPoint,
+            Mode = DragMode.Resize,
+            ResizeDirection = handle.Direction,
+            StartBounds = item.GetBoundsRelativeTo(_canvas),
+            StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
+            StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
+        };
+    }
+
+    private void UpdateDragState(Point currentPoint)
+    {
+        if (_dragState is null || _currentVm is null)
+        {
+            return;
+        }
+
+        Vector delta = currentPoint - _dragState.StartPoint;
+        if (!_dragState.HasMoved && delta.Length < 3)
+        {
+            return;
+        }
+
+        _dragState.HasMoved = true;
+        _dragState.LastPoint = currentPoint;
+
+        switch (_dragState.Mode)
+        {
+            case DragMode.Canvas:
+                UpdateCanvasMove(_dragState, currentPoint);
+                break;
+            case DragMode.Grid:
+                UpdateGridMove(_dragState, currentPoint);
+                break;
+            case DragMode.Dock:
+                UpdateDockMove(_dragState, currentPoint);
+                break;
+            case DragMode.Reorder:
+                UpdateReorderDrag(_dragState, currentPoint);
+                break;
+            case DragMode.Resize:
+                UpdateResize(_dragState, currentPoint);
+                break;
+        }
+    }
+
+    private void CommitDragState()
+    {
+        if (_dragState is null || _currentVm is null)
+        {
+            return;
+        }
+
+        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+        if (docVm is null)
+        {
+            return;
+        }
+
+        if (_dragState.Mode == DragMode.Reorder && _dragState.DropTarget is DesignItem target && _dragState.DropPosition.HasValue)
+        {
+            bool moved = _surfaceDropHandler.Move(_dragState.Item, target, _dragState.DropPosition.Value);
+            if (moved && docVm.SyncEngine.CurrentDocument is not null)
+            {
+                docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
+            }
+        }
+        else if (_dragState.HasMoved && docVm.SyncEngine.CurrentDocument is not null)
+        {
+            docVm.SyncEngine.NotifyAstChanged(docVm.SyncEngine.CurrentDocument, SyncSource.DesignSurface);
+        }
+
+        _adornerLayer?.UpdateDropTarget(null, null);
+        _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
+    }
+
+    private void UpdateCanvasMove(DragState state, Point currentPoint)
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        Vector delta = currentPoint - state.StartPoint;
+        double left = state.StartCanvasLeft + delta.X;
+        double top = state.StartCanvasTop + delta.Y;
+
+        IReadOnlyList<double> snapHorizontal = Array.Empty<double>();
+        IReadOnlyList<double> snapVertical = Array.Empty<double>();
+
+        if (_currentVm.SnapLinesEnabled)
+        {
+            (left, top, snapHorizontal, snapVertical) = ApplySnapLines(state, left, top);
+        }
+
+        if (_currentVm.SnapToGrid)
+        {
+            left = Snap(left, _currentVm.GridSnapSize);
+            top = Snap(top, _currentVm.GridSnapSize);
+        }
+
+        double dx = left - state.StartCanvasLeft;
+        double dy = top - state.StartCanvasTop;
+
+        if (state.StartPositions.Count > 0)
+        {
+            foreach ((Guid id, Point start) in state.StartPositions)
+            {
+                if (_currentVm.ItemMap.TryGetValue(id, out DesignItem? selectedItem) && selectedItem is not null)
+                {
+                    SetAttachedDouble(selectedItem, "Canvas.Left", start.X + dx);
+                    SetAttachedDouble(selectedItem, "Canvas.Top", start.Y + dy);
+                }
+            }
+        }
+        else
+        {
+            SetAttachedDouble(state.Item, "Canvas.Left", left);
+            SetAttachedDouble(state.Item, "Canvas.Top", top);
+        }
+
+        _adornerLayer?.UpdateSnapLines(snapHorizontal, snapVertical);
+    }
+
+    private void UpdateGridMove(DragState state, Point currentPoint)
+    {
+        if (state.Item.VisualElement?.Parent is not Grid grid)
+        {
+            return;
+        }
+
+        Point inGrid = TranslateFromCanvas(grid, currentPoint);
+        int row = FindGridIndex(grid.RowDefinitions, inGrid.Y, grid.Bounds.Height);
+        int column = FindGridIndex(grid.ColumnDefinitions, inGrid.X, grid.Bounds.Width);
+
+        SetAttachedInt(state.Item, "Grid.Row", row);
+        SetAttachedInt(state.Item, "Grid.Column", column);
+    }
+
+    private void UpdateDockMove(DragState state, Point currentPoint)
+    {
+        if (state.Item.VisualElement?.Parent is not DockPanel dockPanel)
+        {
+            return;
+        }
+
+        Point local = TranslateFromCanvas(dockPanel, currentPoint);
+        Rect bounds = dockPanel.Bounds;
+        double edge = Math.Min(bounds.Width, bounds.Height) * 0.2;
+
+          Avalonia.Controls.Dock dock = Avalonia.Controls.Dock.Left;
+        if (local.Y <= edge)
+        {
+             dock = Avalonia.Controls.Dock.Top;
+        }
+        else if (local.Y >= bounds.Height - edge)
+        {
+             dock = Avalonia.Controls.Dock.Bottom;
+        }
+        else if (local.X >= bounds.Width - edge)
+        {
+             dock = Avalonia.Controls.Dock.Right;
+        }
+
+        SetAttachedString(state.Item, "DockPanel.Dock", dock.ToString());
+    }
+
+    private void UpdateReorderDrag(DragState state, Point currentPoint)
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        Point rootPoint = TranslateToRoot(currentPoint);
+        Control? hit = ControlFactory.HitTest(_rootControl!, rootPoint);
+        if (hit is null || !_currentVm.ControlMap.TryGetValue(hit, out DesignItem? target) || target is null)
+        {
+            _adornerLayer?.UpdateDropTarget(null, null);
+            state.DropTarget = null;
+            state.DropPosition = null;
+            return;
+        }
+
+        if (ReferenceEquals(target, state.Item))
+        {
+            _adornerLayer?.UpdateDropTarget(null, null);
+            state.DropTarget = null;
+            state.DropPosition = null;
+            return;
+        }
+
+        DropPosition position = ComputeDropPosition(target, currentPoint);
+        state.DropTarget = target;
+        state.DropPosition = position;
+
+        Rect bounds = target.GetBoundsRelativeTo(_canvas);
+        _adornerLayer?.UpdateDropTarget(bounds, position);
+    }
+
+    private void UpdateResize(DragState state, Point currentPoint)
+    {
+        if (_currentVm is null || state.ResizeDirection is null)
+        {
+            return;
+        }
+
+        Vector delta = currentPoint - state.StartPoint;
+        Rect bounds = state.StartBounds;
+        double left = bounds.Left;
+        double top = bounds.Top;
+        double width = bounds.Width;
+        double height = bounds.Height;
+
+        switch (state.ResizeDirection.Value)
+        {
+            case ResizeDirection.Left:
+                left += delta.X;
+                width -= delta.X;
+                break;
+            case ResizeDirection.Right:
+                width += delta.X;
+                break;
+            case ResizeDirection.Top:
+                top += delta.Y;
+                height -= delta.Y;
+                break;
+            case ResizeDirection.Bottom:
+                height += delta.Y;
+                break;
+            case ResizeDirection.TopLeft:
+                left += delta.X;
+                width -= delta.X;
+                top += delta.Y;
+                height -= delta.Y;
+                break;
+            case ResizeDirection.TopRight:
+                width += delta.X;
+                top += delta.Y;
+                height -= delta.Y;
+                break;
+            case ResizeDirection.BottomLeft:
+                left += delta.X;
+                width -= delta.X;
+                height += delta.Y;
+                break;
+            case ResizeDirection.BottomRight:
+                width += delta.X;
+                height += delta.Y;
+                break;
+        }
+
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+
+        if (_currentVm.SnapToGrid)
+        {
+            width = Snap(width, _currentVm.GridSnapSize);
+            height = Snap(height, _currentVm.GridSnapSize);
+        }
+
+        SetPropertyDouble(state.Item, "Width", width);
+        SetPropertyDouble(state.Item, "Height", height);
+
+        if (state.Item.VisualElement?.Parent is Canvas)
+        {
+            SetAttachedDouble(state.Item, "Canvas.Left", left);
+            SetAttachedDouble(state.Item, "Canvas.Top", top);
+        }
+    }
+
+    private DropPosition ComputeDropPosition(DesignItem target, Point surfacePoint)
+    {
+        Rect bounds = target.GetBoundsRelativeTo(_canvas);
+        double inset = Math.Min(bounds.Width, bounds.Height) * 0.25;
+
+        if (surfacePoint.Y <= bounds.Top + inset || surfacePoint.X <= bounds.Left + inset)
+        {
+            return DropPosition.Before;
+        }
+
+        if (surfacePoint.Y >= bounds.Bottom - inset || surfacePoint.X >= bounds.Right - inset)
+        {
+            return DropPosition.After;
+        }
+
+        return DropPosition.Inside;
+    }
+
+    private DragMode GetDragMode(DesignItem item)
+    {
+        Control? parent = item.VisualElement?.Parent as Control;
+        return parent switch
+        {
+            Canvas => DragMode.Canvas,
+            Grid => DragMode.Grid,
+            DockPanel => DragMode.Dock,
+            StackPanel => DragMode.Reorder,
+            WrapPanel => DragMode.Reorder,
+            UniformGrid => DragMode.Reorder,
+            Panel => DragMode.Reorder,
+            _ => DragMode.Reorder
+        };
+    }
+
+    private static int FindGridIndex(IReadOnlyList<RowDefinition> definitions, double position, double totalSize)
+    {
+        if (definitions.Count == 0)
+        {
+            return 0;
+        }
+
+        double offset = 0;
+        for (int i = 0; i < definitions.Count; i++)
+        {
+            double size = definitions[i].ActualHeight;
+            if (size <= 0)
+            {
+                size = totalSize / definitions.Count;
+            }
+
+            if (position <= offset + size)
+            {
+                return i;
+            }
+
+            offset += size;
+        }
+
+        return definitions.Count - 1;
+    }
+
+    private static int FindGridIndex(IReadOnlyList<ColumnDefinition> definitions, double position, double totalSize)
+    {
+        if (definitions.Count == 0)
+        {
+            return 0;
+        }
+
+        double offset = 0;
+        for (int i = 0; i < definitions.Count; i++)
+        {
+            double size = definitions[i].ActualWidth;
+            if (size <= 0)
+            {
+                size = totalSize / definitions.Count;
+            }
+
+            if (position <= offset + size)
+            {
+                return i;
+            }
+
+            offset += size;
+        }
+
+        return definitions.Count - 1;
+    }
+
+    private void SetPreviewHitTest(Control root, bool interactive)
+    {
+        root.IsHitTestVisible = interactive;
+
+        switch (root)
+        {
+            case Panel panel:
+                foreach (Control child in panel.Children.OfType<Control>())
+                {
+                    SetPreviewHitTest(child, interactive);
+                }
+                break;
+            case Decorator decorator when decorator.Child is Control child:
+                SetPreviewHitTest(child, interactive);
+                break;
+            case ContentControl contentControl when contentControl.Content is Control contentChild:
+                SetPreviewHitTest(contentChild, interactive);
+                break;
+            case ItemsControl itemsControl when itemsControl.ItemsSource is IEnumerable items:
+                foreach (object? item in items)
+                {
+                    if (item is Control itemControl)
+                    {
+                        SetPreviewHitTest(itemControl, interactive);
+                    }
+                }
+                break;
+        }
+    }
+
+    private static double Snap(double value, double gridSize)
+    {
+        if (gridSize <= 0)
+        {
+            return value;
+        }
+
+        return Math.Round(value / gridSize) * gridSize;
+    }
+
+    private (double left, double top, IReadOnlyList<double> snapHorizontal, IReadOnlyList<double> snapVertical)
+        ApplySnapLines(DragState state, double left, double top)
+    {
+        if (_currentVm is null || _canvas is null)
+        {
+            return (left, top, Array.Empty<double>(), Array.Empty<double>());
+        }
+
+        const double threshold = 6.0;
+        double width = state.StartBounds.Width;
+        double height = state.StartBounds.Height;
+
+        List<double> candidateX = new();
+        List<double> candidateY = new();
+
+        foreach (DesignItem item in _currentVm.ItemMap.Values)
+        {
+            if (ReferenceEquals(item, state.Item))
+            {
+                continue;
+            }
+
+            if (state.StartPositions.ContainsKey(item.AstNodeId))
+            {
+                continue;
+            }
+
+            Rect bounds = item.GetBoundsRelativeTo(_canvas);
+            candidateX.Add(bounds.Left);
+            candidateX.Add(bounds.Center.X);
+            candidateX.Add(bounds.Right);
+            candidateY.Add(bounds.Top);
+            candidateY.Add(bounds.Center.Y);
+            candidateY.Add(bounds.Bottom);
+        }
+
+        double snappedLeft = left;
+        double snappedTop = top;
+        List<double> snapVertical = new();
+        List<double> snapHorizontal = new();
+
+        if (candidateX.Count > 0)
+        {
+            (double offset, double line) = FindSnapOffset(
+                new[] { left, left + width / 2, left + width },
+                candidateX,
+                threshold);
+            if (Math.Abs(offset) > 0)
+            {
+                snappedLeft = left + offset;
+                snapVertical.Add(line);
+            }
+        }
+
+        if (candidateY.Count > 0)
+        {
+            (double offset, double line) = FindSnapOffset(
+                new[] { top, top + height / 2, top + height },
+                candidateY,
+                threshold);
+            if (Math.Abs(offset) > 0)
+            {
+                snappedTop = top + offset;
+                snapHorizontal.Add(line);
+            }
+        }
+
+        return (snappedLeft, snappedTop, snapHorizontal, snapVertical);
+    }
+
+    private static (double offset, double line) FindSnapOffset(
+        IReadOnlyList<double> primaryLines,
+        IReadOnlyList<double> candidateLines,
+        double threshold)
+    {
+        double bestDelta = 0;
+        double bestLine = 0;
+        double bestDistance = threshold + 1;
+
+        foreach (double primary in primaryLines)
+        {
+            foreach (double candidate in candidateLines)
+            {
+                double delta = candidate - primary;
+                double distance = Math.Abs(delta);
+                if (distance <= threshold && distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestDelta = delta;
+                    bestLine = candidate;
+                }
+            }
+        }
+
+        return bestDistance <= threshold ? (bestDelta, bestLine) : (0, 0);
+    }
+
+    private static double GetAttachedDouble(DesignItem item, string propertyName)
+    {
+        string? raw = item.AstNode.GetPropertyValue(propertyName);
+        if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+        {
+            return value;
+        }
+
+        if (item.VisualElement is Control control)
+        {
+            return propertyName switch
+            {
+                "Canvas.Left" => double.IsNaN(Canvas.GetLeft(control)) ? 0 : Canvas.GetLeft(control),
+                "Canvas.Top" => double.IsNaN(Canvas.GetTop(control)) ? 0 : Canvas.GetTop(control),
+                _ => 0
+            };
+        }
+
+        return 0;
+    }
+
+    private static int GetAttachedInt(DesignItem item, string propertyName)
+    {
+        string? raw = item.AstNode.GetPropertyValue(propertyName);
+        if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+        {
+            return value;
+        }
+
+        if (item.VisualElement is Control control)
+        {
+            return propertyName switch
+            {
+                "Grid.Row" => Grid.GetRow(control),
+                "Grid.Column" => Grid.GetColumn(control),
+                _ => 0
+            };
+        }
+
+        return 0;
+    }
+
+    private static void SetAttachedDouble(DesignItem item, string propertyName, double value)
+    {
+        string text = value.ToString(CultureInfo.InvariantCulture);
+        item.AstNode.SetPropertyValue(propertyName, text);
+
+        if (item.VisualElement is Control control)
+        {
+            switch (propertyName)
+            {
+                case "Canvas.Left":
+                    Canvas.SetLeft(control, value);
+                    break;
+                case "Canvas.Top":
+                    Canvas.SetTop(control, value);
+                    break;
+            }
+        }
+    }
+
+    private static void SetAttachedInt(DesignItem item, string propertyName, int value)
+    {
+        item.AstNode.SetPropertyValue(propertyName, value.ToString(CultureInfo.InvariantCulture));
+
+        if (item.VisualElement is Control control)
+        {
+            switch (propertyName)
+            {
+                case "Grid.Row":
+                    Grid.SetRow(control, value);
+                    break;
+                case "Grid.Column":
+                    Grid.SetColumn(control, value);
+                    break;
+            }
+        }
+    }
+
+    private static void SetAttachedString(DesignItem item, string propertyName, string value)
+    {
+        item.AstNode.SetPropertyValue(propertyName, value);
+
+        if (item.VisualElement is Control control && propertyName == "DockPanel.Dock" && Enum.TryParse(value, out Avalonia.Controls.Dock dock))
+        {
+            DockPanel.SetDock(control, dock);
+        }
+    }
+
+    private static void SetPropertyDouble(DesignItem item, string propertyName, double value)
+    {
+        string text = value.ToString(CultureInfo.InvariantCulture);
+        item.AstNode.SetPropertyValue(propertyName, text);
+
+        if (item.VisualElement is Control control)
+        {
+            switch (propertyName)
+            {
+                case "Width":
+                    control.Width = value;
+                    break;
+                case "Height":
+                    control.Height = value;
+                    break;
+            }
+        }
+    }
+
+    private static double GetPropertyDouble(DesignItem item, string propertyName)
+    {
+        string? raw = item.AstNode.GetPropertyValue(propertyName);
+        if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+        {
+            return value;
+        }
+
+        if (item.VisualElement is Control control)
+        {
+            return propertyName switch
+            {
+                "Width" => double.IsNaN(control.Width) ? control.Bounds.Width : control.Width,
+                "Height" => double.IsNaN(control.Height) ? control.Bounds.Height : control.Height,
+                _ => 0
+            };
+        }
+
+        return 0;
+    }
+
+    private static Thickness GetThickness(DesignItem item, string propertyName)
+    {
+        string? raw = item.AstNode.GetPropertyValue(propertyName);
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+            string[] parts = raw.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 1 && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double uniform))
+            {
+                return new Thickness(uniform);
+            }
+            if (parts.Length == 2 &&
+                double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double h) &&
+                double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double v))
+            {
+                return new Thickness(h, v, h, v);
+            }
+            if (parts.Length == 4 &&
+                double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double l) &&
+                double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double t) &&
+                double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double r) &&
+                double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out double b))
+            {
+                return new Thickness(l, t, r, b);
+            }
+        }
+
+        if (item.VisualElement is Control control)
+        {
+            return control.Margin;
+        }
+
+        return default;
+    }
+
+    private static void SetThickness(DesignItem item, string propertyName, Thickness thickness)
+    {
+        string text = string.Join(",",
+            thickness.Left.ToString(CultureInfo.InvariantCulture),
+            thickness.Top.ToString(CultureInfo.InvariantCulture),
+            thickness.Right.ToString(CultureInfo.InvariantCulture),
+            thickness.Bottom.ToString(CultureInfo.InvariantCulture));
+
+        item.AstNode.SetPropertyValue(propertyName, text);
+
+        if (item.VisualElement is Control control && propertyName == "Margin")
+        {
+            control.Margin = thickness;
+        }
+    }
+
+    private Point TranslateFromCanvas(Control target, Point canvasPoint)
+    {
+        if (_canvas is null)
+        {
+            return canvasPoint;
+        }
+
+        Point? origin = target.TranslatePoint(new Point(0, 0), _canvas);
+        return origin.HasValue ? canvasPoint - origin.Value : canvasPoint;
+    }
+
+    private Point TranslateToRoot(Point canvasPoint)
+    {
+        if (_canvas is null || _rootControl is null)
+        {
+            return canvasPoint;
+        }
+
+        Point? origin = _rootControl.TranslatePoint(new Point(0, 0), _canvas);
+        return origin.HasValue ? canvasPoint - origin.Value : canvasPoint;
+    }
+
+    private sealed class DragState
+    {
+        public required DesignItem Item { get; init; }
+        public required Point StartPoint { get; init; }
+        public required Rect StartBounds { get; init; }
+        public required DragMode Mode { get; init; }
+        public Point LastPoint { get; set; }
+        public bool HasMoved { get; set; }
+        public ResizeDirection? ResizeDirection { get; init; }
+        public double StartCanvasLeft { get; init; }
+        public double StartCanvasTop { get; init; }
+        public DesignItem? DropTarget { get; set; }
+        public DropPosition? DropPosition { get; set; }
+        public Dictionary<Guid, Point> StartPositions { get; } = new();
+    }
+
+    private sealed class MarqueeState
+    {
+        public required Point StartPoint { get; init; }
+        public required Point CurrentPoint { get; set; }
+        public bool Additive { get; init; }
+    }
+
+    private enum DragMode
+    {
+        Canvas,
+        Grid,
+        Dock,
+        Reorder,
+        Resize
     }
 
     private static DesignItem BuildDesignItemTree(
