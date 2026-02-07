@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Dock.Model.ReactiveUI" />
+    <PackageReference Include="Dock.Serializer.SystemTextJson" />
     <PackageReference Include="ReactiveUI" />
     <PackageReference Include="ReactiveUI.Fody" />
     <PackageReference Include="System.Reactive" />

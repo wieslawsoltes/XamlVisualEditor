@@ -9,6 +9,7 @@ using Dock.Model.ReactiveUI.Controls;
 using Dock.Serializer.SystemTextJson;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
+using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.Shell;
@@ -18,7 +19,13 @@ namespace XamlVisualEditor.Shell;
 /// </summary>
 public sealed class ToolboxTool : Tool
 {
-    public ToolboxViewModel ToolboxViewModel { get; }
+    public ToolboxViewModel? ToolboxViewModel { get; set; }
+
+    public ToolboxTool()
+    {
+        Id = "Toolbox";
+        Title = "Toolbox";
+    }
 
     public ToolboxTool(ToolboxViewModel toolboxViewModel)
     {
@@ -29,14 +36,42 @@ public sealed class ToolboxTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the solution explorer panel.
+/// </summary>
+public sealed class SolutionExplorerTool : Tool
+{
+    public SolutionExplorerViewModel? SolutionExplorerViewModel { get; set; }
+
+    public SolutionExplorerTool()
+    {
+        Id = "SolutionExplorer";
+        Title = "Solution Explorer";
+    }
+
+    public SolutionExplorerTool(SolutionExplorerViewModel solutionExplorerViewModel)
+    {
+        SolutionExplorerViewModel = solutionExplorerViewModel;
+        Id = "SolutionExplorer";
+        Title = "Solution Explorer";
+    }
+}
+
+/// <summary>
 /// Dock tool for the property editor panel.
 /// </summary>
 public sealed class PropertyEditorTool : Tool
 {
-    public string ToolTitle => "Properties";
+    public MainWindowViewModel? MainViewModel { get; set; }
 
     public PropertyEditorTool()
     {
+        Id = "Properties";
+        Title = "Properties";
+    }
+
+    public PropertyEditorTool(MainWindowViewModel mainViewModel)
+    {
+        MainViewModel = mainViewModel;
         Id = "Properties";
         Title = "Properties";
     }
@@ -47,8 +82,17 @@ public sealed class PropertyEditorTool : Tool
 /// </summary>
 public sealed class VisualTreeTool : Tool
 {
+    public MainWindowViewModel? MainViewModel { get; set; }
+
     public VisualTreeTool()
     {
+        Id = "VisualTree";
+        Title = "Visual Tree";
+    }
+
+    public VisualTreeTool(MainWindowViewModel mainViewModel)
+    {
+        MainViewModel = mainViewModel;
         Id = "VisualTree";
         Title = "Visual Tree";
     }
@@ -59,8 +103,17 @@ public sealed class VisualTreeTool : Tool
 /// </summary>
 public sealed class LogicalTreeTool : Tool
 {
+    public MainWindowViewModel? MainViewModel { get; set; }
+
     public LogicalTreeTool()
     {
+        Id = "LogicalTree";
+        Title = "Logical Tree";
+    }
+
+    public LogicalTreeTool(MainWindowViewModel mainViewModel)
+    {
+        MainViewModel = mainViewModel;
         Id = "LogicalTree";
         Title = "Logical Tree";
     }
@@ -71,7 +124,13 @@ public sealed class LogicalTreeTool : Tool
 /// </summary>
 public sealed class OutputTool : Tool
 {
-    public OutputViewModel OutputViewModel { get; }
+    public OutputViewModel? OutputViewModel { get; set; }
+
+    public OutputTool()
+    {
+        Id = "Output";
+        Title = "Output";
+    }
 
     public OutputTool(OutputViewModel outputViewModel)
     {
@@ -86,8 +145,17 @@ public sealed class OutputTool : Tool
 /// </summary>
 public sealed class CollaborationTool : Tool
 {
+    public CollaborationPanelViewModel? CollaborationViewModel { get; set; }
+
     public CollaborationTool()
     {
+        Id = "Collaboration";
+        Title = "Collaboration";
+    }
+
+    public CollaborationTool(CollaborationPanelViewModel collaborationViewModel)
+    {
+        CollaborationViewModel = collaborationViewModel;
         Id = "Collaboration";
         Title = "Collaboration";
     }
@@ -105,6 +173,7 @@ public sealed class DesignerDocument : Document
         DocumentViewModel = documentViewModel;
         Id = documentViewModel.FilePath;
         Title = documentViewModel.FileName;
+        CanClose = true;
     }
 }
 
@@ -127,15 +196,16 @@ public sealed class XamlEditorDockFactory : Factory
     {
         // Left tools: Toolbox
         ToolboxTool toolboxTool = new(_mainVm.Toolbox);
+        SolutionExplorerTool solutionExplorerTool = new(_mainVm.SolutionExplorer);
 
         // Right tools: Properties, Visual Tree, Logical Tree
-        PropertyEditorTool propertyTool = new();
-        VisualTreeTool visualTreeTool = new();
-        LogicalTreeTool logicalTreeTool = new();
+        PropertyEditorTool propertyTool = new(_mainVm);
+        VisualTreeTool visualTreeTool = new(_mainVm);
+        LogicalTreeTool logicalTreeTool = new(_mainVm);
 
         // Bottom tools: Output, Collaboration
         OutputTool outputTool = new(_mainVm.Output);
-        CollaborationTool collabTool = new();
+        CollaborationTool collabTool = new(_mainVm.Collaboration);
 
         // Left tool dock
         ToolDock leftToolDock = new()
@@ -144,7 +214,7 @@ public sealed class XamlEditorDockFactory : Factory
             Title = "Left Tools",
             Proportion = 0.2,
             ActiveDockable = toolboxTool,
-            VisibleDockables = CreateList<IDockable>(toolboxTool),
+            VisibleDockables = CreateList<IDockable>(toolboxTool, solutionExplorerTool),
             Alignment = Alignment.Left
         };
 
@@ -218,9 +288,57 @@ public sealed class XamlEditorDockFactory : Factory
     }
 
     /// <summary>
+    /// Ensures deserialized tools have their view model references wired.
+    /// </summary>
+    public void ConfigureToolViewModels(IRootDock rootDock)
+    {
+        ToolboxTool? toolboxTool = FindDockable<ToolboxTool>(rootDock, "Toolbox");
+        if (toolboxTool is not null)
+        {
+            toolboxTool.ToolboxViewModel = _mainVm.Toolbox;
+        }
+
+        SolutionExplorerTool? solutionTool = FindDockable<SolutionExplorerTool>(rootDock, "SolutionExplorer");
+        if (solutionTool is not null)
+        {
+            solutionTool.SolutionExplorerViewModel = _mainVm.SolutionExplorer;
+        }
+
+        PropertyEditorTool? propertyTool = FindDockable<PropertyEditorTool>(rootDock, "Properties");
+        if (propertyTool is not null)
+        {
+            propertyTool.MainViewModel = _mainVm;
+        }
+
+        VisualTreeTool? visualTreeTool = FindDockable<VisualTreeTool>(rootDock, "VisualTree");
+        if (visualTreeTool is not null)
+        {
+            visualTreeTool.MainViewModel = _mainVm;
+        }
+
+        LogicalTreeTool? logicalTreeTool = FindDockable<LogicalTreeTool>(rootDock, "LogicalTree");
+        if (logicalTreeTool is not null)
+        {
+            logicalTreeTool.MainViewModel = _mainVm;
+        }
+
+        OutputTool? outputTool = FindDockable<OutputTool>(rootDock, "Output");
+        if (outputTool is not null)
+        {
+            outputTool.OutputViewModel = _mainVm.Output;
+        }
+
+        CollaborationTool? collabTool = FindDockable<CollaborationTool>(rootDock, "Collaboration");
+        if (collabTool is not null)
+        {
+            collabTool.CollaborationViewModel = _mainVm.Collaboration;
+        }
+    }
+
+    /// <summary>
     /// Adds a document to the document dock.
     /// </summary>
-    public void AddDocument(IRootDock rootDock, DesignerDocumentViewModel documentVm)
+    public DesignerDocument? AddDocument(IRootDock rootDock, DesignerDocumentViewModel documentVm)
     {
         DesignerDocument doc = new(documentVm);
 
@@ -231,10 +349,13 @@ public sealed class XamlEditorDockFactory : Factory
             AddDockable(docDock, doc);
             SetActiveDockable(doc);
             SetFocusedDockable(docDock, doc);
+            return doc;
         }
+
+        return null;
     }
 
-    private static T? FindDockable<T>(IDockable dockable, string id) where T : class, IDockable
+    public static T? FindDockable<T>(IDockable dockable, string id) where T : class, IDockable
     {
         if (dockable is T typed && dockable.Id == id)
         {
