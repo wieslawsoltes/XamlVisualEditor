@@ -3,6 +3,7 @@
     xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
     xmlns:v="using:XamlVisualEditor.App.Views"
     xmlns:input="using:Avalonia.Input"
+    xmlns:dock="using:Dock.Avalonia.Controls"
         x:Class="XamlVisualEditor.App.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Name="MainWin"
@@ -131,99 +132,9 @@
             </DockPanel>
         </Border>
 
-        <!-- Main Content: Split layout -->
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200" MinWidth="100" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="280" MinWidth="150" />
-            </Grid.ColumnDefinitions>
-
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="200" MinHeight="100" />
-            </Grid.RowDefinitions>
-
-            <!-- Left Panel: Toolbox + Solution Explorer -->
-            <Border Grid.Column="0" Grid.RowSpan="3"
-                    IsVisible="{CompiledBinding IsToolboxVisible}"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="0,0,1,0">
-                <TabControl>
-                    <TabItem Header="Toolbox">
-                        <v:ToolboxView DataContext="{CompiledBinding Toolbox}" />
-                    </TabItem>
-                    <TabItem Header="Solution">
-                        <v:SolutionExplorerView DataContext="{CompiledBinding SolutionExplorer}" />
-                    </TabItem>
-                </TabControl>
-            </Border>
-
-            <GridSplitter Grid.Column="1" Grid.RowSpan="3" Width="4" />
-
-            <!-- Center Panel: Document Area -->
-            <TabControl Grid.Column="2" Grid.Row="0"
-                        ItemsSource="{CompiledBinding Documents}"
-                        SelectedItem="{CompiledBinding ActiveDocument, Mode=TwoWay}">
-                <TabControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:DesignerDocumentViewModel">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="{CompiledBinding Title}" />
-                            <Button Content="✕" Padding="2" FontSize="10"
-                                    Command="{CompiledBinding #MainWin.((vm:MainWindowViewModel)DataContext).CloseDocumentCommand}"
-                                    CommandParameter="{CompiledBinding}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </TabControl.ItemTemplate>
-                <TabControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:DesignerDocumentViewModel">
-                        <v:DesignerDocumentView />
-                    </DataTemplate>
-                </TabControl.ContentTemplate>
-            </TabControl>
-
-            <GridSplitter Grid.Column="3" Grid.RowSpan="3" Width="4" />
-
-            <!-- Right Panel: Properties + Trees -->
-            <Border Grid.Column="4" Grid.RowSpan="3"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="1,0,0,0">
-                <TabControl>
-                    <TabItem Header="Properties"
-                             IsVisible="{CompiledBinding IsPropertiesVisible}">
-                        <v:PropertyEditorView DataContext="{CompiledBinding ActiveDocument.PropertyEditor}" />
-                    </TabItem>
-                    <TabItem Header="Visual Tree"
-                             IsVisible="{CompiledBinding IsVisualTreeVisible}">
-                        <v:VisualTreePanelView DataContext="{CompiledBinding VisualTree}" />
-                    </TabItem>
-                    <TabItem Header="Logical Tree"
-                             IsVisible="{CompiledBinding IsLogicalTreeVisible}">
-                        <v:LogicalTreePanelView DataContext="{CompiledBinding LogicalTree}" />
-                    </TabItem>
-                </TabControl>
-            </Border>
-
-            <!-- Bottom Panel: Output + Collaboration -->
-            <GridSplitter Grid.Column="2" Grid.Row="1" Height="4" />
-
-            <Border Grid.Column="2" Grid.Row="2"
-                    IsVisible="{CompiledBinding IsOutputVisible}"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="0,1,0,0">
-                <TabControl>
-                    <TabItem Header="Output">
-                        <v:OutputView DataContext="{CompiledBinding Output}" />
-                    </TabItem>
-                    <TabItem Header="Collaboration"
-                             IsVisible="{CompiledBinding IsCollaborationVisible}">
-                        <v:CollaborationPanelView DataContext="{CompiledBinding Collaboration}" />
-                    </TabItem>
-                </TabControl>
-            </Border>
-        </Grid>
+        <!-- Docked layout for tools and documents -->
+        <dock:DockControl
+            Layout="{CompiledBinding DockLayout}"
+            Factory="{CompiledBinding DockFactory}" />
     </DockPanel>
 </Window>
