@@ -29,6 +29,7 @@ public sealed partial class XamlCodeEditorView : UserControl
     private CompletionWindow? _completionWindow;
     private OverloadInsightWindow? _insightWindow;
     private TextEditor? _textEditor;
+    private EventHandler? _caretPositionChangedHandler;
     private CompositeDisposable? _vmSubscriptions;
     private bool _textMateInstalled;
     private bool _suppressCaretUpdate;
@@ -59,6 +60,10 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
+            if (_caretPositionChangedHandler is not null)
+            {
+                _textEditor.TextArea.Caret.PositionChanged -= _caretPositionChangedHandler;
+            }
         }
 
         _vmSubscriptions?.Dispose();
@@ -96,9 +101,9 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
 
         // Wire up caret position tracking
-        _textEditor.TextArea.Caret.PositionChanged += (_, _) =>
+        _caretPositionChangedHandler = (_, _) =>
         {
-            if (_suppressCaretUpdate)
+            if (_suppressCaretUpdate || _textEditor is null)
             {
                 return;
             }
@@ -110,6 +115,7 @@ public sealed partial class XamlCodeEditorView : UserControl
                 vm.CurrentColumn = _textEditor.TextArea.Caret.Column;
             }
         };
+        _textEditor.TextArea.Caret.PositionChanged += _caretPositionChangedHandler;
 
         // Wire text input for auto-completion triggers
         _textEditor.TextArea.TextEntered += OnTextEntered;
