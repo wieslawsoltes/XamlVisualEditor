@@ -267,6 +267,12 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     public bool SnapLinesEnabled { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the surface is in edit mode (non-interactive preview).
+    /// </summary>
+    [Reactive]
+    public bool IsEditMode { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets whether the grid is visible.
     /// </summary>
     [Reactive]

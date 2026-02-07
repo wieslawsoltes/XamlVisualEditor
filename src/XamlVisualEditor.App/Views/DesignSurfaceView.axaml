@@ -2,9 +2,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dc="using:XamlVisualEditor.Designer.Core"
              xmlns:input="using:Avalonia.Input"
+             xmlns:ad="using:XamlVisualEditor.Designer.Adorners"
              x:Class="XamlVisualEditor.App.Views.DesignSurfaceView"
              x:DataType="dc:DesignSurfaceViewModel"
              Background="#1E1E1E"
+             Focusable="True"
              input:DragDrop.AllowDrop="True">
 
     <DockPanel>
@@ -25,6 +27,9 @@
                               Content="Grid" Padding="6,2" FontSize="12" />
                 <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
                               Content="Snap" Padding="6,2" FontSize="12" />
+                <Separator />
+                <ToggleButton IsChecked="{CompiledBinding IsEditMode, Mode=TwoWay}"
+                              Content="Edit" Padding="6,2" FontSize="12" />
             </StackPanel>
         </Border>
 
@@ -39,14 +44,17 @@
                         Margin="24"
                         BoxShadow="0 2 8 0 #40000000">
                 <!-- The design canvas where controls are rendered -->
-                <Panel Name="DesignCanvas"
-                       Width="{CompiledBinding CanvasWidth}"
-                       Height="{CompiledBinding CanvasHeight}"
-                      Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                       ClipToBounds="True"
-                       input:DragDrop.AllowDrop="True">
-                    <!-- Child controls will be added programmatically -->
-                </Panel>
+                <Grid Width="{CompiledBinding CanvasWidth}"
+                      Height="{CompiledBinding CanvasHeight}">
+                    <Panel Name="DesignCanvas"
+                           Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                           ClipToBounds="True"
+                           input:DragDrop.AllowDrop="True">
+                        <!-- Child controls will be added programmatically -->
+                    </Panel>
+                    <ad:DesignAdornerLayer Name="AdornerLayer"
+                                           IsVisible="{CompiledBinding IsEditMode}" />
+                </Grid>
             </Border>
         </ScrollViewer>
     </DockPanel>
