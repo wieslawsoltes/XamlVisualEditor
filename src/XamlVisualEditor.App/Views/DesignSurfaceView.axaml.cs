@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Collections;
@@ -11,6 +12,7 @@ using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Designer.Rendering;
+using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Xaml.Ast;
 
@@ -436,18 +438,30 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private DesignerDocumentViewModel? FindDocumentViewModel()
     {
-        // The DesignSurfaceView's DataContext is a DesignSurfaceViewModel.
-        // Its parent DesignerDocumentViewModel is accessible via the visual tree
-        // since DesignerDocumentView contains this view.
-        Control? current = this.Parent as Control;
-        while (current is not null)
+        if (DataContext is DesignerDocumentViewModel selfVm)
         {
-            if (current.DataContext is DesignerDocumentViewModel dvm)
-            {
-                return dvm;
-            }
+            return selfVm;
+        }
 
-            current = current.Parent as Control;
+        if (DataContext is DesignerDocument selfDoc)
+        {
+            return selfDoc.DocumentViewModel;
+        }
+
+        foreach (var ancestor in this.GetVisualAncestors())
+        {
+            if (ancestor is Control control)
+            {
+                if (control.DataContext is DesignerDocumentViewModel dvm)
+                {
+                    return dvm;
+                }
+
+                if (control.DataContext is DesignerDocument dockDoc)
+                {
+                    return dockDoc.DocumentViewModel;
+                }
+            }
         }
 
         return null;
