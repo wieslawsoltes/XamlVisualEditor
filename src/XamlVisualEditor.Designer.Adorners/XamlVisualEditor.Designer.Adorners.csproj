@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Designer.Adorners</RootNamespace>
+    <Description>Designer adorners: selection rectangles, resize handles, snap lines, margin/padding guides</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Designer.Core\XamlVisualEditor.Designer.Core.csproj" />
+  </ItemGroup>
+</Project>

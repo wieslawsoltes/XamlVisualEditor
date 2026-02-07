@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Designer.DragDrop</RootNamespace>
+    <Description>Drag-and-drop protocol for toolbox to surface, surface rearrangement, and tree reorder</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.Fody" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Designer.Core\XamlVisualEditor.Designer.Core.csproj" />
+  </ItemGroup>
+</Project>
