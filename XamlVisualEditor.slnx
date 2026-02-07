@@ -1,0 +1,28 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/XamlVisualEditor.Core/XamlVisualEditor.Core.csproj" />
+    <Project Path="src/XamlVisualEditor.Xaml.Parsing/XamlVisualEditor.Xaml.Parsing.csproj" />
+    <Project Path="src/XamlVisualEditor.Xaml.Ast/XamlVisualEditor.Xaml.Ast.csproj" />
+    <Project Path="src/XamlVisualEditor.Xaml.Serialization/XamlVisualEditor.Xaml.Serialization.csproj" />
+    <Project Path="src/XamlVisualEditor.Xaml.Intellisense/XamlVisualEditor.Xaml.Intellisense.csproj" />
+    <Project Path="src/XamlVisualEditor.Workspace/XamlVisualEditor.Workspace.csproj" />
+    <Project Path="src/XamlVisualEditor.Designer.Core/XamlVisualEditor.Designer.Core.csproj" />
+    <Project Path="src/XamlVisualEditor.Designer.Rendering/XamlVisualEditor.Designer.Rendering.csproj" />
+    <Project Path="src/XamlVisualEditor.Designer.DragDrop/XamlVisualEditor.Designer.DragDrop.csproj" />
+    <Project Path="src/XamlVisualEditor.Designer.Adorners/XamlVisualEditor.Designer.Adorners.csproj" />
+    <Project Path="src/XamlVisualEditor.TreeView/XamlVisualEditor.TreeView.csproj" />
+    <Project Path="src/XamlVisualEditor.PropertyEditor/XamlVisualEditor.PropertyEditor.csproj" />
+    <Project Path="src/XamlVisualEditor.CodeEditor/XamlVisualEditor.CodeEditor.csproj" />
+    <Project Path="src/XamlVisualEditor.Sync/XamlVisualEditor.Sync.csproj" />
+    <Project Path="src/XamlVisualEditor.Collaboration/XamlVisualEditor.Collaboration.csproj" />
+    <Project Path="src/XamlVisualEditor.Collaboration.UI/XamlVisualEditor.Collaboration.UI.csproj" />
+    <Project Path="src/XamlVisualEditor.Shell/XamlVisualEditor.Shell.csproj" />
+    <Project Path="src/XamlVisualEditor.Shell.ViewModels/XamlVisualEditor.Shell.ViewModels.csproj" />
+    <Project Path="src/XamlVisualEditor.App/XamlVisualEditor.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/XamlVisualEditor.Tests.Unit/XamlVisualEditor.Tests.Unit.csproj" />
+    <Project Path="tests/XamlVisualEditor.Tests.Integration/XamlVisualEditor.Tests.Integration.csproj" />
+    <Project Path="tests/XamlVisualEditor.Tests.UI/XamlVisualEditor.Tests.UI.csproj" />
+  </Folder>
+</Solution>
