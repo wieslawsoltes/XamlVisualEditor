@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Xaml.Serialization</RootNamespace>
+    <Description>AST to XAML text serialization with whitespace preservation and minimal edits</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
+  </ItemGroup>
+</Project>

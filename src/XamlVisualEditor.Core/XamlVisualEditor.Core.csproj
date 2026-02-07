@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Core</RootNamespace>
+    <Description>Core primitives, interfaces, enums, and shared types for XamlVisualEditor</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+</Project>

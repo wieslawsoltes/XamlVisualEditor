@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Xaml.Parsing</RootNamespace>
+    <Description>XAML parsing via XamlX with error handling and diagnostics</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
+  </ItemGroup>
+</Project>

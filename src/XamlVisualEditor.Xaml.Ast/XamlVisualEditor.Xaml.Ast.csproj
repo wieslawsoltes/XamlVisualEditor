@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Xaml.Ast</RootNamespace>
+    <Description>Mutable AST model with change tracking, visitor pattern, and observable collections</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+  </ItemGroup>
+</Project>
