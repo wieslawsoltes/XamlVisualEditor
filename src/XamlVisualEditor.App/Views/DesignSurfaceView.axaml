@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dc="using:XamlVisualEditor.Designer.Core"
+             xmlns:input="using:Avalonia.Input"
+             x:Class="XamlVisualEditor.App.Views.DesignSurfaceView"
+             x:DataType="dc:DesignSurfaceViewModel"
+             Background="#1E1E1E"
+             input:DragDrop.AllowDrop="True">
+
+    <DockPanel>
+        <!-- Design surface toolbar -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="4,2">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="Zoom:" VerticalAlignment="Center" Margin="4,0" FontSize="12" />
+                <Slider Minimum="0.25" Maximum="4.0"
+                        Value="{CompiledBinding Zoom, Mode=TwoWay}"
+                        Width="120"
+                        VerticalAlignment="Center" />
+                <TextBlock Text="{CompiledBinding Zoom, StringFormat='{}{0:P0}'}"
+                           VerticalAlignment="Center" Margin="4,0" FontSize="12" />
+                <Separator />
+                <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}"
+                              Content="Grid" Padding="6,2" FontSize="12" />
+                <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
+                              Content="Snap" Padding="6,2" FontSize="12" />
+            </StackPanel>
+        </Border>
+
+        <!-- Artboard / design canvas -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  input:DragDrop.AllowDrop="True">
+                    <Border BorderBrush="#3F3F46"
+                        BorderThickness="1"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Margin="24"
+                        BoxShadow="0 2 8 0 #40000000">
+                <!-- The design canvas where controls are rendered -->
+                <Panel Name="DesignCanvas"
+                       Width="{CompiledBinding CanvasWidth}"
+                       Height="{CompiledBinding CanvasHeight}"
+                      Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                       ClipToBounds="True"
+                       input:DragDrop.AllowDrop="True">
+                    <!-- Child controls will be added programmatically -->
+                </Panel>
+            </Border>
+        </ScrollViewer>
+    </DockPanel>
+
+</UserControl>

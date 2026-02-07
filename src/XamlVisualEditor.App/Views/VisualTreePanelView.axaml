@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:tv="using:XamlVisualEditor.TreeView"
+             x:Class="XamlVisualEditor.App.Views.VisualTreePanelView"
+             x:DataType="tv:VisualTreeGridViewModel">
+
+    <dg:DataGrid x:Name="VisualTreeGrid"
+                AutoGenerateColumns="False"
+                ItemsSource="{CompiledBinding Model.Flattened}"
+                HierarchicalModel="{CompiledBinding Model}"
+                HierarchicalRowsEnabled="True"
+                SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                HeadersVisibility="Column"
+                GridLinesVisibility="None"
+                CanUserSortColumns="False"
+                IsReadOnly="True">
+        <dg:DataGrid.Columns>
+            <dg:DataGridHierarchicalColumn Header="Type"
+                                           Width="2*"
+                                           Binding="{CompiledBinding Item}"
+                                           x:DataType="dh:HierarchicalNode">
+                <dg:DataGridHierarchicalColumn.CellTemplate>
+                    <DataTemplate x:DataType="tv:VisualTreeNodeViewModel">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="◆" Foreground="{DynamicResource SystemAccentColor}" FontSize="10" VerticalAlignment="Center" />
+                            <TextBlock Text="{CompiledBinding TypeName}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </dg:DataGridHierarchicalColumn.CellTemplate>
+            </dg:DataGridHierarchicalColumn>
+            <dg:DataGridTemplateColumn Header="Name" Width="*">
+                <dg:DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="dh:HierarchicalNode">
+                        <ContentControl Content="{CompiledBinding Item}">
+                            <ContentControl.ContentTemplate>
+                                <DataTemplate x:DataType="tv:VisualTreeNodeViewModel">
+                                    <TextBlock Text="{CompiledBinding Name}" />
+                                </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                        </ContentControl>
+                    </DataTemplate>
+                </dg:DataGridTemplateColumn.CellTemplate>
+            </dg:DataGridTemplateColumn>
+        </dg:DataGrid.Columns>
+    </dg:DataGrid>
+
+</UserControl>

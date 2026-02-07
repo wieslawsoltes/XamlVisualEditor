@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Shell</RootNamespace>
+    <Description>Dock factory and VS/Blend-style docking layout definition</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Dock.Avalonia" />
+    <PackageReference Include="Dock.Model.ReactiveUI" />
+    <PackageReference Include="Dock.Serializer.SystemTextJson" />
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.Fody" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+  </ItemGroup>
+</Project>

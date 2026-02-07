@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.OutputView"
+             x:DataType="vm:OutputViewModel">
+
+    <DockPanel>
+        <!-- Output toolbar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="4,2">
+            <TextBlock Text="Output" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
+            <Separator />
+            <TextBlock Text="{CompiledBinding ErrorCount, StringFormat='Errors: {0}'}"
+                       Foreground="Red" VerticalAlignment="Center" Margin="4,0" />
+            <TextBlock Text="{CompiledBinding WarningCount, StringFormat='Warnings: {0}'}"
+                       Foreground="Orange" VerticalAlignment="Center" Margin="4,0" />
+            <Separator />
+            <Button Content="Clear" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
+        </StackPanel>
+
+        <!-- Message list -->
+        <ListBox ItemsSource="{CompiledBinding Messages}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:OutputMessage">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{CompiledBinding Level}"
+                                   FontWeight="SemiBold"
+                                   Width="60" />
+                        <TextBlock Text="{CompiledBinding Text}" TextWrapping="Wrap" />
+                        <TextBlock Text="{CompiledBinding Line, StringFormat='Ln {0}'}"
+                                   Opacity="0.5" />
+                        <TextBlock Text="{CompiledBinding Column, StringFormat='Col {0}'}"
+                                   Opacity="0.5" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+
+</UserControl>

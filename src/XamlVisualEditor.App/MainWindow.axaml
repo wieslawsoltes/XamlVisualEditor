@@ -1,0 +1,229 @@
+<Window xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+    xmlns:v="using:XamlVisualEditor.App.Views"
+    xmlns:input="using:Avalonia.Input"
+        x:Class="XamlVisualEditor.App.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Name="MainWin"
+        Title="{CompiledBinding Title}"
+    input:DragDrop.AllowDrop="True"
+    v:FileDropBehavior.OpenFileCommand="{CompiledBinding OpenPathCommand}"
+        Width="1400"
+        Height="900"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Assets/app-icon.png">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <DockPanel>
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New" Command="{CompiledBinding NewDocumentCommand}" InputGesture="Ctrl+N" />
+                <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
+                <Separator />
+                <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
+                <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />
+                <Separator />
+                <MenuItem Header="E_xit" Command="{CompiledBinding ExitCommand}" InputGesture="Alt+F4" />
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" Command="{CompiledBinding UndoCommand}" InputGesture="Ctrl+Z" />
+                <MenuItem Header="_Redo" Command="{CompiledBinding RedoCommand}" InputGesture="Ctrl+Y" />
+                <Separator />
+                <MenuItem Header="Cu_t" Command="{CompiledBinding CutCommand}" InputGesture="Ctrl+X" />
+                <MenuItem Header="_Copy" Command="{CompiledBinding CopyCommand}" InputGesture="Ctrl+C" />
+                <MenuItem Header="_Paste" Command="{CompiledBinding PasteCommand}" InputGesture="Ctrl+V" />
+                <MenuItem Header="_Delete" Command="{CompiledBinding DeleteCommand}" InputGesture="Delete" />
+                <Separator />
+                <MenuItem Header="Select _All" Command="{CompiledBinding SelectAllCommand}" InputGesture="Ctrl+A" />
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="_Toolbox" Command="{CompiledBinding ToggleToolboxCommand}" />
+                <MenuItem Header="_Properties" Command="{CompiledBinding TogglePropertiesCommand}" />
+                <MenuItem Header="_Visual Tree" Command="{CompiledBinding ToggleVisualTreeCommand}" />
+                <MenuItem Header="_Logical Tree" Command="{CompiledBinding ToggleLogicalTreeCommand}" />
+                <MenuItem Header="_Output" Command="{CompiledBinding ToggleOutputCommand}" />
+                <Separator />
+                <MenuItem Header="Reset _Layout" Command="{CompiledBinding ResetLayoutCommand}" />
+            </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="_Collaboration" Command="{CompiledBinding ToggleCollaborationCommand}" />
+                <Separator />
+                <MenuItem Header="_Workspace">
+                    <MenuItem Header="_Restore" Command="{CompiledBinding RestoreWorkspaceCommand}" />
+                    <MenuItem Header="_Build" Command="{CompiledBinding BuildWorkspaceCommand}" />
+                    <MenuItem Header="Re_build" Command="{CompiledBinding RebuildWorkspaceCommand}" />
+                    <MenuItem Header="_Clean" Command="{CompiledBinding CleanWorkspaceCommand}" />
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About" Command="{CompiledBinding AboutCommand}" />
+            </MenuItem>
+        </Menu>
+
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="4,2">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+                <Button ToolTip.Tip="New (Ctrl+N)" Command="{CompiledBinding NewDocumentCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H14a1 1 0 0 1-1-1V3.5zM6 20V4h5v4a3 3 0 0 0 3 3h4v9H6z" />
+                </Button>
+                <Button ToolTip.Tip="Open (Ctrl+O)" Command="{CompiledBinding OpenDocumentCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M2 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v2H7.93a2 2 0 0 0-1.66.9L4 14.38V6zm-1 8.5L4 10h12.07a1 1 0 0 1 .86 1.5l-3 5A2 2 0 0 1 12.21 18H3a1 1 0 0 1-.86-1.5z" />
+                </Button>
+                <Button ToolTip.Tip="Save (Ctrl+S)" Command="{CompiledBinding SaveDocumentCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM15 9H5V5h10v4z" />
+                </Button>
+                <Separator Margin="4,0" />
+                <Button ToolTip.Tip="Undo (Ctrl+Z)" Command="{CompiledBinding UndoCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M12.5 8c-2.65 0-5.05 1.04-6.83 2.75L3 8v8h8l-2.81-2.81C9.83 11.87 11.1 11 12.5 11c2.34 0 4.33 1.57 4.93 3.7l2.14-.7C18.63 10.73 15.84 8 12.5 8z" />
+                </Button>
+                <Button ToolTip.Tip="Redo (Ctrl+Y)" Command="{CompiledBinding RedoCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M18.4 10.6C16.55 9 14.15 8 11.5 8c-3.34 0-6.13 2.73-7.07 6l2.14.7c.6-2.13 2.59-3.7 4.93-3.7 1.4 0 2.67.87 3.31 2.19L12 16h8V8l-1.6 2.6z" />
+                </Button>
+                <Separator Margin="4,0" />
+                <Button ToolTip.Tip="Cut (Ctrl+X)" Command="{CompiledBinding CutCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6 2 2 7-7V3h-3z" />
+                </Button>
+                <Button ToolTip.Tip="Copy (Ctrl+C)" Command="{CompiledBinding CopyCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                </Button>
+                <Button ToolTip.Tip="Paste (Ctrl+V)" Command="{CompiledBinding PasteCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z" />
+                </Button>
+                <Button ToolTip.Tip="Delete" Command="{CompiledBinding DeleteCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Status Bar -->
+        <Border DockPanel.Dock="Bottom"
+                Background="#007ACC"
+                Height="24"
+                Padding="8,2">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left"
+                           Text="{CompiledBinding StatusText}"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="White" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            HorizontalAlignment="Right" Spacing="16">
+                    <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="Ln {0}, Col {1}">
+                                <CompiledBinding Path="ActiveDocument.CodeEditor.CurrentLine" FallbackValue="1" />
+                                <CompiledBinding Path="ActiveDocument.CodeEditor.CurrentColumn" FallbackValue="1" />
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                    <TextBlock Text="{CompiledBinding CollaborationStatusText}"
+                               VerticalAlignment="Center" FontSize="12"
+                               Foreground="White"
+                               Opacity="0.8" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Main Content: Split layout -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" MinWidth="100" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="280" MinWidth="150" />
+            </Grid.ColumnDefinitions>
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="200" MinHeight="100" />
+            </Grid.RowDefinitions>
+
+            <!-- Left Panel: Toolbox + Solution Explorer -->
+            <Border Grid.Column="0" Grid.RowSpan="3"
+                    IsVisible="{CompiledBinding IsToolboxVisible}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    BorderThickness="0,0,1,0">
+                <TabControl>
+                    <TabItem Header="Toolbox">
+                        <v:ToolboxView DataContext="{CompiledBinding Toolbox}" />
+                    </TabItem>
+                    <TabItem Header="Solution">
+                        <v:SolutionExplorerView DataContext="{CompiledBinding SolutionExplorer}" />
+                    </TabItem>
+                </TabControl>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Grid.RowSpan="3" Width="4" />
+
+            <!-- Center Panel: Document Area -->
+            <TabControl Grid.Column="2" Grid.Row="0"
+                        ItemsSource="{CompiledBinding Documents}"
+                        SelectedItem="{CompiledBinding ActiveDocument, Mode=TwoWay}">
+                <TabControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DesignerDocumentViewModel">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{CompiledBinding Title}" />
+                            <Button Content="✕" Padding="2" FontSize="10"
+                                    Command="{CompiledBinding #MainWin.((vm:MainWindowViewModel)DataContext).CloseDocumentCommand}"
+                                    CommandParameter="{CompiledBinding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+                <TabControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:DesignerDocumentViewModel">
+                        <v:DesignerDocumentView />
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
+
+            <GridSplitter Grid.Column="3" Grid.RowSpan="3" Width="4" />
+
+            <!-- Right Panel: Properties + Trees -->
+            <Border Grid.Column="4" Grid.RowSpan="3"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    BorderThickness="1,0,0,0">
+                <TabControl>
+                    <TabItem Header="Properties"
+                             IsVisible="{CompiledBinding IsPropertiesVisible}">
+                        <v:PropertyEditorView DataContext="{CompiledBinding ActiveDocument.PropertyEditor}" />
+                    </TabItem>
+                    <TabItem Header="Visual Tree"
+                             IsVisible="{CompiledBinding IsVisualTreeVisible}">
+                        <v:VisualTreePanelView DataContext="{CompiledBinding VisualTree}" />
+                    </TabItem>
+                    <TabItem Header="Logical Tree"
+                             IsVisible="{CompiledBinding IsLogicalTreeVisible}">
+                        <v:LogicalTreePanelView DataContext="{CompiledBinding LogicalTree}" />
+                    </TabItem>
+                </TabControl>
+            </Border>
+
+            <!-- Bottom Panel: Output + Collaboration -->
+            <GridSplitter Grid.Column="2" Grid.Row="1" Height="4" />
+
+            <Border Grid.Column="2" Grid.Row="2"
+                    IsVisible="{CompiledBinding IsOutputVisible}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    BorderThickness="0,1,0,0">
+                <TabControl>
+                    <TabItem Header="Output">
+                        <v:OutputView DataContext="{CompiledBinding Output}" />
+                    </TabItem>
+                    <TabItem Header="Collaboration"
+                             IsVisible="{CompiledBinding IsCollaborationVisible}">
+                        <v:CollaborationPanelView DataContext="{CompiledBinding Collaboration}" />
+                    </TabItem>
+                </TabControl>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

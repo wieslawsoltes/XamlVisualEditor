@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Collaboration</RootNamespace>
+    <Description>Bridges XAML AST mutations to CRDT operations via VibeOffice collaboration stack</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ReactiveUI" />
+    <PackageReference Include="ReactiveUI.Fody" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
+  </ItemGroup>
+</Project>

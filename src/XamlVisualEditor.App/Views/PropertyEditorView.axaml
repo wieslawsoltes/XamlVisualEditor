@@ -1,0 +1,224 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:pe="using:XamlVisualEditor.PropertyEditor"
+             x:Class="XamlVisualEditor.App.Views.PropertyEditorView"
+             x:DataType="pe:PropertyEditorViewModel">
+
+    <UserControl.Resources>
+        <pe:BoolStringConverter x:Key="BoolStringConv" />
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- Header: selected type name + search -->
+        <StackPanel DockPanel.Dock="Top" Margin="4">
+            <TextBlock Text="{CompiledBinding SelectedTypeName}"
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       Margin="0,0,0,4" />
+            <TextBox Watermark="Search properties..."
+                     Text="{CompiledBinding SearchText, Mode=TwoWay}"
+                     Margin="0,0,0,4" />
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <ToggleButton IsChecked="{CompiledBinding ShowProperties, Mode=TwoWay}"
+                              Content="Properties" Padding="8,4" />
+                <ToggleButton IsChecked="{CompiledBinding ShowProperties, Mode=TwoWay, Converter={x:Static BoolConverters.Not}}"
+                              Content="Events" Padding="8,4" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Properties grid -->
+        <dg:DataGrid IsVisible="{CompiledBinding ShowProperties}"
+                    ItemsSource="{CompiledBinding FlatProperties}"
+                    AutoGenerateColumns="False"
+                    HeadersVisibility="Column"
+                    GridLinesVisibility="None"
+                    CanUserSortColumns="False"
+                    CanUserResizeColumns="True"
+                    IsReadOnly="False">
+            <dg:DataGrid.Styles>
+                <Style Selector="DataGridRow" x:DataType="pe:PropertyItemViewModel">
+                    <Setter Property="IsVisible" Value="{CompiledBinding IsVisible}" />
+                </Style>
+            </dg:DataGrid.Styles>
+            <dg:DataGrid.Columns>
+                <dg:DataGridTemplateColumn Header="Category" Width="*" IsReadOnly="True">
+                    <dg:DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                            <TextBlock Text="{CompiledBinding Category}" />
+                        </DataTemplate>
+                    </dg:DataGridTemplateColumn.CellTemplate>
+                </dg:DataGridTemplateColumn>
+                <dg:DataGridTemplateColumn Header="Property" Width="*" IsReadOnly="True">
+                    <dg:DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                            <TextBlock Text="{CompiledBinding Name}" />
+                        </DataTemplate>
+                    </dg:DataGridTemplateColumn.CellTemplate>
+                </dg:DataGridTemplateColumn>
+                <dg:DataGridTemplateColumn Header="Value" Width="2*">
+                    <dg:DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                            <ContentControl Content="{CompiledBinding}">
+                                <ContentControl.ContentTemplate>
+                                    <pe:ValueEditorSelector>
+                                        <pe:ValueEditorSelector.StringEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="{CompiledBinding DefaultValueHint}"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.StringEditor>
+                                        <pe:ValueEditorSelector.BooleanEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <CheckBox IsChecked="{CompiledBinding Value, Mode=TwoWay, Converter={StaticResource BoolStringConv}}"
+                                                          HorizontalAlignment="Left"
+                                                          Margin="4,0" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.BooleanEditor>
+                                        <pe:ValueEditorSelector.NumericEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="0"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.NumericEditor>
+                                        <pe:ValueEditorSelector.EnumEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <ComboBox ItemsSource="{CompiledBinding EnumValues}"
+                                                          SelectedItem="{CompiledBinding Value, Mode=TwoWay}"
+                                                          HorizontalAlignment="Stretch"
+                                                          Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.EnumEditor>
+                                        <pe:ValueEditorSelector.BrushEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <Grid ColumnDefinitions="24,*">
+                                                    <Border Grid.Column="0"
+                                                            Width="20" Height="20"
+                                                            CornerRadius="2"
+                                                            BorderBrush="Gray"
+                                                            BorderThickness="1"
+                                                            Background="{CompiledBinding Value}"
+                                                            Margin="2,0" />
+                                                    <TextBox Grid.Column="1"
+                                                             Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                             Watermark="#RRGGBB or name"
+                                                             Padding="4,2" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.BrushEditor>
+                                        <pe:ValueEditorSelector.ThicknessEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="L,T,R,B"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.ThicknessEditor>
+                                        <pe:ValueEditorSelector.CornerRadiusEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="TL,TR,BR,BL"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.CornerRadiusEditor>
+                                    </pe:ValueEditorSelector>
+                                </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </DataTemplate>
+                    </dg:DataGridTemplateColumn.CellTemplate>
+                    <dg:DataGridTemplateColumn.CellEditingTemplate>
+                        <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                            <ContentControl Content="{CompiledBinding}">
+                                <ContentControl.ContentTemplate>
+                                    <pe:ValueEditorSelector>
+                                        <pe:ValueEditorSelector.StringEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="{CompiledBinding DefaultValueHint}"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.StringEditor>
+                                        <pe:ValueEditorSelector.BooleanEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <CheckBox IsChecked="{CompiledBinding Value, Mode=TwoWay, Converter={StaticResource BoolStringConv}}"
+                                                          HorizontalAlignment="Left"
+                                                          Margin="4,0" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.BooleanEditor>
+                                        <pe:ValueEditorSelector.NumericEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="0"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.NumericEditor>
+                                        <pe:ValueEditorSelector.EnumEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <ComboBox ItemsSource="{CompiledBinding EnumValues}"
+                                                          SelectedItem="{CompiledBinding Value, Mode=TwoWay}"
+                                                          HorizontalAlignment="Stretch"
+                                                          Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.EnumEditor>
+                                        <pe:ValueEditorSelector.BrushEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <Grid ColumnDefinitions="24,*">
+                                                    <Border Grid.Column="0"
+                                                            Width="20" Height="20"
+                                                            CornerRadius="2"
+                                                            BorderBrush="Gray"
+                                                            BorderThickness="1"
+                                                            Background="{CompiledBinding Value}"
+                                                            Margin="2,0" />
+                                                    <TextBox Grid.Column="1"
+                                                             Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                             Watermark="#RRGGBB or name"
+                                                             Padding="4,2" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.BrushEditor>
+                                        <pe:ValueEditorSelector.ThicknessEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="L,T,R,B"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.ThicknessEditor>
+                                        <pe:ValueEditorSelector.CornerRadiusEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="TL,TR,BR,BL"
+                                                         Padding="4,2" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.CornerRadiusEditor>
+                                    </pe:ValueEditorSelector>
+                                </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </DataTemplate>
+                    </dg:DataGridTemplateColumn.CellEditingTemplate>
+                </dg:DataGridTemplateColumn>
+            </dg:DataGrid.Columns>
+        </dg:DataGrid>
+
+        <!-- Events list -->
+        <ScrollViewer IsVisible="{CompiledBinding ShowProperties, Converter={x:Static BoolConverters.Not}}">
+            <ItemsControl ItemsSource="{CompiledBinding Events}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="pe:EventItemViewModel">
+                        <Grid ColumnDefinitions="*,*" Margin="4,2">
+                            <TextBlock Grid.Column="0"
+                                       Text="{CompiledBinding Name}"
+                                       VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{CompiledBinding HandlerName, Mode=TwoWay}"
+                                     Watermark="(handler)"
+                                     Padding="4,2" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+
+</UserControl>

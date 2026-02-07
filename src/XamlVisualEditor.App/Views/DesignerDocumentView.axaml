@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:v="using:XamlVisualEditor.App.Views"
+             x:Class="XamlVisualEditor.App.Views.DesignerDocumentView"
+             x:DataType="vm:DesignerDocumentViewModel">
+
+    <DockPanel>
+        <!-- View mode tabs -->
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="4,2"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+                <RadioButton Content="Split" GroupName="ViewMode"
+                             IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
+                             Padding="12,4"
+                             FontSize="12" />
+                <RadioButton Content="Design" GroupName="ViewMode"
+                             IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsDesign}}"
+                             Padding="12,4"
+                             FontSize="12" />
+                <RadioButton Content="XAML" GroupName="ViewMode"
+                             IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsCode}}"
+                             Padding="12,4"
+                             FontSize="12" />
+            </StackPanel>
+        </Border>
+
+        <!-- Split view: Design Surface + Code Editor -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Design Surface -->
+            <Border Grid.Row="0"
+                    IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.ShowDesigner}}">
+                <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
+            </Border>
+
+            <GridSplitter Grid.Row="1" Height="4"
+                          IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}" />
+
+            <!-- Code Editor -->
+            <Border Grid.Row="2"
+                    MinHeight="120"
+                    IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.ShowCode}}">
+                <v:XamlCodeEditorView DataContext="{CompiledBinding CodeEditor}" />
+            </Border>
+        </Grid>
+    </DockPanel>
+
+</UserControl>

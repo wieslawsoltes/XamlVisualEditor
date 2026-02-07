@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:collab="using:XamlVisualEditor.Collaboration.UI"
+             x:Class="XamlVisualEditor.App.Views.CollaborationPanelView"
+             x:DataType="collab:CollaborationPanelViewModel">
+
+    <DockPanel>
+        <!-- Session controls -->
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="4">
+            <TextBlock Text="Collaboration" FontWeight="SemiBold" FontSize="14" />
+
+            <TextBox Watermark="Your name"
+                     Text="{CompiledBinding LocalUserName, Mode=TwoWay}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button Content="Start Session"
+                        Command="{CompiledBinding StartSessionCommand}"
+                        IsVisible="{CompiledBinding !IsSessionActive}"
+                        Padding="8,4" />
+                <Button Content="Leave"
+                        Command="{CompiledBinding LeaveSessionCommand}"
+                        IsVisible="{CompiledBinding IsSessionActive}"
+                        Padding="8,4" />
+            </StackPanel>
+
+            <TextBlock Text="{CompiledBinding StatusMessage}"
+                       Opacity="0.7" FontSize="12" Margin="0,4" />
+
+            <TextBox Watermark="Session ID to join..."
+                     Text="{CompiledBinding SessionId, Mode=TwoWay}"
+                     IsVisible="{CompiledBinding !IsSessionActive}" />
+            <Button Content="Join Session"
+                    Command="{CompiledBinding JoinSessionCommand}"
+                    IsVisible="{CompiledBinding !IsSessionActive}"
+                    Padding="8,4" />
+        </StackPanel>
+
+        <Separator DockPanel.Dock="Top" Margin="4,8" />
+
+        <!-- Participants list -->
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Text="Participants" FontWeight="SemiBold" Margin="4" />
+            <ListBox ItemsSource="{CompiledBinding Participants}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="collab:ParticipantViewModel">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Width="12" Height="12" CornerRadius="6"
+                                    VerticalAlignment="Center"
+                                    Background="{CompiledBinding Color}" />
+                            <TextBlock Text="{CompiledBinding DisplayName}" VerticalAlignment="Center" />
+                            <TextBlock Text="(you)"
+                                       IsVisible="{CompiledBinding IsLocal}"
+                                       Opacity="0.5" FontStyle="Italic"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </DockPanel>
+
+</UserControl>

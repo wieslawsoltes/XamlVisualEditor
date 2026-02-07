@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:v="using:XamlVisualEditor.App.Views"
+             x:DataType="vm:SolutionExplorerViewModel"
+             x:Class="XamlVisualEditor.App.Views.SolutionExplorerView">
+  <DockPanel>
+    <TextBox DockPanel.Dock="Top"
+             Watermark="🔍 Search files..."
+             Text="{CompiledBinding FilterText, Mode=TwoWay}"
+             Margin="4" />
+
+    <TreeView ItemsSource="{CompiledBinding Root.Children}">
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:SolutionExplorerNodeViewModel"
+                          ItemsSource="{CompiledBinding Children}">
+          <Grid>
+            <Button Command="{CompiledBinding OpenCommand}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0"
+                    IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsXamlFile}}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="{CompiledBinding Icon}" />
+                <TextBlock Text="{CompiledBinding Name}" />
+              </StackPanel>
+            </Button>
+
+            <StackPanel Orientation="Horizontal" Spacing="4"
+                        IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsNotXamlFile}}">
+              <TextBlock Text="{CompiledBinding Icon}" />
+              <TextBlock Text="{CompiledBinding Name}" />
+            </StackPanel>
+          </Grid>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>
