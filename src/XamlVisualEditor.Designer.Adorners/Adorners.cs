@@ -18,13 +18,15 @@ public sealed class SelectionAdorner
     /// <summary>
     /// Renders selection adorners for the given items.
     /// </summary>
-    public void Render(DrawingContext context, IReadOnlyList<IDesignItem> selectedItems)
+    public void Render(DrawingContext context, IReadOnlyList<IDesignItem> selectedItems, Control? surfaceRoot)
     {
         foreach (IDesignItem item in selectedItems)
         {
             if (item is DesignItem designItem && designItem.VisualElement is not null)
             {
-                Rect bounds = designItem.Bounds;
+                Rect bounds = surfaceRoot is not null
+                    ? designItem.GetBoundsRelativeTo(surfaceRoot)
+                    : designItem.Bounds;
                 context.DrawRectangle(null, SelectionPen, bounds);
             }
         }
@@ -33,11 +35,13 @@ public sealed class SelectionAdorner
     /// <summary>
     /// Renders a hover outline for an item under the cursor.
     /// </summary>
-    public void RenderHover(DrawingContext context, IDesignItem? hoveredItem)
+    public void RenderHover(DrawingContext context, IDesignItem? hoveredItem, Control? surfaceRoot)
     {
         if (hoveredItem is DesignItem designItem && designItem.VisualElement is not null)
         {
-            Rect bounds = designItem.Bounds;
+            Rect bounds = surfaceRoot is not null
+                ? designItem.GetBoundsRelativeTo(surfaceRoot)
+                : designItem.Bounds;
             context.DrawRectangle(null, HoverPen, bounds);
         }
     }

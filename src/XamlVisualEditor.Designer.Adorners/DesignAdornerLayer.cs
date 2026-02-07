@@ -15,6 +15,8 @@ namespace XamlVisualEditor.Designer.Adorners;
 /// </summary>
 public sealed class DesignAdornerLayer : Control
 {
+    private static readonly IPen SelectionBoxPen = new Pen(Brushes.DodgerBlue, 1, DashStyle.Dash);
+    private static readonly IBrush SelectionBoxFill = new SolidColorBrush(Color.FromArgb(30, 30, 144, 255));
     private readonly SelectionAdorner _selectionAdorner = new();
     private readonly ResizeHandleAdorner _resizeHandleAdorner = new();
     private readonly SnapLineAdorner _snapLineAdorner = new();
@@ -28,6 +30,8 @@ public sealed class DesignAdornerLayer : Control
     private DropPosition? _dropPosition;
     private Rect? _dropTargetBounds;
     private bool _showMarginPadding;
+    private Control? _surfaceRoot;
+    private Rect? _selectionBox;
 
     /// <summary>
     /// Gets or sets whether to show margin/padding adorners on the selected item.
@@ -46,6 +50,15 @@ public sealed class DesignAdornerLayer : Control
     {
         IsHitTestVisible = false;
         ClipToBounds = true;
+    }
+
+    /// <summary>
+    /// Sets the surface root control used for coordinate translation.
+    /// </summary>
+    public void SetSurfaceRoot(Control? surfaceRoot)
+    {
+        _surfaceRoot = surfaceRoot;
+        InvalidateVisual();
     }
 
     /// <summary>
@@ -87,6 +100,15 @@ public sealed class DesignAdornerLayer : Control
     }
 
     /// <summary>
+    /// Updates the marquee selection rectangle.
+    /// </summary>
+    public void UpdateSelectionBox(Rect? selectionBox)
+    {
+        _selectionBox = selectionBox;
+        InvalidateVisual();
+    }
+
+    /// <summary>
     /// Clears all adorner state.
     /// </summary>
     public void ClearAll()
@@ -97,6 +119,7 @@ public sealed class DesignAdornerLayer : Control
         _snapVerticalLines = Array.Empty<double>();
         _dropTargetBounds = null;
         _dropPosition = null;
+        _selectionBox = null;
         InvalidateVisual();
     }
 
@@ -113,7 +136,10 @@ public sealed class DesignAdornerLayer : Control
         IDesignItem primary = _selectedItems[0];
         if (primary is DesignItem designItem)
         {
-            return _resizeHandleAdorner.HitTest(designItem.Bounds, point);
+            Rect bounds = _surfaceRoot is not null
+                ? designItem.GetBoundsRelativeTo(_surfaceRoot)
+                : designItem.Bounds;
+            return _resizeHandleAdorner.HitTest(bounds, point);
         }
 
         return null;
@@ -125,20 +151,22 @@ public sealed class DesignAdornerLayer : Control
         base.Render(context);
 
         // 1. Hover outline
-        _selectionAdorner.RenderHover(context, _hoveredItem);
+        _selectionAdorner.RenderHover(context, _hoveredItem, _surfaceRoot);
 
         // 2. Selection rectangles
-        _selectionAdorner.Render(context, _selectedItems);
+        _selectionAdorner.Render(context, _selectedItems, _surfaceRoot);
 
         // 3. Resize handles on primary selection
         if (_selectedItems.Count > 0 && _selectedItems[0] is DesignItem primary)
         {
-            _resizeHandleAdorner.Render(context, primary.Bounds);
+            Rect bounds = _surfaceRoot is not null
+                ? primary.GetBoundsRelativeTo(_surfaceRoot)
+                : primary.Bounds;
+            _resizeHandleAdorner.Render(context, bounds);
 
             // 4. Margin/padding on primary selection
             if (_showMarginPadding)
             {
-                Rect bounds = primary.Bounds;
                 Thickness margin = TryParseThickness(primary.AstNode.GetPropertyValue("Margin"));
                 Thickness padding = TryParseThickness(primary.AstNode.GetPropertyValue("Padding"));
 
@@ -157,6 +185,13 @@ public sealed class DesignAdornerLayer : Control
         if (_dropTargetBounds.HasValue && _dropPosition.HasValue)
         {
             _dropTargetAdorner.Render(context, _dropTargetBounds.Value, _dropPosition.Value);
+        }
+
+        // 7. Marquee selection box
+        if (_selectionBox.HasValue)
+        {
+            Rect box = _selectionBox.Value;
+            context.DrawRectangle(SelectionBoxFill, SelectionBoxPen, box);
         }
     }
 
