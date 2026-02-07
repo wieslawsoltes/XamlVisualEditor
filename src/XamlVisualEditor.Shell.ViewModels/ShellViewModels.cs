@@ -4,6 +4,9 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Dock.Model.Controls;
+using Dock.Model.Core;
+using Dock.Model.Core.Events;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.CodeEditor;
@@ -23,6 +26,7 @@ using XamlVisualEditor.Xaml.Intellisense;
 using XamlVisualEditor.Workspace;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
+using XamlVisualEditor.Shell;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -486,6 +490,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private WorkspaceAssemblyResolver? _assemblyResolver;
     private WorkspaceModel? _workspace;
     private string? _workspacePath;
+    private readonly Dictionary<string, DesignerDocument> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
+    private bool _isClosingFromDock;
 
     /// <summary>
     /// Gets the open documents.
@@ -527,6 +533,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// Gets the collaboration panel ViewModel.
     /// </summary>
     public CollaborationPanelViewModel Collaboration { get; } = new();
+
+    /// <summary>
+    /// Gets the dock factory.
+    /// </summary>
+    public XamlEditorDockFactory DockFactory { get; }
+
+    /// <summary>
+    /// Gets the active dock layout.
+    /// </summary>
+    [Reactive]
+    public IRootDock? DockLayout { get; private set; }
 
     /// <summary>
     /// Gets or sets the application title.
@@ -619,6 +636,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     {
         _workspaceService = workspaceService;
         _metadataService = metadataService;
+
+        DockFactory = new XamlEditorDockFactory(this);
+        IRootDock layout = XamlEditorDockFactory.LoadLayout() ?? DockFactory.CreateDefaultLayout();
+        DockFactory.InitLayout(layout);
+        DockFactory.ConfigureToolViewModels(layout);
+        DockLayout = layout;
+        WireDockEvents();
+
+        _dockDocuments.Clear();
+        foreach (DesignerDocumentViewModel doc in Documents)
+        {
+            AddDocumentToDock(doc);
+        }
 
         // File commands
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
@@ -731,12 +761,37 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }, hasActiveDoc);
 
         // View commands
-        ToggleToolboxCommand = ReactiveCommand.Create(() => { IsToolboxVisible = !IsToolboxVisible; });
-        TogglePropertiesCommand = ReactiveCommand.Create(() => { IsPropertiesVisible = !IsPropertiesVisible; });
-        ToggleVisualTreeCommand = ReactiveCommand.Create(() => { IsVisualTreeVisible = !IsVisualTreeVisible; });
-        ToggleLogicalTreeCommand = ReactiveCommand.Create(() => { IsLogicalTreeVisible = !IsLogicalTreeVisible; });
-        ToggleOutputCommand = ReactiveCommand.Create(() => { IsOutputVisible = !IsOutputVisible; });
-        ToggleCollaborationCommand = ReactiveCommand.Create(() => { IsCollaborationVisible = !IsCollaborationVisible; });
+        ToggleToolboxCommand = ReactiveCommand.Create(() =>
+        {
+            IsToolboxVisible = !IsToolboxVisible;
+            SetDockableVisibility("Toolbox", IsToolboxVisible);
+            SetDockableVisibility("SolutionExplorer", IsToolboxVisible);
+        });
+        TogglePropertiesCommand = ReactiveCommand.Create(() =>
+        {
+            IsPropertiesVisible = !IsPropertiesVisible;
+            SetDockableVisibility("Properties", IsPropertiesVisible);
+        });
+        ToggleVisualTreeCommand = ReactiveCommand.Create(() =>
+        {
+            IsVisualTreeVisible = !IsVisualTreeVisible;
+            SetDockableVisibility("VisualTree", IsVisualTreeVisible);
+        });
+        ToggleLogicalTreeCommand = ReactiveCommand.Create(() =>
+        {
+            IsLogicalTreeVisible = !IsLogicalTreeVisible;
+            SetDockableVisibility("LogicalTree", IsLogicalTreeVisible);
+        });
+        ToggleOutputCommand = ReactiveCommand.Create(() =>
+        {
+            IsOutputVisible = !IsOutputVisible;
+            SetDockableVisibility("Output", IsOutputVisible);
+        });
+        ToggleCollaborationCommand = ReactiveCommand.Create(() =>
+        {
+            IsCollaborationVisible = !IsCollaborationVisible;
+            SetDockableVisibility("Collaboration", IsCollaborationVisible);
+        });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
 
         // Help commands
@@ -768,6 +823,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         // Update trees when active document changes
         this.WhenAnyValue(x => x.ActiveDocument)
             .Subscribe(doc => UpdateTrees(doc))
+            .DisposeWith(_disposables);
+
+        this.WhenAnyValue(x => x.ActiveDocument)
+            .Where(doc => doc is not null)
+            .Subscribe(doc => SetActiveDockDocument(doc!))
             .DisposeWith(_disposables);
 
         // Refresh trees on sync events from active document (Switch unsubscribes from previous)
@@ -860,6 +920,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DesignerDocumentViewModel doc = new(tempPath, _metadataService);
         Documents.Add(doc);
         ActiveDocument = doc;
+        AddDocumentToDock(doc);
 
         try
         {
@@ -921,6 +982,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IsOutputVisible = true;
         IsCollaborationVisible = false;
 
+        IRootDock layout = DockFactory.CreateDefaultLayout();
+        DockFactory.InitLayout(layout);
+        DockFactory.ConfigureToolViewModels(layout);
+        DockLayout = layout;
+
         // Delete persisted layout so it reloads default on next start
         try
         {
@@ -936,7 +1002,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             System.Diagnostics.Trace.TraceWarning($"Failed to delete layout file: {ex.Message}");
         }
 
-        StatusText = "Layout reset (restart to apply dock positions)";
+        StatusText = "Layout reset";
     }
 
     private void UpdateTrees(DesignerDocumentViewModel? doc)
@@ -998,11 +1064,111 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         LogicalTree.SelectNode(logicalNode);
     }
 
+    private void AddDocumentToDock(DesignerDocumentViewModel document)
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        DesignerDocument? dockDoc = DockFactory.AddDocument(DockLayout, document);
+        if (dockDoc is not null)
+        {
+            _dockDocuments[document.FilePath] = dockDoc;
+        }
+    }
+
+    private void SetActiveDockDocument(DesignerDocumentViewModel document)
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        if (_dockDocuments.TryGetValue(document.FilePath, out DesignerDocument? dockDoc))
+        {
+            DockFactory.SetActiveDockable(dockDoc);
+        }
+    }
+
+    private void CloseDockDocument(DesignerDocumentViewModel document)
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        if (_dockDocuments.TryGetValue(document.FilePath, out DesignerDocument? dockDoc))
+        {
+            DockFactory.CloseDockable(dockDoc);
+            _dockDocuments.Remove(document.FilePath);
+        }
+    }
+
+    private void WireDockEvents()
+    {
+        DockFactory.ActiveDockableChanged += OnActiveDockableChanged;
+        DockFactory.DockableClosed += OnDockableClosed;
+    }
+
+    private void OnActiveDockableChanged(object? sender, ActiveDockableChangedEventArgs e)
+    {
+        if (e.Dockable is DesignerDocument doc)
+        {
+            ActiveDocument = doc.DocumentViewModel;
+        }
+    }
+
+    private void OnDockableClosed(object? sender, DockableClosedEventArgs e)
+    {
+        if (e.Dockable is DesignerDocument doc)
+        {
+            _isClosingFromDock = true;
+            try
+            {
+                CloseDocument(doc.DocumentViewModel);
+            }
+            finally
+            {
+                _isClosingFromDock = false;
+            }
+        }
+    }
+
+    private void SetDockableVisibility(string id, bool isVisible)
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
+        if (dockable is null)
+        {
+            return;
+        }
+
+        if (isVisible)
+        {
+            DockFactory.RestoreDockable(dockable);
+            DockFactory.SetActiveDockable(dockable);
+        }
+        else
+        {
+            DockFactory.HideDockable(dockable);
+        }
+    }
+
     /// <summary>
     /// Closes a document.
     /// </summary>
     public void CloseDocument(DesignerDocumentViewModel doc)
     {
+        if (!_isClosingFromDock)
+        {
+            CloseDockDocument(doc);
+        }
+
         Documents.Remove(doc);
         if (ActiveDocument == doc)
         {
@@ -1037,12 +1203,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         if (existing is not null)
         {
             ActiveDocument = existing;
+            SetActiveDockDocument(existing);
             return;
         }
 
         DesignerDocumentViewModel doc = new(filePath, _metadataService);
         Documents.Add(doc);
         ActiveDocument = doc;
+        AddDocumentToDock(doc);
         await doc.LoadAsync();
         UpdateTrees(doc);
 
@@ -1103,6 +1271,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             ApplyAssemblyResolver(assemblyPaths);
             _metadataService.LoadAssemblies(assemblyPaths);
+            RefreshOpenDocumentsAfterMetadataLoad();
         }
 
         StatusText = $"Loaded workspace {name}";
@@ -1261,6 +1430,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             ApplyAssemblyResolver(assemblyPaths);
             _metadataService.LoadAssemblies(assemblyPaths);
+            RefreshOpenDocumentsAfterMetadataLoad();
+        }
+    }
+
+    private void RefreshOpenDocumentsAfterMetadataLoad()
+    {
+        foreach (DesignerDocumentViewModel doc in Documents)
+        {
+            doc.DesignSurface.RequestRebuild();
         }
     }
 
@@ -1363,6 +1541,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _disposables.Dispose();
         Collaboration.Dispose();
         _assemblyResolver?.Dispose();
+
+        DockFactory.ActiveDockableChanged -= OnActiveDockableChanged;
+        DockFactory.DockableClosed -= OnDockableClosed;
+
+        if (DockLayout is not null)
+        {
+            XamlEditorDockFactory.SaveLayout(DockLayout);
+        }
 
         foreach (DesignerDocumentViewModel doc in Documents)
         {
