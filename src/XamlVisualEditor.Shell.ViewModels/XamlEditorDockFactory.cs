@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.Serialization;
+using System.Reactive.Linq;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.ReactiveUI;
@@ -11,6 +12,7 @@ using Dock.Serializer.SystemTextJson;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Collaboration.UI;
+using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.Shell;
@@ -21,6 +23,7 @@ namespace XamlVisualEditor.Shell;
 public sealed class ToolboxTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public ToolboxViewModel? ToolboxViewModel { get; set; }
 
     public ToolboxTool()
@@ -43,6 +46,7 @@ public sealed class ToolboxTool : Tool
 public sealed class SolutionExplorerTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public SolutionExplorerViewModel? SolutionExplorerViewModel { get; set; }
 
     public SolutionExplorerTool()
@@ -65,12 +69,22 @@ public sealed class SolutionExplorerTool : Tool
 public sealed class PropertyEditorTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public MainWindowViewModel? MainViewModel { get; set; }
+
+    internal static MainWindowViewModel? DefaultMainViewModel { get; set; }
+
+    [IgnoreDataMember]
+    [Reactive]
+    public PropertyEditorViewModel? PropertyEditor { get; private set; }
+
+    private IDisposable? _activeDocSubscription;
 
     public PropertyEditorTool()
     {
         Id = "Properties";
         Title = "Properties";
+        MainViewModel = DefaultMainViewModel;
     }
 
     public PropertyEditorTool(MainWindowViewModel mainViewModel)
@@ -78,6 +92,15 @@ public sealed class PropertyEditorTool : Tool
         MainViewModel = mainViewModel;
         Id = "Properties";
         Title = "Properties";
+    }
+
+    public void Bind(MainWindowViewModel mainViewModel)
+    {
+        MainViewModel = mainViewModel;
+        _activeDocSubscription?.Dispose();
+        _activeDocSubscription = mainViewModel.WhenAnyValue(x => x.ActiveDesignerDocument)
+            .Select(doc => doc?.PropertyEditor)
+            .Subscribe(vm => PropertyEditor = vm);
     }
 }
 
@@ -87,12 +110,16 @@ public sealed class PropertyEditorTool : Tool
 public sealed class VisualTreeTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public MainWindowViewModel? MainViewModel { get; set; }
+
+    internal static MainWindowViewModel? DefaultMainViewModel { get; set; }
 
     public VisualTreeTool()
     {
         Id = "VisualTree";
         Title = "Visual Tree";
+        MainViewModel = DefaultMainViewModel;
     }
 
     public VisualTreeTool(MainWindowViewModel mainViewModel)
@@ -109,12 +136,16 @@ public sealed class VisualTreeTool : Tool
 public sealed class LogicalTreeTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public MainWindowViewModel? MainViewModel { get; set; }
+
+    internal static MainWindowViewModel? DefaultMainViewModel { get; set; }
 
     public LogicalTreeTool()
     {
         Id = "LogicalTree";
         Title = "Logical Tree";
+        MainViewModel = DefaultMainViewModel;
     }
 
     public LogicalTreeTool(MainWindowViewModel mainViewModel)
@@ -131,6 +162,7 @@ public sealed class LogicalTreeTool : Tool
 public sealed class OutputTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public OutputViewModel? OutputViewModel { get; set; }
 
     public OutputTool()
@@ -153,6 +185,7 @@ public sealed class OutputTool : Tool
 public sealed class CollaborationTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public CollaborationPanelViewModel? CollaborationViewModel { get; set; }
 
     public CollaborationTool()
@@ -175,6 +208,7 @@ public sealed class CollaborationTool : Tool
 public sealed class ReferencesTool : Tool
 {
     [IgnoreDataMember]
+    [Reactive]
     public ReferencesViewModel? ReferencesViewModel { get; set; }
 
     public ReferencesTool()
@@ -236,6 +270,9 @@ public sealed class XamlEditorDockFactory : Factory
     public XamlEditorDockFactory(MainWindowViewModel mainVm)
     {
         _mainVm = mainVm;
+        PropertyEditorTool.DefaultMainViewModel = mainVm;
+        VisualTreeTool.DefaultMainViewModel = mainVm;
+        LogicalTreeTool.DefaultMainViewModel = mainVm;
     }
 
     /// <summary>
@@ -359,7 +396,7 @@ public sealed class XamlEditorDockFactory : Factory
         PropertyEditorTool? propertyTool = FindDockable<PropertyEditorTool>(rootDock, "Properties");
         if (propertyTool is not null)
         {
-            propertyTool.MainViewModel = _mainVm;
+            propertyTool.Bind(_mainVm);
         }
 
         VisualTreeTool? visualTreeTool = FindDockable<VisualTreeTool>(rootDock, "VisualTree");

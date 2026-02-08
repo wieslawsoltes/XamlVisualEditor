@@ -20,6 +20,8 @@ public sealed class DesignAdornerLayer : Control
     private readonly SelectionAdorner _selectionAdorner = new();
     private readonly ResizeHandleAdorner _resizeHandleAdorner = new();
     private readonly SnapLineAdorner _snapLineAdorner = new();
+    private readonly GuideLineAdorner _guideLineAdorner = new();
+    private readonly SpacingGuideAdorner _spacingGuideAdorner = new();
     private readonly MarginPaddingAdorner _marginPaddingAdorner = new();
     private readonly DropTargetAdorner _dropTargetAdorner = new();
 
@@ -27,9 +29,15 @@ public sealed class DesignAdornerLayer : Control
     private IDesignItem? _hoveredItem;
     private IReadOnlyList<double> _snapHorizontalLines = Array.Empty<double>();
     private IReadOnlyList<double> _snapVerticalLines = Array.Empty<double>();
+    private IReadOnlyList<double> _guideHorizontalLines = Array.Empty<double>();
+    private IReadOnlyList<double> _guideVerticalLines = Array.Empty<double>();
+    private IReadOnlyList<SpacingGuide> _spacingGuides = Array.Empty<SpacingGuide>();
     private DropPosition? _dropPosition;
     private Rect? _dropTargetBounds;
     private bool _showMarginPadding;
+    private bool _showAlignmentGuides = true;
+    private bool _showGuides = true;
+    private bool _showSpacingGuides = true;
     private Control? _surfaceRoot;
     private Rect? _selectionBox;
 
@@ -42,6 +50,45 @@ public sealed class DesignAdornerLayer : Control
         set
         {
             _showMarginPadding = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether alignment guides (snap lines) are visible.
+    /// </summary>
+    public bool ShowAlignmentGuides
+    {
+        get => _showAlignmentGuides;
+        set
+        {
+            _showAlignmentGuides = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether persistent guides are visible.
+    /// </summary>
+    public bool ShowGuides
+    {
+        get => _showGuides;
+        set
+        {
+            _showGuides = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether spacing guides are visible.
+    /// </summary>
+    public bool ShowSpacingGuides
+    {
+        get => _showSpacingGuides;
+        set
+        {
+            _showSpacingGuides = value;
             InvalidateVisual();
         }
     }
@@ -90,6 +137,25 @@ public sealed class DesignAdornerLayer : Control
     }
 
     /// <summary>
+    /// Updates guide lines (ruler guides).
+    /// </summary>
+    public void UpdateGuideLines(IReadOnlyList<double> horizontalLines, IReadOnlyList<double> verticalLines)
+    {
+        _guideHorizontalLines = horizontalLines ?? Array.Empty<double>();
+        _guideVerticalLines = verticalLines ?? Array.Empty<double>();
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Updates spacing guides.
+    /// </summary>
+    public void UpdateSpacingGuides(IReadOnlyList<SpacingGuide> guides)
+    {
+        _spacingGuides = guides ?? Array.Empty<SpacingGuide>();
+        InvalidateVisual();
+    }
+
+    /// <summary>
     /// Updates the drop target indicator.
     /// </summary>
     public void UpdateDropTarget(Rect? targetBounds, DropPosition? position)
@@ -117,6 +183,9 @@ public sealed class DesignAdornerLayer : Control
         _hoveredItem = null;
         _snapHorizontalLines = Array.Empty<double>();
         _snapVerticalLines = Array.Empty<double>();
+        _guideHorizontalLines = Array.Empty<double>();
+        _guideVerticalLines = Array.Empty<double>();
+        _spacingGuides = Array.Empty<SpacingGuide>();
         _dropTargetBounds = null;
         _dropPosition = null;
         _selectionBox = null;
@@ -175,19 +244,31 @@ public sealed class DesignAdornerLayer : Control
             }
         }
 
-        // 5. Snap lines
-        if (_snapHorizontalLines.Count > 0 || _snapVerticalLines.Count > 0)
+        // 5. Alignment snap lines
+        if (_showAlignmentGuides && (_snapHorizontalLines.Count > 0 || _snapVerticalLines.Count > 0))
         {
             _snapLineAdorner.Render(context, _snapHorizontalLines, _snapVerticalLines, Bounds.Size);
         }
 
-        // 6. Drop target indicator
+        // 6. Spacing guides
+        if (_showSpacingGuides && _spacingGuides.Count > 0)
+        {
+            _spacingGuideAdorner.Render(context, _spacingGuides);
+        }
+
+        // 7. Persistent guides
+        if (_showGuides && (_guideHorizontalLines.Count > 0 || _guideVerticalLines.Count > 0))
+        {
+            _guideLineAdorner.Render(context, _guideHorizontalLines, _guideVerticalLines, Bounds.Size);
+        }
+
+        // 8. Drop target indicator
         if (_dropTargetBounds.HasValue && _dropPosition.HasValue)
         {
             _dropTargetAdorner.Render(context, _dropTargetBounds.Value, _dropPosition.Value);
         }
 
-        // 7. Marquee selection box
+        // 9. Marquee selection box
         if (_selectionBox.HasValue)
         {
             Rect box = _selectionBox.Value;

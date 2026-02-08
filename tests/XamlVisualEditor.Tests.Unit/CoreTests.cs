@@ -961,6 +961,31 @@ public sealed class IntellisenseProviderTests
     }
 
     [Fact]
+    public void AttributeCompletionProvider_Prioritizes_Attached_Properties()
+    {
+        AttributeCompletionProvider provider = new();
+        StubMetadataService metadata = new();
+
+        CompletionContext context = new()
+        {
+            TextBefore = "<Button ",
+            Offset = 8,
+            Trigger = CompletionTrigger.CharacterTyped,
+            Metadata = metadata
+        };
+
+        IReadOnlyList<CompletionItem> items = provider.GetCompletions(context);
+
+        CompletionItem? attached = items.FirstOrDefault(i => i.DisplayText == "Grid.Row");
+        CompletionItem? normal = items.FirstOrDefault(i => i.DisplayText == "Width");
+
+        Assert.NotNull(attached);
+        Assert.NotNull(normal);
+        Assert.Equal(2, attached!.Priority);
+        Assert.Equal(1, normal!.Priority);
+    }
+
+    [Fact]
     public void ClosingTagCompletionProvider_ShouldTrigger_On_Slash()
     {
         ClosingTagCompletionProvider provider = new();
@@ -1006,6 +1031,78 @@ public sealed class IntellisenseProviderTests
         // Should not throw — providers are registered
         IReadOnlyList<CompletionItem> items = registry.GetCompletions(context);
         Assert.NotNull(items);
+    }
+
+    private sealed class StubMetadataService : ITypeMetadataService
+    {
+        private readonly TypeMetadata _type = new()
+        {
+            FullName = "Avalonia.Controls.Button",
+            Name = "Button",
+            XmlNamespace = "https://github.com/avaloniaui",
+            ClrNamespace = "Avalonia.Controls",
+            AssemblyName = "Avalonia.Controls"
+        };
+
+        private readonly IReadOnlyList<PropertyMetadata> _properties = new List<PropertyMetadata>
+        {
+            new()
+            {
+                Name = "Width",
+                TypeFullName = "System.Double",
+                Kind = PropertyKind.Numeric,
+                IsReadOnly = false
+            },
+            new()
+            {
+                Name = "Grid.Row",
+                TypeFullName = "System.Int32",
+                Kind = PropertyKind.Numeric,
+                IsReadOnly = false,
+                IsAttached = true,
+                OwnerType = "Avalonia.Controls.Grid"
+            }
+        };
+
+        public TypeMetadata? GetType(string xmlNamespace, string typeName)
+        {
+            return xmlNamespace == _type.XmlNamespace && typeName == _type.Name
+                ? _type
+                : null;
+        }
+
+        public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null)
+        {
+            return Array.Empty<TypeMetadata>();
+        }
+
+        public IReadOnlyList<PropertyMetadata> GetProperties(TypeMetadata type)
+        {
+            return type.FullName == _type.FullName ? _properties : Array.Empty<PropertyMetadata>();
+        }
+
+        public IReadOnlyList<EventMetadata> GetEvents(TypeMetadata type)
+        {
+            return Array.Empty<EventMetadata>();
+        }
+
+        public IReadOnlyList<string> GetAvailableNamespaces()
+        {
+            return Array.Empty<string>();
+        }
+
+        public void LoadAssembly(string assemblyPath)
+        {
+        }
+
+        public void LoadAssemblies(IEnumerable<string> assemblyPaths)
+        {
+        }
+
+        public Type? ResolveClrType(TypeMetadata type)
+        {
+            return null;
+        }
     }
 }
 

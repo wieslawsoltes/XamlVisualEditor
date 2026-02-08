@@ -12,6 +12,13 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+
+
 
 namespace XamlVisualEditor.Workspace;
 
@@ -732,6 +739,25 @@ public sealed class TypeMetadataService : ITypeMetadataService
 {
     private readonly Dictionary<string, TypeMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<System.Reflection.Assembly> _loadedAssemblies = new();
+    private readonly HashSet<string> _loadedAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
+
+    public TypeMetadataService()
+    {
+        foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            string? name = asm.GetName().Name;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            if (name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase) ||
+                name.StartsWith("XamlVisualEditor", StringComparison.OrdinalIgnoreCase))
+            {
+                AddAssembly(asm);
+            }
+        }
+    }
 
     /// <inheritdoc />
     public TypeMetadata? GetType(string xmlNamespace, string typeName)
@@ -770,16 +796,59 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
 
         List<PropertyMetadata> properties = new();
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach ((Avalonia.AvaloniaProperty prop, Type ownerType) in GetAvaloniaProperties(clrType))
+        {
+            string name = prop.IsAttached ? $"{ownerType.Name}.{prop.Name}" : prop.Name;
+            if (!seen.Add(name))
+            {
+                continue;
+            }
+
+            properties.Add(new PropertyMetadata
+            {
+                Name = name,
+                TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
+                Kind = MapValueKind(prop.PropertyType),
+                IsReadOnly = prop.IsReadOnly,
+                DefaultValue = TryGetDefaultValue(prop, ownerType),
+                ClrType = prop.PropertyType,
+                IsAttached = prop.IsAttached,
+                OwnerType = prop.IsAttached ? ownerType.FullName : null
+            });
+        }
+
+        foreach (PropertyMetadata attached in GetAttachedProperties())
+        {
+            if (!seen.Add(attached.Name))
+            {
+                continue;
+            }
+
+            properties.Add(attached);
+        }
+
         foreach (System.Reflection.PropertyInfo prop in clrType.GetProperties(
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
-            PropertyKind kind = InferKind(prop.PropertyType);
+            if (prop.GetIndexParameters().Length > 0)
+            {
+                continue;
+            }
+
+            if (!seen.Add(prop.Name))
+            {
+                continue;
+            }
+
             properties.Add(new PropertyMetadata
             {
                 Name = prop.Name,
                 TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
-                Kind = kind,
-                IsReadOnly = !prop.CanWrite
+                Kind = MapValueKind(prop.PropertyType),
+                IsReadOnly = !prop.CanWrite,
+                ClrType = prop.PropertyType
             });
         }
 
@@ -849,7 +918,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
         try
         {
             System.Reflection.Assembly asm = System.Reflection.Assembly.LoadFrom(assemblyPath);
-            _loadedAssemblies.Add(asm);
+            AddAssembly(asm);
         }
         catch (Exception ex)
         {
@@ -923,9 +992,267 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
     private static PropertyKind InferKind(Type propertyType)
     {
-        // All property kinds map to the available enum values:
-        // Styled, Direct, Attached, ClrProperty
-        return PropertyKind.ClrProperty;
+        return MapValueKind(propertyType);
+    }
+
+    private void AddAssembly(System.Reflection.Assembly asm)
+    {
+        string? name = asm.GetName().Name;
+        if (string.IsNullOrWhiteSpace(name) || !_loadedAssemblyNames.Add(name))
+        {
+            return;
+        }
+
+        _loadedAssemblies.Add(asm);
+    }
+
+    private IEnumerable<(Avalonia.AvaloniaProperty Prop, Type OwnerType)> GetAvaloniaProperties(Type type)
+    {
+        Type? current = type;
+        while (current is not null)
+        {
+            foreach (System.Reflection.FieldInfo field in current.GetFields(
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.FlattenHierarchy))
+            {
+                if (!typeof(Avalonia.AvaloniaProperty).IsAssignableFrom(field.FieldType))
+                {
+                    continue;
+                }
+
+                if (field.GetValue(null) is Avalonia.AvaloniaProperty prop)
+                {
+                    yield return (prop, prop.OwnerType ?? current);
+                }
+            }
+
+            current = current.BaseType;
+        }
+    }
+
+    private IReadOnlyList<PropertyMetadata> GetAttachedProperties()
+    {
+        List<PropertyMetadata> attached = new();
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (System.Reflection.Assembly asm in _loadedAssemblies)
+        {
+            Type[] types;
+            try
+            {
+                types = asm.GetTypes();
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (Type type in types)
+            {
+                if (type.ContainsGenericParameters)
+                {
+                    continue;
+                }
+
+                foreach (System.Reflection.FieldInfo field in type.GetFields(
+                    System.Reflection.BindingFlags.Public |
+                    System.Reflection.BindingFlags.Static |
+                    System.Reflection.BindingFlags.FlattenHierarchy))
+                {
+                    try
+                    {
+                        if (!typeof(Avalonia.AvaloniaProperty).IsAssignableFrom(field.FieldType))
+                        {
+                            continue;
+                        }
+
+                        Avalonia.AvaloniaProperty? prop = field.GetValue(null) as Avalonia.AvaloniaProperty;
+                        if (prop is null || !prop.IsAttached)
+                        {
+                            continue;
+                        }
+
+                        string name = $"{type.Name}.{prop.Name}";
+                        if (!seen.Add(name))
+                        {
+                            continue;
+                        }
+
+                        attached.Add(new PropertyMetadata
+                        {
+                            Name = name,
+                            TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
+                            Kind = MapValueKind(prop.PropertyType),
+                            IsReadOnly = prop.IsReadOnly,
+                            DefaultValue = TryGetDefaultValue(prop, type),
+                            ClrType = prop.PropertyType,
+                            IsAttached = true,
+                            OwnerType = type.FullName
+                        });
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        return attached;
+    }
+
+    private static object? TryGetDefaultValue(Avalonia.AvaloniaProperty prop, Type ownerType)
+    {
+        try
+        {
+            System.Reflection.MethodInfo? getDefault = prop.GetType().GetMethod("GetDefaultValue");
+            if (getDefault is not null)
+            {
+                return getDefault.Invoke(prop, new object?[] { ownerType });
+            }
+
+            System.Reflection.MethodInfo? getMetadata = prop.GetType().GetMethod("GetMetadata");
+            if (getMetadata is not null)
+            {
+                object? metadata = getMetadata.Invoke(prop, new object?[] { ownerType });
+                if (metadata is not null)
+                {
+                    System.Reflection.PropertyInfo? defaultProp = metadata.GetType().GetProperty("DefaultValue");
+                    if (defaultProp is not null)
+                    {
+                        return defaultProp.GetValue(metadata);
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static PropertyKind MapValueKind(Type propertyType)
+    {
+        if (propertyType == typeof(string))
+        {
+            return PropertyKind.String;
+        }
+
+        if (propertyType == typeof(bool) || propertyType == typeof(bool?))
+        {
+            return PropertyKind.Boolean;
+        }
+
+        if (propertyType.IsEnum)
+        {
+            return PropertyKind.Enum;
+        }
+
+        if (propertyType == typeof(Avalonia.Thickness))
+        {
+            return PropertyKind.Thickness;
+        }
+
+        if (propertyType == typeof(Avalonia.CornerRadius))
+        {
+            return PropertyKind.CornerRadius;
+        }
+
+        if (propertyType == typeof(Avalonia.Point))
+        {
+            return PropertyKind.Point;
+        }
+
+        if (propertyType == typeof(Avalonia.Size))
+        {
+            return PropertyKind.Size;
+        }
+
+        if (propertyType == typeof(Avalonia.Rect))
+        {
+            return PropertyKind.Rect;
+        }
+
+        if (propertyType == typeof(Avalonia.Controls.GridLength))
+        {
+            return PropertyKind.GridLength;
+        }
+
+        if (propertyType == typeof(Avalonia.Media.Color))
+        {
+            return PropertyKind.Color;
+        }
+
+        if (typeof(Avalonia.Media.IBrush).IsAssignableFrom(propertyType))
+        {
+            return PropertyKind.Brush;
+        }
+
+        if (propertyType == typeof(Avalonia.Media.FontFamily))
+        {
+            return PropertyKind.FontFamily;
+        }
+
+        if (propertyType == typeof(Avalonia.Media.FontWeight))
+        {
+            return PropertyKind.FontWeight;
+        }
+
+        if (propertyType == typeof(Avalonia.Media.FontStyle))
+        {
+            return PropertyKind.FontStyle;
+        }
+
+        if (propertyType == typeof(TimeSpan) || propertyType == typeof(TimeSpan?))
+        {
+            return PropertyKind.TimeSpan;
+        }
+
+        if (propertyType == typeof(Uri))
+        {
+            return PropertyKind.Uri;
+        }
+
+        if (typeof(Avalonia.Controls.Templates.IDataTemplate).IsAssignableFrom(propertyType) ||
+            typeof(Avalonia.Controls.Templates.IControlTemplate).IsAssignableFrom(propertyType))
+        {
+            return PropertyKind.Template;
+        }
+
+        if (typeof(Avalonia.Markup.Xaml.MarkupExtension).IsAssignableFrom(propertyType))
+        {
+            return PropertyKind.MarkupExtension;
+        }
+
+        if (typeof(System.Collections.IEnumerable).IsAssignableFrom(propertyType) && propertyType != typeof(string))
+        {
+            return PropertyKind.Collection;
+        }
+
+        if (propertyType.IsPrimitive)
+        {
+            return PropertyKind.Numeric;
+        }
+
+        switch (Type.GetTypeCode(propertyType))
+        {
+            case TypeCode.Byte:
+            case TypeCode.SByte:
+            case TypeCode.Int16:
+            case TypeCode.Int32:
+            case TypeCode.Int64:
+            case TypeCode.UInt16:
+            case TypeCode.UInt32:
+            case TypeCode.UInt64:
+            case TypeCode.Single:
+            case TypeCode.Double:
+            case TypeCode.Decimal:
+                return PropertyKind.Numeric;
+        }
+
+        return PropertyKind.Object;
     }
 
     private bool TryResolveType(string xmlNamespace, string typeName, out Type? resolved)

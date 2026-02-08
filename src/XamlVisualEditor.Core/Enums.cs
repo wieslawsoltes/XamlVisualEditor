@@ -48,7 +48,52 @@ public enum PropertyKind
     Thickness,
 
     /// <summary>A CornerRadius property (4-field editor).</summary>
-    CornerRadius
+    CornerRadius,
+
+    /// <summary>A string property.</summary>
+    String,
+
+    /// <summary>A color property.</summary>
+    Color,
+
+    /// <summary>A point property.</summary>
+    Point,
+
+    /// <summary>A size property.</summary>
+    Size,
+
+    /// <summary>A rect property.</summary>
+    Rect,
+
+    /// <summary>A grid length property.</summary>
+    GridLength,
+
+    /// <summary>A font family property.</summary>
+    FontFamily,
+
+    /// <summary>A font weight property.</summary>
+    FontWeight,
+
+    /// <summary>A font style property.</summary>
+    FontStyle,
+
+    /// <summary>A TimeSpan property.</summary>
+    TimeSpan,
+
+    /// <summary>A Uri property.</summary>
+    Uri,
+
+    /// <summary>A collection property.</summary>
+    Collection,
+
+    /// <summary>A template property.</summary>
+    Template,
+
+    /// <summary>A markup extension property.</summary>
+    MarkupExtension,
+
+    /// <summary>An object property.</summary>
+    Object
 }
 
 /// <summary>

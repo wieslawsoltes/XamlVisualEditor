@@ -31,9 +31,9 @@
         <!-- Split view: Design Surface + Code Editor -->
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.DesignerRowHeight}}" />
+                <RowDefinition Height="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.SplitterRowHeight}}" />
+                <RowDefinition Height="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.CodeRowHeight}}" />
             </Grid.RowDefinitions>
 
             <!-- Design Surface -->

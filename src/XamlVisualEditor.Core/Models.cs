@@ -1,3 +1,5 @@
+using System;
+
 namespace XamlVisualEditor.Core;
 
 /// <summary>
@@ -48,6 +50,15 @@ public sealed class PropertyMetadata
 
     /// <summary>Gets the kind of Avalonia property.</summary>
     public required PropertyKind Kind { get; init; }
+
+    /// <summary>Gets the CLR type of the property value, if known.</summary>
+    public Type? ClrType { get; init; }
+
+    /// <summary>Gets whether the property is attached.</summary>
+    public bool IsAttached { get; init; }
+
+    /// <summary>Gets the owner type for attached properties.</summary>
+    public string? OwnerType { get; init; }
 
     /// <summary>Gets whether the property is read-only.</summary>
     public bool IsReadOnly { get; init; }

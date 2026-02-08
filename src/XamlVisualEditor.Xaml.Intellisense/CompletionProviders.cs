@@ -103,7 +103,7 @@ public sealed class AttributeCompletionProvider : ICompletionProvider
                 InsertText = $"{prop.Name}=\"\"",
                 Description = $"{prop.Name} : {prop.TypeFullName}",
                 Kind = CompletionItemKind.Property,
-                Priority = prop.Kind == PropertyKind.Attached ? 2 : 1
+                Priority = prop.IsAttached ? 2 : 1
             });
         }
 

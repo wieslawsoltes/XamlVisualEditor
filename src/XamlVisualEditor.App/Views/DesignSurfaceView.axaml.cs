@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.ComponentModel;
 using XamlVisualEditor.Core.Interfaces;
@@ -39,10 +40,14 @@ public sealed partial class DesignSurfaceView : UserControl
     private Panel? _canvas;
     private Control? _rootControl;
     private DesignAdornerLayer? _adornerLayer;
+    private ScrollViewer? _scrollViewer;
+    private RulerControl? _horizontalRuler;
+    private RulerControl? _verticalRuler;
     private IDesignItem? _hoveredItem;
     private DragState? _dragState;
     private MarqueeState? _marqueeState;
     private readonly SurfaceDropHandler _surfaceDropHandler = new();
+    private NotifyCollectionChangedEventHandler? _guideChangedHandler;
 
     public DesignSurfaceView()
     {
@@ -76,12 +81,21 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _canvas = this.FindControl<Panel>("DesignCanvas");
         _adornerLayer = this.FindControl<DesignAdornerLayer>("AdornerLayer");
+        _scrollViewer = this.FindControl<ScrollViewer>("SurfaceScrollViewer");
+        _horizontalRuler = this.FindControl<RulerControl>("HorizontalRuler");
+        _verticalRuler = this.FindControl<RulerControl>("VerticalRuler");
         if (_canvas is not null)
         {
             _canvas.PointerPressed += OnCanvasPointerPressed;
             _canvas.PointerMoved += OnCanvasPointerMoved;
             _canvas.PointerReleased += OnCanvasPointerReleased;
             _canvas.PointerCaptureLost += OnCanvasPointerCaptureLost;
+        }
+
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.ScrollChanged += OnSurfaceScrollChanged;
+            UpdateRulerOffsets();
         }
 
         if (_adornerLayer is not null && _canvas is not null)
@@ -105,6 +119,7 @@ public sealed partial class DesignSurfaceView : UserControl
             _currentVm.RebuildRequested -= OnRebuildRequested;
             _currentVm.Selection.SelectionChanged -= OnSelectionChanged;
             _currentVm.PropertyChanged -= OnDesignSurfacePropertyChanged;
+            DetachGuideHandlers(_currentVm);
         }
 
         _currentVm = DataContext as DesignSurfaceViewModel;
@@ -114,6 +129,10 @@ public sealed partial class DesignSurfaceView : UserControl
             _currentVm.RebuildRequested += OnRebuildRequested;
             _currentVm.Selection.SelectionChanged += OnSelectionChanged;
             _currentVm.PropertyChanged += OnDesignSurfacePropertyChanged;
+            AttachGuideHandlers(_currentVm);
+            ApplyAdornerVisibility();
+            UpdateGuideLines();
+            UpdateRulerSelectionBounds();
 
             // Trigger an initial rebuild if we're already loaded
             if (_isLoaded)
@@ -146,6 +165,8 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _adornerLayer.UpdateSelection(selected);
+        UpdateRulerSelectionBounds();
+        UpdateSpacingGuidesForSelection();
     }
 
     private void OnDesignSurfacePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -153,7 +174,156 @@ public sealed partial class DesignSurfaceView : UserControl
         if (e.PropertyName == nameof(DesignSurfaceViewModel.IsEditMode))
         {
             ApplyEditMode();
+            return;
         }
+
+        if (e.PropertyName == nameof(DesignSurfaceViewModel.ShowMarginPadding) ||
+            e.PropertyName == nameof(DesignSurfaceViewModel.ShowAlignmentGuides) ||
+            e.PropertyName == nameof(DesignSurfaceViewModel.ShowGuides) ||
+            e.PropertyName == nameof(DesignSurfaceViewModel.ShowSpacingGuides))
+        {
+            ApplyAdornerVisibility();
+            UpdateGuideLines();
+            UpdateSpacingGuidesForSelection();
+            return;
+        }
+
+        if (e.PropertyName == nameof(DesignSurfaceViewModel.Zoom) ||
+            e.PropertyName == nameof(DesignSurfaceViewModel.CanvasWidth) ||
+            e.PropertyName == nameof(DesignSurfaceViewModel.CanvasHeight))
+        {
+            UpdateRulerOffsets();
+            UpdateRulerSelectionBounds();
+        }
+    }
+
+    private void AttachGuideHandlers(DesignSurfaceViewModel vm)
+    {
+        _guideChangedHandler ??= (_, _) => UpdateGuideLines();
+        vm.HorizontalGuides.CollectionChanged += _guideChangedHandler;
+        vm.VerticalGuides.CollectionChanged += _guideChangedHandler;
+    }
+
+    private void DetachGuideHandlers(DesignSurfaceViewModel vm)
+    {
+        if (_guideChangedHandler is null)
+        {
+            return;
+        }
+
+        vm.HorizontalGuides.CollectionChanged -= _guideChangedHandler;
+        vm.VerticalGuides.CollectionChanged -= _guideChangedHandler;
+    }
+
+    private void ApplyAdornerVisibility()
+    {
+        if (_adornerLayer is null || _currentVm is null)
+        {
+            return;
+        }
+
+        _adornerLayer.ShowMarginPadding = _currentVm.ShowMarginPadding;
+        _adornerLayer.ShowAlignmentGuides = _currentVm.ShowAlignmentGuides;
+        _adornerLayer.ShowGuides = _currentVm.ShowGuides;
+        _adornerLayer.ShowSpacingGuides = _currentVm.ShowSpacingGuides;
+    }
+
+    private void UpdateGuideLines()
+    {
+        if (_adornerLayer is null || _currentVm is null)
+        {
+            return;
+        }
+
+        if (_currentVm.ShowGuides)
+        {
+            _adornerLayer.UpdateGuideLines(_currentVm.HorizontalGuides, _currentVm.VerticalGuides);
+        }
+        else
+        {
+            _adornerLayer.UpdateGuideLines(Array.Empty<double>(), Array.Empty<double>());
+        }
+    }
+
+    private void OnSurfaceScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        UpdateRulerOffsets();
+    }
+
+    private void UpdateRulerOffsets()
+    {
+        if (_scrollViewer is null || _canvas is null)
+        {
+            return;
+        }
+
+        Point origin = GetCanvasOriginInScrollViewer();
+        double offsetX = _scrollViewer.Offset.X - origin.X;
+        double offsetY = _scrollViewer.Offset.Y - origin.Y;
+
+        if (_horizontalRuler is not null)
+        {
+            _horizontalRuler.Offset = offsetX;
+        }
+
+        if (_verticalRuler is not null)
+        {
+            _verticalRuler.Offset = offsetY;
+        }
+    }
+
+    private Point GetCanvasOriginInScrollViewer()
+    {
+        if (_canvas is null || _scrollViewer is null)
+        {
+            return default;
+        }
+
+        Point? origin = _canvas.TranslatePoint(new Point(0, 0), _scrollViewer);
+        return origin ?? default;
+    }
+
+    private void UpdateRulerSelectionBounds()
+    {
+        if (_canvas is null)
+        {
+            return;
+        }
+
+        Rect? selectionBounds = GetSelectionBounds();
+        if (_horizontalRuler is not null)
+        {
+            _horizontalRuler.SelectionStart = selectionBounds?.Left;
+            _horizontalRuler.SelectionEnd = selectionBounds?.Right;
+        }
+
+        if (_verticalRuler is not null)
+        {
+            _verticalRuler.SelectionStart = selectionBounds?.Top;
+            _verticalRuler.SelectionEnd = selectionBounds?.Bottom;
+        }
+    }
+
+    private Rect? GetSelectionBounds()
+    {
+        if (_currentVm is null || _currentVm.Selection.SelectedItems.Count == 0)
+        {
+            return null;
+        }
+
+        Rect? bounds = null;
+        foreach (IDesignItem item in _currentVm.Selection.SelectedItems)
+        {
+            if (item is not DesignItem designItem)
+            {
+                continue;
+            }
+
+            Rect itemBounds = designItem.GetBoundsRelativeTo(_canvas);
+            bounds = bounds is null ? itemBounds : bounds.Value.Union(itemBounds);
+        }
+
+        return bounds;
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
@@ -383,7 +553,11 @@ public sealed partial class DesignSurfaceView : UserControl
         {
             _adornerLayer.SetSurfaceRoot(canvas);
             _adornerLayer.UpdateSelection(_currentVm?.Selection.SelectedItems ?? Array.Empty<IDesignItem>());
+            ApplyAdornerVisibility();
+            UpdateGuideLines();
         }
+
+        UpdateRulerSelectionBounds();
 
         // Build design item maps for selection sync
         Dictionary<Guid, DesignItem> itemMap = new();
@@ -904,6 +1078,8 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _adornerLayer.UpdateSelection(_currentVm.Selection.SelectedItems);
+        UpdateRulerSelectionBounds();
+        UpdateSpacingGuidesForSelection();
     }
 
     private void StartDrag(DesignItem item, Point startPoint)
@@ -1019,6 +1195,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
+        _adornerLayer?.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
         RefreshSelectionAdorners();
     }
 
@@ -1036,9 +1213,14 @@ public sealed partial class DesignSurfaceView : UserControl
         IReadOnlyList<double> snapHorizontal = Array.Empty<double>();
         IReadOnlyList<double> snapVertical = Array.Empty<double>();
 
-        if (_currentVm.SnapLinesEnabled)
+        if (_currentVm.ShowAlignmentGuides || _currentVm.SnapLinesEnabled)
         {
-            (left, top, snapHorizontal, snapVertical) = ApplySnapLines(state, left, top);
+            (left, top, snapHorizontal, snapVertical) = ApplySnapLines(state, left, top, _currentVm.SnapLinesEnabled);
+        }
+
+        if (_currentVm.ShowGuides || _currentVm.SnapToGuides)
+        {
+            (left, top) = ApplyGuideSnaps(state, left, top, _currentVm.SnapToGuides);
         }
 
         if (_currentVm.SnapToGrid)
@@ -1068,6 +1250,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _adornerLayer?.UpdateSnapLines(snapHorizontal, snapVertical);
+        UpdateSpacingGuidesForDrag(new Rect(left, top, state.StartBounds.Width, state.StartBounds.Height));
         RefreshSelectionAdorners();
     }
 
@@ -1210,6 +1393,11 @@ public sealed partial class DesignSurfaceView : UserControl
             height = Snap(height, _currentVm.GridSnapSize);
         }
 
+        if (_currentVm.SnapToGuides)
+        {
+            (left, top, width, height) = ApplyGuideSnapsToResize(state, left, top, width, height);
+        }
+
         SetPropertyDouble(state.Item, "Width", width);
         SetPropertyDouble(state.Item, "Height", height);
 
@@ -1219,6 +1407,7 @@ public sealed partial class DesignSurfaceView : UserControl
             SetAttachedDouble(state.Item, "Canvas.Top", top);
         }
 
+        UpdateSpacingGuidesForDrag(new Rect(left, top, width, height));
         RefreshSelectionAdorners();
     }
 
@@ -1351,7 +1540,7 @@ public sealed partial class DesignSurfaceView : UserControl
     }
 
     private (double left, double top, IReadOnlyList<double> snapHorizontal, IReadOnlyList<double> snapVertical)
-        ApplySnapLines(DragState state, double left, double top)
+        ApplySnapLines(DragState state, double left, double top, bool applySnap)
     {
         if (_currentVm is null || _canvas is null)
         {
@@ -1399,7 +1588,10 @@ public sealed partial class DesignSurfaceView : UserControl
                 threshold);
             if (Math.Abs(offset) > 0)
             {
-                snappedLeft = left + offset;
+                if (applySnap)
+                {
+                    snappedLeft = left + offset;
+                }
                 snapVertical.Add(line);
             }
         }
@@ -1412,12 +1604,310 @@ public sealed partial class DesignSurfaceView : UserControl
                 threshold);
             if (Math.Abs(offset) > 0)
             {
-                snappedTop = top + offset;
+                if (applySnap)
+                {
+                    snappedTop = top + offset;
+                }
                 snapHorizontal.Add(line);
             }
         }
 
         return (snappedLeft, snappedTop, snapHorizontal, snapVertical);
+    }
+
+    private (double left, double top) ApplyGuideSnaps(DragState state, double left, double top, bool applySnap)
+    {
+        if (_currentVm is null)
+        {
+            return (left, top);
+        }
+
+        const double threshold = 6.0;
+        double width = state.StartBounds.Width;
+        double height = state.StartBounds.Height;
+
+        if (_currentVm.VerticalGuides.Count > 0)
+        {
+            (double offset, _) = FindSnapOffset(
+                new[] { left, left + width / 2, left + width },
+                _currentVm.VerticalGuides,
+                threshold);
+            if (applySnap && Math.Abs(offset) > 0)
+            {
+                left += offset;
+            }
+        }
+
+        if (_currentVm.HorizontalGuides.Count > 0)
+        {
+            (double offset, _) = FindSnapOffset(
+                new[] { top, top + height / 2, top + height },
+                _currentVm.HorizontalGuides,
+                threshold);
+            if (applySnap && Math.Abs(offset) > 0)
+            {
+                top += offset;
+            }
+        }
+
+        return (left, top);
+    }
+
+    private (double left, double top, double width, double height) ApplyGuideSnapsToResize(
+        DragState state,
+        double left,
+        double top,
+        double width,
+        double height)
+    {
+        if (_currentVm is null || state.ResizeDirection is null)
+        {
+            return (left, top, width, height);
+        }
+
+        const double threshold = 6.0;
+        ResizeDirection direction = state.ResizeDirection.Value;
+
+        if (_currentVm.VerticalGuides.Count > 0)
+        {
+            if (direction is ResizeDirection.Left or ResizeDirection.TopLeft or ResizeDirection.BottomLeft)
+            {
+                (double offset, _) = FindSnapOffset(new[] { left }, _currentVm.VerticalGuides, threshold);
+                if (Math.Abs(offset) > 0)
+                {
+                    left += offset;
+                    width -= offset;
+                }
+            }
+            else if (direction is ResizeDirection.Right or ResizeDirection.TopRight or ResizeDirection.BottomRight)
+            {
+                double right = left + width;
+                (double offset, _) = FindSnapOffset(new[] { right }, _currentVm.VerticalGuides, threshold);
+                if (Math.Abs(offset) > 0)
+                {
+                    width += offset;
+                }
+            }
+        }
+
+        if (_currentVm.HorizontalGuides.Count > 0)
+        {
+            if (direction is ResizeDirection.Top or ResizeDirection.TopLeft or ResizeDirection.TopRight)
+            {
+                (double offset, _) = FindSnapOffset(new[] { top }, _currentVm.HorizontalGuides, threshold);
+                if (Math.Abs(offset) > 0)
+                {
+                    top += offset;
+                    height -= offset;
+                }
+            }
+            else if (direction is ResizeDirection.Bottom or ResizeDirection.BottomLeft or ResizeDirection.BottomRight)
+            {
+                double bottom = top + height;
+                (double offset, _) = FindSnapOffset(new[] { bottom }, _currentVm.HorizontalGuides, threshold);
+                if (Math.Abs(offset) > 0)
+                {
+                    height += offset;
+                }
+            }
+        }
+
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+
+        return (left, top, width, height);
+    }
+
+    private void UpdateSpacingGuidesForSelection()
+    {
+        if (_currentVm is null || _adornerLayer is null)
+        {
+            return;
+        }
+
+        if (!_currentVm.ShowSpacingGuides)
+        {
+            _adornerLayer.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+            return;
+        }
+
+        Rect? selectionBounds = GetSelectionBounds();
+        if (selectionBounds is null)
+        {
+            _adornerLayer.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+            return;
+        }
+
+        _adornerLayer.UpdateSpacingGuides(BuildSpacingGuides(selectionBounds.Value));
+    }
+
+    private void UpdateSpacingGuidesForDrag(Rect selectionBounds)
+    {
+        if (_currentVm is null || _adornerLayer is null)
+        {
+            return;
+        }
+
+        if (!_currentVm.ShowSpacingGuides)
+        {
+            _adornerLayer.UpdateSpacingGuides(Array.Empty<SpacingGuide>());
+            return;
+        }
+
+        _adornerLayer.UpdateSpacingGuides(BuildSpacingGuides(selectionBounds));
+    }
+
+    private IReadOnlyList<SpacingGuide> BuildSpacingGuides(Rect selectionBounds)
+    {
+        if (_currentVm is null || _canvas is null)
+        {
+            return Array.Empty<SpacingGuide>();
+        }
+
+        double? bestLeft = null;
+        double? bestRight = null;
+        double? bestTop = null;
+        double? bestBottom = null;
+        Rect leftBounds = default;
+        Rect rightBounds = default;
+        Rect topBounds = default;
+        Rect bottomBounds = default;
+
+        foreach (DesignItem item in _currentVm.ItemMap.Values)
+        {
+            if (_currentVm.Selection.SelectedItems.Contains(item))
+            {
+                continue;
+            }
+
+            Rect bounds = item.GetBoundsRelativeTo(_canvas);
+
+            if (TryGetVerticalOverlap(selectionBounds, bounds, out double overlapY))
+            {
+                if (bounds.Right <= selectionBounds.Left)
+                {
+                    double distance = selectionBounds.Left - bounds.Right;
+                    if (!bestLeft.HasValue || distance < bestLeft.Value)
+                    {
+                        bestLeft = distance;
+                        leftBounds = bounds;
+                    }
+                }
+
+                if (bounds.Left >= selectionBounds.Right)
+                {
+                    double distance = bounds.Left - selectionBounds.Right;
+                    if (!bestRight.HasValue || distance < bestRight.Value)
+                    {
+                        bestRight = distance;
+                        rightBounds = bounds;
+                    }
+                }
+            }
+
+            if (TryGetHorizontalOverlap(selectionBounds, bounds, out double overlapX))
+            {
+                if (bounds.Bottom <= selectionBounds.Top)
+                {
+                    double distance = selectionBounds.Top - bounds.Bottom;
+                    if (!bestTop.HasValue || distance < bestTop.Value)
+                    {
+                        bestTop = distance;
+                        topBounds = bounds;
+                    }
+                }
+
+                if (bounds.Top >= selectionBounds.Bottom)
+                {
+                    double distance = bounds.Top - selectionBounds.Bottom;
+                    if (!bestBottom.HasValue || distance < bestBottom.Value)
+                    {
+                        bestBottom = distance;
+                        bottomBounds = bounds;
+                    }
+                }
+            }
+        }
+
+        List<SpacingGuide> guides = new();
+
+        if (bestLeft.HasValue)
+        {
+            double y = GetOverlapCenterY(selectionBounds, leftBounds);
+            guides.Add(new SpacingGuide(
+                new Point(leftBounds.Right, y),
+                new Point(selectionBounds.Left, y),
+                bestLeft.Value.ToString("0")));
+        }
+
+        if (bestRight.HasValue)
+        {
+            double y = GetOverlapCenterY(selectionBounds, rightBounds);
+            guides.Add(new SpacingGuide(
+                new Point(selectionBounds.Right, y),
+                new Point(rightBounds.Left, y),
+                bestRight.Value.ToString("0")));
+        }
+
+        if (bestTop.HasValue)
+        {
+            double x = GetOverlapCenterX(selectionBounds, topBounds);
+            guides.Add(new SpacingGuide(
+                new Point(x, topBounds.Bottom),
+                new Point(x, selectionBounds.Top),
+                bestTop.Value.ToString("0")));
+        }
+
+        if (bestBottom.HasValue)
+        {
+            double x = GetOverlapCenterX(selectionBounds, bottomBounds);
+            guides.Add(new SpacingGuide(
+                new Point(x, selectionBounds.Bottom),
+                new Point(x, bottomBounds.Top),
+                bestBottom.Value.ToString("0")));
+        }
+
+        return guides;
+    }
+
+    private static bool TryGetVerticalOverlap(Rect a, Rect b, out double center)
+    {
+        double top = Math.Max(a.Top, b.Top);
+        double bottom = Math.Min(a.Bottom, b.Bottom);
+        if (bottom <= top)
+        {
+            center = 0;
+            return false;
+        }
+
+        center = (top + bottom) / 2;
+        return true;
+    }
+
+    private static bool TryGetHorizontalOverlap(Rect a, Rect b, out double center)
+    {
+        double left = Math.Max(a.Left, b.Left);
+        double right = Math.Min(a.Right, b.Right);
+        if (right <= left)
+        {
+            center = 0;
+            return false;
+        }
+
+        center = (left + right) / 2;
+        return true;
+    }
+
+    private static double GetOverlapCenterY(Rect a, Rect b)
+    {
+        TryGetVerticalOverlap(a, b, out double center);
+        return center;
+    }
+
+    private static double GetOverlapCenterX(Rect a, Rect b)
+    {
+        TryGetHorizontalOverlap(a, b, out double center);
+        return center;
     }
 
     private static (double offset, double line) FindSnapOffset(

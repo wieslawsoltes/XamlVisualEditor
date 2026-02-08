@@ -4,6 +4,10 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Avalonia;
+using Avalonia.Controls.Templates;
+using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Core;
@@ -32,6 +36,21 @@ public sealed class PropertyItemViewModel : ReactiveObject
     /// Gets the kind of property (e.g., String, Numeric, Boolean, Brush, Enum, Thickness, CornerRadius).
     /// </summary>
     public PropertyKind Kind { get; }
+
+    /// <summary>
+    /// Gets the full type name of the property value.
+    /// </summary>
+    public string? TypeFullName { get; }
+
+    /// <summary>
+    /// Gets whether this property is attached.
+    /// </summary>
+    public bool IsAttached { get; }
+
+    /// <summary>
+    /// Gets whether this property is read-only.
+    /// </summary>
+    public bool IsReadOnly { get; }
 
     /// <summary>
     /// Gets or sets the current value as a string.
@@ -66,12 +85,22 @@ public sealed class PropertyItemViewModel : ReactiveObject
     /// </summary>
     public Guid AstNodeId { get; }
 
-    public PropertyItemViewModel(string name, string category, PropertyKind kind, Guid astNodeId)
+    public PropertyItemViewModel(
+        string name,
+        string category,
+        PropertyKind kind,
+        Guid astNodeId,
+        string? typeFullName = null,
+        bool isAttached = false,
+        bool isReadOnly = false)
     {
         Name = name;
         Category = category;
         Kind = kind;
         AstNodeId = astNodeId;
+        TypeFullName = typeFullName;
+        IsAttached = isAttached;
+        IsReadOnly = isReadOnly;
     }
 }
 
@@ -146,13 +175,15 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     public event Action<PropertyItemViewModel>? PropertyValueApplied;
 
     private readonly AstNodeMap _nodeMap;
+    private readonly ITypeMetadataService? _metadataService;
     private readonly CompositeDisposable _propertySubscriptions = new();
     private readonly CompositeDisposable _disposables = new();
     private bool _isDisposed;
 
-    public PropertyEditorViewModel(AstNodeMap nodeMap)
+    public PropertyEditorViewModel(AstNodeMap nodeMap, ITypeMetadataService? metadataService = null)
     {
         _nodeMap = nodeMap;
+        _metadataService = metadataService;
 
         // Filter properties on search text change
         IDisposable searchSubscription = this.WhenAnyValue(x => x.SearchText)
@@ -220,37 +251,64 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        // Build property items from current AST properties
         Dictionary<string, PropertyCategoryViewModel> catMap = new();
+        Dictionary<string, MutableAstPropertyNode> existingProps = node.Properties
+            .ToDictionary(p => p.PropertyName, StringComparer.OrdinalIgnoreCase);
+
+        TypeMetadata? meta = _metadataService?.GetType(node.XmlNamespace, node.TypeName);
+
+        if (meta is not null && _metadataService is not null)
+        {
+            foreach (PropertyMetadata prop in _metadataService.GetProperties(meta))
+            {
+                string category = string.IsNullOrWhiteSpace(prop.Category)
+                    ? CategorizeProperty(prop.Name)
+                    : prop.Category;
+                PropertyItemViewModel propVm = CreatePropertyItem(prop, node.Id, category);
+
+                if (existingProps.TryGetValue(prop.Name, out MutableAstPropertyNode? existing))
+                {
+                    propVm.Value = (existing.Value as MutableAstTextNode)?.Text;
+                    propVm.IsSet = !string.IsNullOrWhiteSpace(propVm.Value);
+                }
+
+                AddPropertyToCategory(catMap, category, propVm);
+            }
+
+            foreach (EventMetadata evt in _metadataService.GetEvents(meta))
+            {
+                EventItemViewModel eventVm = new(evt.Name)
+                {
+                    HandlerName = node.GetPropertyValue(evt.Name)
+                };
+                Events.Add(eventVm);
+            }
+        }
 
         foreach (MutableAstPropertyNode prop in node.Properties)
         {
-            string category = CategorizeProperty(prop.PropertyName);
-            (PropertyKind kind, IReadOnlyList<string>? enumValues) = ResolvePropertyKind(prop.PropertyName);
+            if (catMap.Values.SelectMany(c => c.Properties)
+                .Any(p => string.Equals(p.Name, prop.PropertyName, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
 
+            string category = CategorizeProperty(prop.PropertyName);
+            (PropertyKind kind, IReadOnlyList<string>? enumValues) = ResolvePropertyKind(prop.PropertyName, null);
             PropertyItemViewModel propVm = new(prop.PropertyName, category, kind, node.Id)
             {
                 IsSet = true,
-                EnumValues = enumValues
+                EnumValues = enumValues,
+                Value = (prop.Value as MutableAstTextNode)?.Text
             };
 
-            // Get value
-            if (prop.Value is MutableAstTextNode textNode)
-            {
-                propVm.Value = textNode.Text;
-            }
-
-            if (!catMap.TryGetValue(category, out PropertyCategoryViewModel? catVm))
-            {
-                catVm = new PropertyCategoryViewModel(category);
-                catMap[category] = catVm;
-            }
-
-            catVm.Properties.Add(propVm);
+            AddPropertyToCategory(catMap, category, propVm);
         }
 
-        // Add well-known properties for common types
-        AddWellKnownProperties(node, catMap);
+        if (catMap.Count == 0)
+        {
+            AddWellKnownProperties(node, catMap);
+        }
 
         // Sort categories and wire up value-change subscriptions
         foreach (PropertyCategoryViewModel cat in catMap.Values.OrderBy(c => c.Name))
@@ -277,6 +335,11 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void ApplyPropertyChange(PropertyItemViewModel prop)
     {
+        if (prop.IsReadOnly)
+        {
+            return;
+        }
+
         MutableAstObjectNode? node = _nodeMap.FindById(prop.AstNodeId) as MutableAstObjectNode;
         if (node is null)
         {
@@ -345,6 +408,133 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     internal static (PropertyKind Kind, IReadOnlyList<string>? EnumValues) ResolvePropertyKind(string propertyName)
     {
+        return ResolvePropertyKind(propertyName, null);
+    }
+
+    internal static (PropertyKind Kind, IReadOnlyList<string>? EnumValues) ResolvePropertyKind(
+        string propertyName,
+        Type? propertyType)
+    {
+        if (propertyType is not null)
+        {
+            if (propertyType.IsEnum)
+            {
+                return (PropertyKind.Enum, Enum.GetNames(propertyType));
+            }
+
+            if (propertyType == typeof(string))
+            {
+                return (PropertyKind.String, null);
+            }
+
+            if (propertyType == typeof(bool) || propertyType == typeof(bool?))
+            {
+                return (PropertyKind.Boolean, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Thickness))
+            {
+                return (PropertyKind.Thickness, null);
+            }
+
+            if (propertyType == typeof(Avalonia.CornerRadius))
+            {
+                return (PropertyKind.CornerRadius, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Media.Color))
+            {
+                return (PropertyKind.Color, null);
+            }
+
+            if (typeof(Avalonia.Media.IBrush).IsAssignableFrom(propertyType))
+            {
+                return (PropertyKind.Brush, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Point))
+            {
+                return (PropertyKind.Point, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Size))
+            {
+                return (PropertyKind.Size, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Rect))
+            {
+                return (PropertyKind.Rect, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Controls.GridLength))
+            {
+                return (PropertyKind.GridLength, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Media.FontFamily))
+            {
+                return (PropertyKind.FontFamily, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Media.FontWeight))
+            {
+                return (PropertyKind.FontWeight, null);
+            }
+
+            if (propertyType == typeof(Avalonia.Media.FontStyle))
+            {
+                return (PropertyKind.FontStyle, null);
+            }
+
+            if (propertyType == typeof(TimeSpan) || propertyType == typeof(TimeSpan?))
+            {
+                return (PropertyKind.TimeSpan, null);
+            }
+
+            if (propertyType == typeof(Uri))
+            {
+                return (PropertyKind.Uri, null);
+            }
+
+            if (typeof(Avalonia.Controls.Templates.IDataTemplate).IsAssignableFrom(propertyType) ||
+                typeof(Avalonia.Controls.Templates.IControlTemplate).IsAssignableFrom(propertyType))
+            {
+                return (PropertyKind.Template, null);
+            }
+
+            if (typeof(Avalonia.Markup.Xaml.MarkupExtension).IsAssignableFrom(propertyType))
+            {
+                return (PropertyKind.MarkupExtension, null);
+            }
+
+            if (typeof(System.Collections.IEnumerable).IsAssignableFrom(propertyType) && propertyType != typeof(string))
+            {
+                return (PropertyKind.Collection, null);
+            }
+
+            if (propertyType.IsPrimitive)
+            {
+                return (PropertyKind.Numeric, null);
+            }
+
+            switch (Type.GetTypeCode(propertyType))
+            {
+                case TypeCode.Byte:
+                case TypeCode.SByte:
+                case TypeCode.Int16:
+                case TypeCode.Int32:
+                case TypeCode.Int64:
+                case TypeCode.UInt16:
+                case TypeCode.UInt32:
+                case TypeCode.UInt64:
+                case TypeCode.Single:
+                case TypeCode.Double:
+                case TypeCode.Decimal:
+                    return (PropertyKind.Numeric, null);
+            }
+        }
+
         return propertyName switch
         {
             // Boolean properties
@@ -425,7 +615,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
                 => (PropertyKind.Enum, new[] { "Disabled", "Auto", "Hidden", "Visible" }),
 
             // Default string
-            _ => (PropertyKind.ClrProperty, null)
+            _ => (PropertyKind.String, null)
         };
     }
 
@@ -445,7 +635,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
             if (!alreadyExists)
             {
                 string category = CategorizeProperty(propName);
-                (PropertyKind kind, IReadOnlyList<string>? enumValues) = ResolvePropertyKind(propName);
+                (PropertyKind kind, IReadOnlyList<string>? enumValues) = ResolvePropertyKind(propName, null);
 
                 PropertyItemViewModel propVm = new(propName, category, kind, node.Id)
                 {
@@ -463,6 +653,41 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
                 catVm.Properties.Add(propVm);
             }
         }
+    }
+
+    private static void AddPropertyToCategory(
+        IDictionary<string, PropertyCategoryViewModel> catMap,
+        string category,
+        PropertyItemViewModel propVm)
+    {
+        if (!catMap.TryGetValue(category, out PropertyCategoryViewModel? catVm))
+        {
+            catVm = new PropertyCategoryViewModel(category);
+            catMap[category] = catVm;
+        }
+
+        catVm.Properties.Add(propVm);
+    }
+
+    private PropertyItemViewModel CreatePropertyItem(PropertyMetadata prop, Guid nodeId, string category)
+    {
+        (PropertyKind kind, IReadOnlyList<string>? enumValues) = ResolvePropertyKind(prop.Name, prop.ClrType);
+        PropertyItemViewModel propVm = new(
+            prop.Name,
+            category,
+            kind,
+            nodeId,
+            prop.TypeFullName,
+            prop.IsAttached,
+            prop.IsReadOnly)
+        {
+            EnumValues = enumValues,
+            DefaultValueHint = prop.DefaultValue is null ? null : Convert.ToString(prop.DefaultValue),
+            IsSet = false,
+            Value = null
+        };
+
+        return propVm;
     }
 }
 

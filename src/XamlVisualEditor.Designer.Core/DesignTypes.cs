@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
 using Avalonia;
@@ -312,6 +313,12 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     public bool SnapLinesEnabled { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether alignment guides are visible.
+    /// </summary>
+    [Reactive]
+    public bool ShowAlignmentGuides { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets whether the surface is in edit mode (non-interactive preview).
     /// </summary>
     [Reactive]
@@ -324,6 +331,36 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     public bool ShowGrid { get; set; }
 
     /// <summary>
+    /// Gets or sets whether spacing guides are visible.
+    /// </summary>
+    [Reactive]
+    public bool ShowSpacingGuides { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether rulers are visible.
+    /// </summary>
+    [Reactive]
+    public bool ShowRulers { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether guide lines are visible.
+    /// </summary>
+    [Reactive]
+    public bool ShowGuides { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether snapping to guides is enabled.
+    /// </summary>
+    [Reactive]
+    public bool SnapToGuides { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether margin/padding hints are visible.
+    /// </summary>
+    [Reactive]
+    public bool ShowMarginPadding { get; set; }
+
+    /// <summary>
     /// Gets or sets whether snap to grid is enabled.
     /// </summary>
     [Reactive]
@@ -334,6 +371,16 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// </summary>
     [Reactive]
     public double GridSnapSize { get; set; } = 8.0;
+
+    /// <summary>
+    /// Gets the horizontal guide positions (in surface coordinates).
+    /// </summary>
+    public ObservableCollection<double> HorizontalGuides { get; } = new();
+
+    /// <summary>
+    /// Gets the vertical guide positions (in surface coordinates).
+    /// </summary>
+    public ObservableCollection<double> VerticalGuides { get; } = new();
 
     /// <summary>
     /// Gets or sets the canvas width.

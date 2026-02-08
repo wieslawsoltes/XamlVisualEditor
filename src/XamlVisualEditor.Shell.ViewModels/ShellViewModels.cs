@@ -165,7 +165,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         DesignSurface = new DesignSurfaceViewModel();
         CompletionProviderRegistry completionRegistry = CompletionProviderRegistry.CreateDefault();
         CodeEditor = new CodeEditorViewModel(SyncEngine, completionRegistry, metadataService);
-        PropertyEditor = new PropertyEditorViewModel(NodeMap);
+        PropertyEditor = new PropertyEditorViewModel(NodeMap, metadataService);
         ControlFactory = new ControlFactory(metadataService);
 
         // Wire property editor changes back to the sync engine

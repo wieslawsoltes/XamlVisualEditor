@@ -66,21 +66,24 @@
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="{CompiledBinding DefaultValueHint}"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.StringEditor>
                                         <pe:ValueEditorSelector.BooleanEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <CheckBox IsChecked="{CompiledBinding Value, Mode=TwoWay, Converter={StaticResource BoolStringConv}}"
                                                           HorizontalAlignment="Left"
-                                                          Margin="4,0" />
+                                                          Margin="4,0"
+                                                          IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.BooleanEditor>
                                         <pe:ValueEditorSelector.NumericEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="0"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.NumericEditor>
                                         <pe:ValueEditorSelector.EnumEditor>
@@ -88,7 +91,8 @@
                                                 <ComboBox ItemsSource="{CompiledBinding EnumValues}"
                                                           SelectedItem="{CompiledBinding Value, Mode=TwoWay}"
                                                           HorizontalAlignment="Stretch"
-                                                          Padding="4,2" />
+                                                          Padding="4,2"
+                                                          IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.EnumEditor>
                                         <pe:ValueEditorSelector.BrushEditor>
@@ -104,24 +108,135 @@
                                                     <TextBox Grid.Column="1"
                                                              Text="{CompiledBinding Value, Mode=TwoWay}"
                                                              Watermark="#RRGGBB or name"
-                                                             Padding="4,2" />
+                                                             Padding="4,2"
+                                                             IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                                 </Grid>
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.BrushEditor>
+                                        <pe:ValueEditorSelector.ColorEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="#RRGGBB or #AARRGGBB"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.ColorEditor>
                                         <pe:ValueEditorSelector.ThicknessEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="L,T,R,B"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.ThicknessEditor>
                                         <pe:ValueEditorSelector.CornerRadiusEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="TL,TR,BR,BL"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.CornerRadiusEditor>
+                                        <pe:ValueEditorSelector.PointEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="X,Y"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.PointEditor>
+                                        <pe:ValueEditorSelector.SizeEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Width,Height"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.SizeEditor>
+                                        <pe:ValueEditorSelector.RectEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="X,Y,Width,Height"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.RectEditor>
+                                        <pe:ValueEditorSelector.GridLengthEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Auto,*,2* or 42"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.GridLengthEditor>
+                                        <pe:ValueEditorSelector.FontFamilyEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Font family"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.FontFamilyEditor>
+                                        <pe:ValueEditorSelector.FontWeightEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Normal, Bold, 700"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.FontWeightEditor>
+                                        <pe:ValueEditorSelector.FontStyleEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Normal, Italic"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.FontStyleEditor>
+                                        <pe:ValueEditorSelector.TimeSpanEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="00:00:00"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.TimeSpanEditor>
+                                        <pe:ValueEditorSelector.UriEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="https://"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.UriEditor>
+                                        <pe:ValueEditorSelector.CollectionEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Comma or newline separated"
+                                                         Padding="4,2"
+                                                         AcceptsReturn="True"
+                                                         MinHeight="64"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.CollectionEditor>
+                                        <pe:ValueEditorSelector.TemplateEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="&lt;DataTemplate&gt;..."
+                                                         Padding="4,2"
+                                                         AcceptsReturn="True"
+                                                         MinHeight="80"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.TemplateEditor>
+                                        <pe:ValueEditorSelector.MarkupExtensionEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="{Binding ...}"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.MarkupExtensionEditor>
                                     </pe:ValueEditorSelector>
                                 </ContentControl.ContentTemplate>
                             </ContentControl>
@@ -136,21 +251,24 @@
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="{CompiledBinding DefaultValueHint}"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.StringEditor>
                                         <pe:ValueEditorSelector.BooleanEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <CheckBox IsChecked="{CompiledBinding Value, Mode=TwoWay, Converter={StaticResource BoolStringConv}}"
                                                           HorizontalAlignment="Left"
-                                                          Margin="4,0" />
+                                                          Margin="4,0"
+                                                          IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.BooleanEditor>
                                         <pe:ValueEditorSelector.NumericEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="0"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.NumericEditor>
                                         <pe:ValueEditorSelector.EnumEditor>
@@ -158,7 +276,8 @@
                                                 <ComboBox ItemsSource="{CompiledBinding EnumValues}"
                                                           SelectedItem="{CompiledBinding Value, Mode=TwoWay}"
                                                           HorizontalAlignment="Stretch"
-                                                          Padding="4,2" />
+                                                          Padding="4,2"
+                                                          IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.EnumEditor>
                                         <pe:ValueEditorSelector.BrushEditor>
@@ -174,24 +293,135 @@
                                                     <TextBox Grid.Column="1"
                                                              Text="{CompiledBinding Value, Mode=TwoWay}"
                                                              Watermark="#RRGGBB or name"
-                                                             Padding="4,2" />
+                                                             Padding="4,2"
+                                                             IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                                 </Grid>
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.BrushEditor>
+                                        <pe:ValueEditorSelector.ColorEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="#RRGGBB or #AARRGGBB"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.ColorEditor>
                                         <pe:ValueEditorSelector.ThicknessEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="L,T,R,B"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.ThicknessEditor>
                                         <pe:ValueEditorSelector.CornerRadiusEditor>
                                             <DataTemplate x:DataType="pe:PropertyItemViewModel">
                                                 <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
                                                          Watermark="TL,TR,BR,BL"
-                                                         Padding="4,2" />
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
                                             </DataTemplate>
                                         </pe:ValueEditorSelector.CornerRadiusEditor>
+                                        <pe:ValueEditorSelector.PointEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="X,Y"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.PointEditor>
+                                        <pe:ValueEditorSelector.SizeEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Width,Height"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.SizeEditor>
+                                        <pe:ValueEditorSelector.RectEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="X,Y,Width,Height"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.RectEditor>
+                                        <pe:ValueEditorSelector.GridLengthEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Auto,*,2* or 42"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.GridLengthEditor>
+                                        <pe:ValueEditorSelector.FontFamilyEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Font family"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.FontFamilyEditor>
+                                        <pe:ValueEditorSelector.FontWeightEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Normal, Bold, 700"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.FontWeightEditor>
+                                        <pe:ValueEditorSelector.FontStyleEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Normal, Italic"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.FontStyleEditor>
+                                        <pe:ValueEditorSelector.TimeSpanEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="00:00:00"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.TimeSpanEditor>
+                                        <pe:ValueEditorSelector.UriEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="https://"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.UriEditor>
+                                        <pe:ValueEditorSelector.CollectionEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="Comma or newline separated"
+                                                         Padding="4,2"
+                                                         AcceptsReturn="True"
+                                                         MinHeight="64"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.CollectionEditor>
+                                        <pe:ValueEditorSelector.TemplateEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="&lt;DataTemplate&gt;..."
+                                                         Padding="4,2"
+                                                         AcceptsReturn="True"
+                                                         MinHeight="80"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.TemplateEditor>
+                                        <pe:ValueEditorSelector.MarkupExtensionEditor>
+                                            <DataTemplate x:DataType="pe:PropertyItemViewModel">
+                                                <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                                                         Watermark="{Binding ...}"
+                                                         Padding="4,2"
+                                                         IsEnabled="{CompiledBinding IsReadOnly, Converter={x:Static BoolConverters.Not}}" />
+                                            </DataTemplate>
+                                        </pe:ValueEditorSelector.MarkupExtensionEditor>
                                     </pe:ValueEditorSelector>
                                 </ContentControl.ContentTemplate>
                             </ContentControl>

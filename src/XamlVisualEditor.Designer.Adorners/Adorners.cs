@@ -179,6 +179,75 @@ public sealed class SnapLineAdorner
 }
 
 /// <summary>
+/// Renders persistent guide lines on the design surface.
+/// </summary>
+public sealed class GuideLineAdorner
+{
+    private static readonly IPen GuidePen = new Pen(new SolidColorBrush(Color.Parse("#3FA9F5")), 1);
+
+    public void Render(
+        DrawingContext context,
+        IReadOnlyList<double> horizontalLines,
+        IReadOnlyList<double> verticalLines,
+        Size surfaceSize)
+    {
+        foreach (double y in horizontalLines)
+        {
+            context.DrawLine(GuidePen, new Point(0, y), new Point(surfaceSize.Width, y));
+        }
+
+        foreach (double x in verticalLines)
+        {
+            context.DrawLine(GuidePen, new Point(x, 0), new Point(x, surfaceSize.Height));
+        }
+    }
+}
+
+/// <summary>
+/// Describes a spacing guide line with a label.
+/// </summary>
+public readonly record struct SpacingGuide(Point Start, Point End, string Label);
+
+/// <summary>
+/// Renders spacing guides between elements.
+/// </summary>
+public sealed class SpacingGuideAdorner
+{
+    private static readonly IPen SpacingPen = new Pen(new SolidColorBrush(Color.Parse("#FF4BD8")), 1);
+    private static readonly IBrush LabelBrush = new SolidColorBrush(Color.Parse("#FF4BD8"));
+    private static readonly IBrush LabelBackground = new SolidColorBrush(Color.FromArgb(180, 30, 30, 30));
+
+    public void Render(DrawingContext context, IReadOnlyList<SpacingGuide> guides)
+    {
+        foreach (SpacingGuide guide in guides)
+        {
+            context.DrawLine(SpacingPen, guide.Start, guide.End);
+
+            Point mid = new(
+                (guide.Start.X + guide.End.X) / 2,
+                (guide.Start.Y + guide.End.Y) / 2);
+
+            FormattedText text = new(
+                guide.Label,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                Typeface.Default,
+                10,
+                LabelBrush);
+
+            Rect labelRect = new(
+                mid.X - text.Width / 2 - 4,
+                mid.Y - text.Height / 2 - 2,
+                text.Width + 8,
+                text.Height + 4);
+
+            context.DrawRectangle(LabelBackground, null, labelRect, 2, 2);
+            context.DrawText(text, new Point(labelRect.X + 4, labelRect.Y + 2));
+        }
+    }
+}
+
+/// <summary>
 /// Renders margin and padding visualization around a design item.
 /// </summary>
 public sealed class MarginPaddingAdorner
