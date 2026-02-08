@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Avalonia;
+using Avalonia.Collections;
 using Avalonia.Controls.Templates;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -121,6 +123,12 @@ public sealed class PropertyCategoryViewModel : ReactiveObject
     public bool IsExpanded { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the category is visible after filtering.
+    /// </summary>
+    [Reactive]
+    public bool IsVisible { get; set; } = true;
+
+    /// <summary>
     /// Gets the properties in this category.
     /// </summary>
     public ObservableCollection<PropertyItemViewModel> Properties { get; } = new();
@@ -128,6 +136,40 @@ public sealed class PropertyCategoryViewModel : ReactiveObject
     public PropertyCategoryViewModel(string name)
     {
         Name = name;
+    }
+}
+
+/// <summary>
+/// Provides row data for grouped property views.
+/// </summary>
+public sealed class PropertyRowViewModel
+{
+    public PropertyItemViewModel Property { get; }
+
+    public string GroupName { get; }
+
+    public PropertyRowViewModel(PropertyItemViewModel property, string groupName)
+    {
+        Property = property;
+        GroupName = groupName;
+    }
+}
+
+/// <summary>
+/// Groups property rows without reflection-based property paths.
+/// </summary>
+public sealed class PropertyRowGroupDescription : DataGridGroupDescription
+{
+    public override string PropertyName => nameof(PropertyRowViewModel.GroupName);
+
+    public override object GroupKeyFromItem(object item, int level, CultureInfo culture)
+    {
+        if (item is PropertyRowViewModel row)
+        {
+            return row.GroupName;
+        }
+
+        return string.Empty;
     }
 }
 
@@ -159,6 +201,11 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     public ObservableCollection<PropertyItemViewModel> FlatProperties { get; } = new();
 
     /// <summary>
+    /// Gets the grouped rows for grid display.
+    /// </summary>
+    public ObservableCollection<PropertyRowViewModel> GroupedRows { get; } = new();
+
+    /// <summary>
     /// Gets or sets the active events list.
     /// </summary>
     public ObservableCollection<EventItemViewModel> Events { get; } = new();
@@ -170,6 +217,12 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     public bool ShowProperties { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether grouped view is shown (vs flat grid).
+    /// </summary>
+    [Reactive]
+    public bool ShowGroupedView { get; set; }
+
+    /// <summary>
     /// Fires when a property value changes (for upstream sync).
     /// </summary>
     public event Action<PropertyItemViewModel>? PropertyValueApplied;
@@ -178,15 +231,29 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     private readonly ITypeMetadataService? _metadataService;
     private readonly CompositeDisposable _propertySubscriptions = new();
     private readonly CompositeDisposable _disposables = new();
+    private const string LocalValuesGroupName = "Local Values";
+    private DataGridCollectionView? _groupedCollectionView;
     private bool _isDisposed;
+
+    /// <summary>
+    /// Gets the grouped collection view used by the DataGrid.
+    /// </summary>
+    public DataGridCollectionView? GroupedCollectionView
+    {
+        get => _groupedCollectionView;
+        private set => this.RaiseAndSetIfChanged(ref _groupedCollectionView, value);
+    }
 
     public PropertyEditorViewModel(AstNodeMap nodeMap, ITypeMetadataService? metadataService = null)
     {
         _nodeMap = nodeMap;
         _metadataService = metadataService;
+        ShowGroupedView = true;
 
         // Filter properties on search text change
         IDisposable searchSubscription = this.WhenAnyValue(x => x.SearchText)
+            .Select(text => string.IsNullOrWhiteSpace(text) ? null : text.Trim())
+            .DistinctUntilChanged()
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(filter => FilterProperties(filter));
@@ -206,19 +273,46 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
 
     private void FilterProperties(string? filter)
     {
-        foreach (PropertyCategoryViewModel cat in Categories)
+        bool hasFilter = !string.IsNullOrWhiteSpace(filter);
+        IEnumerable<PropertyCategoryViewModel> categories = Categories;
+        Dictionary<PropertyItemViewModel, bool> matchCache = new();
+
+        foreach (PropertyCategoryViewModel cat in categories)
         {
             bool anyVisible = false;
+            bool categoryMatch = hasFilter && cat.Name.Contains(filter!, StringComparison.OrdinalIgnoreCase);
+
             foreach (PropertyItemViewModel prop in cat.Properties)
             {
-                bool visible = string.IsNullOrEmpty(filter) ||
-                               prop.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
-                prop.IsVisible = visible;
-                if (visible) anyVisible = true;
+                if (!matchCache.TryGetValue(prop, out bool visible))
+                {
+                    visible = !hasFilter || categoryMatch ||
+                              prop.Name.Contains(filter!, StringComparison.OrdinalIgnoreCase) ||
+                              prop.Category.Contains(filter!, StringComparison.OrdinalIgnoreCase) ||
+                              (!string.IsNullOrWhiteSpace(prop.Value) &&
+                               prop.Value.Contains(filter!, StringComparison.OrdinalIgnoreCase));
+                    matchCache[prop] = visible;
+                }
+
+                if (prop.IsVisible != visible)
+                {
+                    prop.IsVisible = visible;
+                }
+
+                if (visible)
+                {
+                    anyVisible = true;
+                }
             }
 
-            cat.IsExpanded = anyVisible;
+            cat.IsVisible = anyVisible;
+            if (hasFilter)
+            {
+                cat.IsExpanded = anyVisible;
+            }
         }
+
+        GroupedCollectionView?.Refresh();
     }
 
     private void RebuildFlatProperties()
@@ -327,7 +421,60 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
         }
 
         RebuildFlatProperties();
+        RebuildGroupedCollectionView();
         FilterProperties(SearchText);
+    }
+
+    private void RebuildGroupedCollectionView()
+    {
+        try
+        {
+            GroupedRows.Clear();
+
+            List<PropertyItemViewModel> allProperties = Categories
+                .SelectMany(c => c.Properties)
+                .ToList();
+            List<PropertyItemViewModel> localValues = allProperties
+                .Where(p => p.IsSet)
+                .OrderBy(p => p.Name)
+                .ToList();
+
+            foreach (PropertyItemViewModel prop in localValues)
+            {
+                GroupedRows.Add(new PropertyRowViewModel(prop, LocalValuesGroupName));
+            }
+
+            foreach (PropertyCategoryViewModel category in Categories.OrderBy(c => c.Name))
+            {
+                foreach (PropertyItemViewModel prop in category.Properties.OrderBy(p => p.Name))
+                {
+                    GroupedRows.Add(new PropertyRowViewModel(prop, category.Name));
+                }
+            }
+
+            DataGridCollectionView view = GroupedCollectionView ?? new DataGridCollectionView(GroupedRows);
+            using (view.DeferRefresh())
+            {
+                view.Filter = item => item is PropertyRowViewModel row && row.Property.IsVisible;
+                view.GroupDescriptions.Clear();
+
+                PropertyRowGroupDescription groupDescription = new();
+                groupDescription.GroupKeys.Add(LocalValuesGroupName);
+                foreach (PropertyCategoryViewModel category in Categories.OrderBy(c => c.Name))
+                {
+                    groupDescription.GroupKeys.Add(category.Name);
+                }
+
+                view.GroupDescriptions.Add(groupDescription);
+            }
+
+            view.Refresh();
+            GroupedCollectionView ??= view;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Property editor grouping failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -349,6 +496,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
         node.SetPropertyValue(prop.Name, string.IsNullOrEmpty(prop.Value) ? null : prop.Value);
         prop.IsSet = !string.IsNullOrEmpty(prop.Value);
         PropertyValueApplied?.Invoke(prop);
+        GroupedCollectionView?.Refresh();
     }
 
     /// <summary>
@@ -373,6 +521,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
 
         prop.Value = null;
         prop.IsSet = false;
+        GroupedCollectionView?.Refresh();
     }
 
     private static string CategorizeProperty(string propertyName)

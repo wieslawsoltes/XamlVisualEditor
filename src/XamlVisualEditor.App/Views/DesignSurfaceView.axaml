@@ -44,30 +44,37 @@
                     Padding="6,2"
                     FontSize="12" />
                 <Separator />
-                <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}"
-                              Content="Grid" Padding="6,2" FontSize="12" />
-                <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
-                              Content="Snap Grid" Padding="6,2" FontSize="12" />
-                <Separator />
-                <ToggleButton IsChecked="{CompiledBinding ShowAlignmentGuides, Mode=TwoWay}"
-                              Content="Align" Padding="6,2" FontSize="12" />
-                <ToggleButton IsChecked="{CompiledBinding SnapLinesEnabled, Mode=TwoWay}"
-                              Content="Snap Align" Padding="6,2" FontSize="12" />
-                <ToggleButton IsChecked="{CompiledBinding ShowSpacingGuides, Mode=TwoWay}"
-                              Content="Spacing" Padding="6,2" FontSize="12" />
-                <Separator />
-                <ToggleButton IsChecked="{CompiledBinding ShowGuides, Mode=TwoWay}"
-                              Content="Guides" Padding="6,2" FontSize="12" />
-                <ToggleButton IsChecked="{CompiledBinding SnapToGuides, Mode=TwoWay}"
-                              Content="Snap Guides" Padding="6,2" FontSize="12" />
-                <ToggleButton IsChecked="{CompiledBinding ShowRulers, Mode=TwoWay}"
-                              Content="Rulers" Padding="6,2" FontSize="12" />
-                <Separator />
-                <ToggleButton IsChecked="{CompiledBinding ShowMarginPadding, Mode=TwoWay}"
-                              Content="Margin" Padding="6,2" FontSize="12" />
-                <Separator />
-                <ToggleButton IsChecked="{CompiledBinding IsEditMode, Mode=TwoWay}"
-                              Content="Edit" Padding="6,2" FontSize="12" />
+                <Button Content="Settings" Padding="6,2" FontSize="12">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Spacing="6" Margin="8">
+                                <ToggleButton IsChecked="{CompiledBinding ShowGrid, Mode=TwoWay}"
+                                              Content="Grid" />
+                                <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
+                                              Content="Snap Grid" />
+                                <Separator />
+                                <ToggleButton IsChecked="{CompiledBinding ShowAlignmentGuides, Mode=TwoWay}"
+                                              Content="Align" />
+                                <ToggleButton IsChecked="{CompiledBinding SnapLinesEnabled, Mode=TwoWay}"
+                                              Content="Snap Align" />
+                                <ToggleButton IsChecked="{CompiledBinding ShowSpacingGuides, Mode=TwoWay}"
+                                              Content="Spacing" />
+                                <Separator />
+                                <ToggleButton IsChecked="{CompiledBinding ShowGuides, Mode=TwoWay}"
+                                              Content="Guides" />
+                                <ToggleButton IsChecked="{CompiledBinding SnapToGuides, Mode=TwoWay}"
+                                              Content="Snap Guides" />
+                                <ToggleButton IsChecked="{CompiledBinding ShowRulers, Mode=TwoWay}"
+                                              Content="Rulers" />
+                                <Separator />
+                                <ToggleButton IsChecked="{CompiledBinding ShowMarginPadding, Mode=TwoWay}"
+                                              Content="Margin" />
+                                <ToggleButton IsChecked="{CompiledBinding IsEditMode, Mode=TwoWay}"
+                                              Content="Edit" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </StackPanel>
         </Border>
 
@@ -103,16 +110,17 @@
                              Guides="{CompiledBinding HorizontalGuides}"
                              IsVisible="{CompiledBinding ShowRulers}" />
 
-            <ScrollViewer Name="SurfaceScrollViewer"
+                    <ScrollViewer Name="SurfaceScrollViewer"
                           Grid.Row="1" Grid.Column="1"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           input:DragDrop.AllowDrop="True">
-                <Border BorderBrush="#3F3F46"
+                    <Border Name="SurfaceBorder"
+                        BorderBrush="#3F3F46"
                         BorderThickness="1"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Margin="24"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Margin="0"
                         BoxShadow="0 2 8 0 #40000000">
                     <!-- The design canvas where controls are rendered -->
                     <Grid Name="ZoomContainer">

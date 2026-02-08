@@ -25,30 +25,146 @@
                              IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsCode}}"
                              Padding="12,4"
                              FontSize="12" />
+                <Separator Margin="6,0" />
+                <RadioButton Content="Split V" GroupName="SplitDirection"
+                              IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitVertical}}"
+                              IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
+                              Padding="12,4"
+                              FontSize="12" />
+                <RadioButton Content="Split H" GroupName="SplitDirection"
+                              IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitHorizontal}}"
+                              IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}"
+                              Padding="12,4"
+                              FontSize="12" />
             </StackPanel>
         </Border>
 
-        <!-- Split view: Design Surface + Code Editor -->
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.DesignerRowHeight}}" />
-                <RowDefinition Height="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.SplitterRowHeight}}" />
-                <RowDefinition Height="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.CodeRowHeight}}" />
+                <RowDefinition>
+                    <RowDefinition.Height>
+                        <MultiBinding Converter="{x:Static v:ViewModeConverters.DesignerRowLength}">
+                            <Binding Path="ViewMode" />
+                            <Binding Path="SplitOrientation" />
+                        </MultiBinding>
+                    </RowDefinition.Height>
+                </RowDefinition>
+                <RowDefinition>
+                    <RowDefinition.Height>
+                        <MultiBinding Converter="{x:Static v:ViewModeConverters.SplitterRowLength}">
+                            <Binding Path="ViewMode" />
+                            <Binding Path="SplitOrientation" />
+                        </MultiBinding>
+                    </RowDefinition.Height>
+                </RowDefinition>
+                <RowDefinition>
+                    <RowDefinition.Height>
+                        <MultiBinding Converter="{x:Static v:ViewModeConverters.CodeRowLength}">
+                            <Binding Path="ViewMode" />
+                            <Binding Path="SplitOrientation" />
+                        </MultiBinding>
+                    </RowDefinition.Height>
+                </RowDefinition>
             </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition>
+                    <ColumnDefinition.Width>
+                        <MultiBinding Converter="{x:Static v:ViewModeConverters.DesignerColumnLength}">
+                            <Binding Path="ViewMode" />
+                            <Binding Path="SplitOrientation" />
+                        </MultiBinding>
+                    </ColumnDefinition.Width>
+                </ColumnDefinition>
+                <ColumnDefinition>
+                    <ColumnDefinition.Width>
+                        <MultiBinding Converter="{x:Static v:ViewModeConverters.SplitterColumnLength}">
+                            <Binding Path="ViewMode" />
+                            <Binding Path="SplitOrientation" />
+                        </MultiBinding>
+                    </ColumnDefinition.Width>
+                </ColumnDefinition>
+                <ColumnDefinition>
+                    <ColumnDefinition.Width>
+                        <MultiBinding Converter="{x:Static v:ViewModeConverters.CodeColumnLength}">
+                            <Binding Path="ViewMode" />
+                            <Binding Path="SplitOrientation" />
+                        </MultiBinding>
+                    </ColumnDefinition.Width>
+                </ColumnDefinition>
+            </Grid.ColumnDefinitions>
 
-            <!-- Design Surface -->
-            <Border Grid.Row="0"
-                    IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.ShowDesigner}}">
+            <Border IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.ShowDesigner}}">
+                <Grid.Row>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.DesignerRowIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Row>
+                <Grid.Column>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.DesignerColumnIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Column>
                 <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
             </Border>
 
-            <GridSplitter Grid.Row="1" Height="4"
-                          IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsSplit}}" />
+            <GridSplitter Height="4">
+                <GridSplitter.IsVisible>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.ShowVerticalSplitter}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </GridSplitter.IsVisible>
+                <Grid.Row>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.SplitterRowIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Row>
+                <Grid.Column>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.SplitterColumnIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Column>
+            </GridSplitter>
 
-            <!-- Code Editor -->
-            <Border Grid.Row="2"
-                    MinHeight="120"
+            <GridSplitter Width="4">
+                <GridSplitter.IsVisible>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.ShowHorizontalSplitter}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </GridSplitter.IsVisible>
+                <Grid.Row>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.SplitterRowIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Row>
+                <Grid.Column>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.SplitterColumnIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Column>
+            </GridSplitter>
+
+            <Border MinHeight="120" MinWidth="240"
                     IsVisible="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.ShowCode}}">
+                <Grid.Row>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.CodeRowIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Row>
+                <Grid.Column>
+                    <MultiBinding Converter="{x:Static v:ViewModeConverters.CodeColumnIndex}">
+                        <Binding Path="ViewMode" />
+                        <Binding Path="SplitOrientation" />
+                    </MultiBinding>
+                </Grid.Column>
                 <v:XamlCodeEditorView DataContext="{CompiledBinding CodeEditor}" />
             </Border>
         </Grid>

@@ -354,14 +354,13 @@ public sealed class XamlEditorDockFactory : Factory
         };
 
         // Document dock (center)
-        InfiniteCanvasDocument canvasDocument = new(_mainVm.InfiniteCanvas);
         DocumentDock documentDock = new()
         {
             Id = "DocumentDock",
             Title = "Documents",
             IsCollapsable = false,
-            VisibleDockables = CreateList<IDockable>(canvasDocument),
-            ActiveDockable = canvasDocument,
+            VisibleDockables = CreateList<IDockable>(),
+            ActiveDockable = null,
             CanCreateDocument = false,
             EnableWindowDrag = true
         };

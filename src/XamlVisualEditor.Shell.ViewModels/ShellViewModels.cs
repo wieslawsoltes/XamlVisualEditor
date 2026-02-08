@@ -15,6 +15,7 @@ using Avalonia.Controls.DataGridFiltering;
 using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
 using Avalonia.Controls.DataGridSorting;
+using AvOrientation = Avalonia.Layout.Orientation;
 using Avalonia.Threading;
 using Dock.Model.Controls;
 using Dock.Model.Core;
@@ -116,6 +117,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// </summary>
     [Reactive]
     public DocumentViewMode ViewMode { get; set; } = DocumentViewMode.Split;
+
+    /// <summary>
+    /// Gets or sets the split orientation when in split view.
+    /// </summary>
+    [Reactive]
+    public AvOrientation SplitOrientation { get; set; } = AvOrientation.Vertical;
 
     /// <summary>
     /// Gets or sets the selected AST node ID (synced between editor, tree, and designer).
@@ -236,6 +243,8 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
                 {
                     PropertyEditor.Categories.Clear();
                     PropertyEditor.FlatProperties.Clear();
+                    PropertyEditor.GroupedRows.Clear();
+                    PropertyEditor.GroupedCollectionView?.Refresh();
                     PropertyEditor.Events.Clear();
                     PropertyEditor.SelectedTypeName = null;
                 }, DispatcherPriority.Background);
@@ -260,7 +269,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
                     {
                         PropertyEditor.LoadFromDesignItem(item);
                     }
-                    catch (Avalonia.AvaloniaInternalException ex)
+                    catch (Exception ex)
                     {
                         System.Diagnostics.Trace.TraceWarning(
                             $"Property editor update failed: {ex.Message}");
@@ -1681,7 +1690,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
-        EnsureCanvasDocument();
         WireDockEvents();
 
         IObservable<int> activeLine = this.WhenAnyValue(x => x.ActiveDocument)
@@ -2418,8 +2426,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
-
-        EnsureCanvasDocument();
 
         // Delete persisted layout so it reloads default on next start
         try

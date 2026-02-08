@@ -47,6 +47,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private const double MaxZoom = 8.0;
     private DesignAdornerLayer? _adornerLayer;
     private ScrollViewer? _scrollViewer;
+    private Border? _surfaceBorder;
     private RulerControl? _horizontalRuler;
     private RulerControl? _verticalRuler;
     private IDesignItem? _hoveredItem;
@@ -125,6 +126,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _zoomSurface = this.FindControl<Control>("ZoomSurface");
         _adornerLayer = this.FindControl<DesignAdornerLayer>("AdornerLayer");
         _scrollViewer = this.FindControl<ScrollViewer>("SurfaceScrollViewer");
+        _surfaceBorder = this.FindControl<Border>("SurfaceBorder");
         _horizontalRuler = this.FindControl<RulerControl>("HorizontalRuler");
         _verticalRuler = this.FindControl<RulerControl>("VerticalRuler");
         _topLevel = TopLevel.GetTopLevel(this);
@@ -146,6 +148,8 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_scrollViewer is not null)
         {
             _scrollViewer.ScrollChanged += OnSurfaceScrollChanged;
+            _scrollViewer.SizeChanged += OnSurfaceSizeChanged;
+            UpdateSurfaceMargin();
             UpdateRulerOffsets();
         }
 
@@ -246,10 +250,18 @@ public sealed partial class DesignSurfaceView : UserControl
             e.PropertyName == nameof(DesignSurfaceViewModel.CanvasWidth) ||
             e.PropertyName == nameof(DesignSurfaceViewModel.CanvasHeight))
         {
+            UpdateSurfaceMargin();
             UpdateRulerOffsets();
             UpdateRulerSelectionBounds();
             RefreshSelectionAdorners();
         }
+    }
+
+    private void OnSurfaceSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        UpdateSurfaceMargin();
+        UpdateRulerOffsets();
+        RefreshSelectionAdorners();
     }
 
     private void AttachGuideHandlers(DesignSurfaceViewModel vm)
@@ -604,18 +616,20 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        const double padding = 32;
+        const double padding = 0;
         double width = Math.Max(1, bounds.Width);
         double height = Math.Max(1, bounds.Height);
         double zoomX = (viewport.Width - padding * 2) / width;
         double zoomY = (viewport.Height - padding * 2) / height;
         double targetZoom = ClampZoom(Math.Min(zoomX, zoomY));
         _currentVm.Zoom = targetZoom;
+        UpdateSurfaceMargin();
 
         Point center = bounds.Center;
+        Point origin = GetCanvasOriginInScrollViewer();
         Vector targetOffset = new(
-            center.X * targetZoom - viewport.Width / 2,
-            center.Y * targetZoom - viewport.Height / 2);
+            origin.X + center.X * targetZoom - viewport.Width / 2,
+            origin.Y + center.Y * targetZoom - viewport.Height / 2);
 
         Dispatcher.UIThread.Post(() =>
         {
@@ -652,6 +666,7 @@ public sealed partial class DesignSurfaceView : UserControl
         double scale = clamped / oldZoom;
 
         _currentVm.Zoom = clamped;
+        UpdateSurfaceMargin();
 
         Dispatcher.UIThread.Post(() =>
         {
@@ -663,9 +678,10 @@ public sealed partial class DesignSurfaceView : UserControl
             if (canvasFocus.HasValue)
             {
                 Point logical = canvasFocus.Value;
+                Point origin = GetCanvasOriginInScrollViewer();
                 _scrollViewer.Offset = new Vector(
-                    logical.X * clamped - focus.X,
-                    logical.Y * clamped - focus.Y);
+                    origin.X + logical.X * clamped - focus.X,
+                    origin.Y + logical.Y * clamped - focus.Y);
             }
             else
             {
@@ -674,34 +690,46 @@ public sealed partial class DesignSurfaceView : UserControl
         }, DispatcherPriority.Render);
     }
 
+    private void UpdateSurfaceMargin()
+    {
+        if (_currentVm is null || _scrollViewer is null || _surfaceBorder is null)
+        {
+            return;
+        }
+
+        Size viewport = _scrollViewer.Viewport;
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return;
+        }
+
+        double zoom = Math.Max(0.01, _currentVm.Zoom);
+        double contentWidth = _currentVm.CanvasWidth * zoom;
+        double contentHeight = _currentVm.CanvasHeight * zoom;
+        double marginX = Math.Max(0, (viewport.Width - contentWidth) / 2);
+        double marginY = Math.Max(0, (viewport.Height - contentHeight) / 2);
+        _surfaceBorder.Margin = new Thickness(marginX, marginY, marginX, marginY);
+    }
+
     private bool TryGetCanvasFocus(Point focusInScrollViewer, out Point canvasFocus)
     {
         canvasFocus = default;
-        if (_scrollViewer is null || _canvas is null)
+        if (_scrollViewer is null || _currentVm is null)
         {
             return false;
         }
 
-        Point? focusOnCanvas = _scrollViewer.TranslatePoint(focusInScrollViewer, _canvas);
-        if (!focusOnCanvas.HasValue)
-        {
-            return false;
-        }
-
-        canvasFocus = GetLogicalPoint(focusOnCanvas.Value);
+        Point origin = GetCanvasOriginInScrollViewer();
+        double zoom = Math.Max(0.01, _currentVm.Zoom);
+        Vector offset = _scrollViewer.Offset;
+        double logicalX = (focusInScrollViewer.X + offset.X - origin.X) / zoom;
+        double logicalY = (focusInScrollViewer.Y + offset.Y - origin.Y) / zoom;
+        canvasFocus = new Point(logicalX, logicalY);
         return true;
     }
 
-    private Point GetLogicalPoint(Point point)
-    {
-        if (_currentVm is null || Math.Abs(_currentVm.Zoom) < 0.0001)
-        {
-            return point;
-        }
-
-        double inv = 1.0 / _currentVm.Zoom;
-        return new Point(point.X * inv, point.Y * inv);
-    }
+    // Intentionally left without coordinate helpers; use e.GetPosition(target)
+    // for consistent hit testing across split layouts.
 
     private Control? GetSurfaceRoot()
     {
@@ -1058,18 +1086,19 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_adornerLayer is not null)
         {
-            ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(GetLogicalPoint(e.GetPosition(_adornerLayer)));
+            ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(e.GetPosition(_adornerLayer));
             if (handle is not null && _currentVm.Selection.PrimarySelection is DesignItem primary)
             {
-                StartResize(primary, handle, GetLogicalPoint(e.GetPosition(_canvas)));
+                StartResize(primary, handle, e.GetPosition(_canvas));
                 e.Pointer.Capture(_canvas);
                 e.Handled = true;
                 return;
             }
         }
 
-        Point position = GetLogicalPoint(e.GetPosition(_rootControl));
-        Control? hit = ControlFactory.HitTest(_rootControl, position);
+        Point canvasPoint = e.GetPosition(_canvas);
+        Point rootPoint = e.GetPosition(_rootControl);
+        Control? hit = ControlFactory.HitTest(_rootControl, rootPoint);
         if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
         {
             ApplySelection(item, e.KeyModifiers);
@@ -1085,7 +1114,7 @@ public sealed partial class DesignSurfaceView : UserControl
                 e.Handled = true;
                 return;
             }
-            StartDrag(item, GetLogicalPoint(e.GetPosition(_canvas)));
+            StartDrag(item, canvasPoint);
             e.Pointer.Capture(_canvas);
             e.Handled = true;
             return;
@@ -1093,7 +1122,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _currentVm.Selection.ClearSelection();
         UpdateSelectedNode(null);
-        StartMarquee(GetLogicalPoint(e.GetPosition(_canvas)), e.KeyModifiers);
+        StartMarquee(canvasPoint, e.KeyModifiers);
         e.Pointer.Capture(_canvas);
     }
 
@@ -1140,17 +1169,17 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_dragState is not null)
         {
-            UpdateDragState(GetLogicalPoint(e.GetPosition(_canvas)));
+            UpdateDragState(e.GetPosition(_canvas));
             return;
         }
 
         if (_marqueeState is not null)
         {
-            UpdateMarquee(GetLogicalPoint(e.GetPosition(_canvas)));
+            UpdateMarquee(e.GetPosition(_canvas));
             return;
         }
 
-        UpdateHover(GetLogicalPoint(e.GetPosition(_rootControl)));
+        UpdateHover(e.GetPosition(_rootControl));
     }
 
     private void OnCanvasPointerReleased(object? sender, PointerReleasedEventArgs e)
