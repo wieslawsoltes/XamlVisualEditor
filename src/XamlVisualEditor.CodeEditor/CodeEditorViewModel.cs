@@ -289,7 +289,9 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     {
         if (syncEvent.XamlText is not null)
         {
+            int caretOffset = CaretOffset;
             SetTextSilently(syncEvent.XamlText);
+            SetCaretOffsetFromSync(caretOffset);
         }
 
         // Update diagnostics

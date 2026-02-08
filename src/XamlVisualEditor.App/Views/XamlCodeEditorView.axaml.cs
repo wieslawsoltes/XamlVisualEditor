@@ -1,15 +1,20 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using AvaloniaEdit;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
+using AvaloniaEdit.Folding;
 using AvaloniaEdit.TextMate;
 using ReactiveUI;
 using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using TextMateSharp.Grammars;
 using XamlVisualEditor.CodeEditor;
+using XmlFoldingStrategy = XamlVisualEditor.CodeEditor.XmlFoldingStrategy;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.DragDrop;
@@ -33,6 +38,9 @@ public sealed partial class XamlCodeEditorView : UserControl
     private CompositeDisposable? _vmSubscriptions;
     private bool _textMateInstalled;
     private bool _suppressCaretUpdate;
+    private FoldingManager? _foldingManager;
+    private readonly XmlFoldingStrategy _foldingStrategy = new();
+    private IDisposable? _foldingSubscription;
 
     public XamlCodeEditorView()
     {
@@ -65,6 +73,10 @@ public sealed partial class XamlCodeEditorView : UserControl
                 _textEditor.TextArea.Caret.PositionChanged -= _caretPositionChangedHandler;
             }
         }
+
+        _foldingSubscription?.Dispose();
+        _foldingSubscription = null;
+        _foldingManager = null;
 
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = null;
@@ -162,6 +174,23 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Set the shared TextDocument directly — this is the critical line
         _textEditor.Document = vm.Document;
 
+        if (_textEditor.TextArea.LeftMargins.FirstOrDefault(m => m is FoldingMargin) is null)
+        {
+            _textEditor.TextArea.LeftMargins.Insert(0, new FoldingMargin());
+        }
+
+        _foldingManager ??= FoldingManager.Install(_textEditor.TextArea);
+
+        _foldingSubscription?.Dispose();
+        _foldingSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => vm.Document.TextChanged += h,
+                h => vm.Document.TextChanged -= h)
+            .Throttle(TimeSpan.FromMilliseconds(200))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(_ => UpdateFoldings());
+        _vmSubscriptions.Add(_foldingSubscription);
+        UpdateFoldings();
+
         // Sync editor properties from the ViewModel
         _textEditor.FontSize = vm.FontSize;
         _textEditor.ShowLineNumbers = vm.ShowLineNumbers;
@@ -185,7 +214,13 @@ public sealed partial class XamlCodeEditorView : UserControl
             {
                 _suppressCaretUpdate = true;
                 _textEditor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _textEditor.Document.TextLength);
-                _textEditor.TextArea.Caret.BringCaretToView();
+                try
+                {
+                    _textEditor.TextArea.Caret.BringCaretToView();
+                }
+                catch (ArgumentException)
+                {
+                }
                 _suppressCaretUpdate = false;
             });
         _vmSubscriptions.Add(caretSubscription);
@@ -223,6 +258,51 @@ public sealed partial class XamlCodeEditorView : UserControl
                 ToolTip.SetTip(_textEditor, null);
             }
         };
+    }
+
+    private void UpdateFoldings()
+    {
+        if (_textEditor?.Document is null || _foldingManager is null)
+        {
+            return;
+        }
+
+        TextDocument document = _textEditor.Document;
+        int length = document.TextLength;
+        if (length == 0)
+        {
+            try
+            {
+                _foldingManager.UpdateFoldings(Array.Empty<NewFolding>(), -1);
+            }
+            catch (ArgumentException)
+            {
+            }
+            return;
+        }
+        IEnumerable<NewFolding> foldings = _foldingStrategy.CreateNewFoldings(document)
+            .Select(folding =>
+            {
+                int start = Math.Clamp(folding.StartOffset, 0, length);
+                int end = Math.Clamp(folding.EndOffset, 0, length);
+                return new NewFolding(start, end) { Name = folding.Name };
+            })
+            .Where(folding => folding.EndOffset > folding.StartOffset)
+            .OrderBy(folding => folding.StartOffset)
+            .ToList();
+
+        int currentLength = document.TextLength;
+        List<NewFolding> safeFoldings = foldings
+            .Where(folding => folding.StartOffset >= 0 && folding.EndOffset <= currentLength)
+            .ToList();
+
+        try
+        {
+            _foldingManager.UpdateFoldings(safeFoldings, -1);
+        }
+        catch (ArgumentException)
+        {
+        }
     }
 
     private void OnTextEntering(object? sender, TextInputEventArgs e)

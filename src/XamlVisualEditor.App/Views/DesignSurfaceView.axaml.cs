@@ -13,6 +13,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 using System.ComponentModel;
+using System.Reactive;
+using System.Windows.Input;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Designer.Core;
@@ -48,10 +50,17 @@ public sealed partial class DesignSurfaceView : UserControl
     private MarqueeState? _marqueeState;
     private readonly SurfaceDropHandler _surfaceDropHandler = new();
     private NotifyCollectionChangedEventHandler? _guideChangedHandler;
+    private readonly ContextMenu _surfaceContextMenu;
+    private readonly MenuItem _openDefinitionMenuItem;
 
     public DesignSurfaceView()
     {
         InitializeComponent();
+
+        _openDefinitionMenuItem = new MenuItem { Header = "Open Definition" };
+        _openDefinitionMenuItem.Click += OnOpenDefinitionClick;
+        _surfaceContextMenu = new ContextMenu();
+        _surfaceContextMenu.Items.Add(_openDefinitionMenuItem);
 
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
@@ -90,6 +99,7 @@ public sealed partial class DesignSurfaceView : UserControl
             _canvas.PointerMoved += OnCanvasPointerMoved;
             _canvas.PointerReleased += OnCanvasPointerReleased;
             _canvas.PointerCaptureLost += OnCanvasPointerCaptureLost;
+            _canvas.ContextMenu = _surfaceContextMenu;
         }
 
         if (_scrollViewer is not null)
@@ -144,6 +154,8 @@ public sealed partial class DesignSurfaceView : UserControl
                 _rebuildPending = true;
             }
         }
+
+        UpdateNavigateMenuState();
     }
 
     private void OnSelectionChanged(IReadOnlyList<IDesignItem> selected)
@@ -167,6 +179,7 @@ public sealed partial class DesignSurfaceView : UserControl
         _adornerLayer.UpdateSelection(selected);
         UpdateRulerSelectionBounds();
         UpdateSpacingGuidesForSelection();
+        UpdateNavigateMenuState();
     }
 
     private void OnDesignSurfacePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -733,6 +746,17 @@ public sealed partial class DesignSurfaceView : UserControl
         {
             ApplySelection(item, e.KeyModifiers);
             UpdateSelectedNode(item.AstNodeId);
+            if (e.ClickCount == 2)
+            {
+                DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+                if (docVm is not null)
+                {
+                    _ = docVm.NavigateToDefinitionAsync();
+                }
+
+                e.Handled = true;
+                return;
+            }
             StartDrag(item, e.GetPosition(_canvas));
             e.Pointer.Capture(_canvas);
             e.Handled = true;
@@ -743,6 +767,29 @@ public sealed partial class DesignSurfaceView : UserControl
         UpdateSelectedNode(null);
         StartMarquee(e.GetPosition(_canvas), e.KeyModifiers);
         e.Pointer.Capture(_canvas);
+    }
+
+    private void OnOpenDefinitionClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+        if (docVm is null)
+        {
+            return;
+        }
+
+        _ = docVm.NavigateToDefinitionAsync();
+    }
+
+    private void UpdateNavigateMenuState()
+    {
+        if (_openDefinitionMenuItem is null)
+        {
+            return;
+        }
+
+        DesignerDocumentViewModel? docVm = FindDocumentViewModel();
+        _openDefinitionMenuItem.IsEnabled = docVm is not null
+            && ((ICommand)docVm.NavigateToDefinitionCommand).CanExecute(null);
     }
 
     private void OnCanvasPointerMoved(object? sender, PointerEventArgs e)

@@ -8,7 +8,9 @@ using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Text;
+using System.Xml.Linq;
 using System.Diagnostics;
+using Avalonia.Threading;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Core.Events;
@@ -56,6 +58,11 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 {
     private readonly CompositeDisposable _disposables = new();
     private SyncSource _selectionSource = SyncSource.DesignSurface;
+    private readonly ITypeMetadataService? _metadataService;
+    private readonly Func<WorkspaceModel?>? _workspaceProvider;
+    private readonly Func<string, System.Threading.Tasks.Task>? _openFileAsync;
+    private readonly Dictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
+        = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the file path of the XAML document.
@@ -150,9 +157,21 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// </summary>
     public ReactiveCommand<Unit, Unit> SplitViewCommand { get; }
 
-    public DesignerDocumentViewModel(string filePath, ITypeMetadataService? metadataService = null)
+    /// <summary>
+    /// Command to navigate to the selected control definition.
+    /// </summary>
+    public ReactiveCommand<Unit, Unit> NavigateToDefinitionCommand { get; }
+
+    public DesignerDocumentViewModel(
+        string filePath,
+        ITypeMetadataService? metadataService = null,
+        Func<WorkspaceModel?>? workspaceProvider = null,
+        Func<string, System.Threading.Tasks.Task>? openFileAsync = null)
     {
         FilePath = filePath;
+        _metadataService = metadataService;
+        _workspaceProvider = workspaceProvider;
+        _openFileAsync = openFileAsync;
 
         // Create services
         XamlParsingService parsingService = new();
@@ -200,28 +219,48 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 
         // When selected node changes, update property editor
         IDisposable selectedNodeClearSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
+            .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(id =>
             {
-                if (id is null)
+                if (id is not null)
+                {
+                    return;
+                }
+
+                Dispatcher.UIThread.Post(() =>
                 {
                     PropertyEditor.Categories.Clear();
                     PropertyEditor.FlatProperties.Clear();
                     PropertyEditor.Events.Clear();
                     PropertyEditor.SelectedTypeName = null;
-                }
+                }, DispatcherPriority.Background);
             });
         _disposables.Add(selectedNodeClearSubscription);
 
         IDisposable selectedNodeLoadSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
+            .ObserveOn(RxApp.MainThreadScheduler)
             .Where(id => id is not null)
             .Subscribe(id =>
             {
                 MutableAstNode? node = NodeMap.FindById(id!.Value);
-                if (node is MutableAstObjectNode objNode)
+                if (node is not MutableAstObjectNode objNode)
+                {
+                    return;
+                }
+
+                Dispatcher.UIThread.Post(() =>
                 {
                     DesignItem item = new(objNode);
-                    PropertyEditor.LoadFromDesignItem(item);
-                }
+                    try
+                    {
+                        PropertyEditor.LoadFromDesignItem(item);
+                    }
+                    catch (Avalonia.AvaloniaInternalException ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"Property editor update failed: {ex.Message}");
+                    }
+                }, DispatcherPriority.Background);
             });
         _disposables.Add(selectedNodeLoadSubscription);
 
@@ -288,6 +327,126 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         DesignViewCommand = ReactiveCommand.Create(() => { ViewMode = DocumentViewMode.Design; });
         CodeViewCommand = ReactiveCommand.Create(() => { ViewMode = DocumentViewMode.Code; });
         SplitViewCommand = ReactiveCommand.Create(() => { ViewMode = DocumentViewMode.Split; });
+
+        IObservable<bool> canNavigate = this.WhenAnyValue(x => x.SelectedNodeId)
+            .Select(id => id is not null)
+            .CombineLatest(
+                Observable.Return(_metadataService is not null && _workspaceProvider is not null && _openFileAsync is not null),
+                (hasSelection, servicesAvailable) => hasSelection && servicesAvailable);
+        NavigateToDefinitionCommand = ReactiveCommand.CreateFromTask(NavigateToDefinitionAsync, canNavigate);
+    }
+
+    /// <summary>
+    /// Navigates to the XAML file that defines the selected control type.
+    /// </summary>
+    public async System.Threading.Tasks.Task NavigateToDefinitionAsync()
+    {
+        if (_metadataService is null || _workspaceProvider is null || _openFileAsync is null)
+        {
+            return;
+        }
+
+        if (SelectedNodeId is null)
+        {
+            return;
+        }
+
+        MutableAstNode? node = NodeMap.FindById(SelectedNodeId.Value);
+        if (node is not MutableAstObjectNode objNode)
+        {
+            return;
+        }
+
+        TypeMetadata? type = _metadataService.GetType(objNode.XmlNamespace, objNode.TypeName);
+        if (type is null)
+        {
+            return;
+        }
+
+        WorkspaceModel? workspace = _workspaceProvider();
+        if (workspace is null)
+        {
+            return;
+        }
+
+        ProjectModel? project = FindProjectForFile(workspace, FilePath);
+        if (project is null)
+        {
+            return;
+        }
+
+        string? targetPath = FindXamlFileForType(project, type.FullName);
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            return;
+        }
+
+        await _openFileAsync(targetPath);
+    }
+
+    private static ProjectModel? FindProjectForFile(WorkspaceModel workspace, string filePath)
+    {
+        foreach (ProjectModel project in workspace.Projects)
+        {
+            foreach (XamlFileModel file in project.XamlFiles)
+            {
+                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return project;
+                }
+            }
+
+            foreach (ProjectFileModel file in project.Files)
+            {
+                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return project;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private string? FindXamlFileForType(ProjectModel project, string fullTypeName)
+    {
+        foreach (XamlFileModel file in project.XamlFiles)
+        {
+            string? className = TryGetXamlClassName(file.FilePath);
+            if (string.IsNullOrWhiteSpace(className))
+            {
+                continue;
+            }
+
+            if (string.Equals(className, fullTypeName, StringComparison.Ordinal))
+            {
+                return file.FilePath;
+            }
+        }
+
+        return null;
+    }
+
+    private string? TryGetXamlClassName(string filePath)
+    {
+        try
+        {
+            DateTime lastWrite = System.IO.File.GetLastWriteTimeUtc(filePath);
+            if (_xamlClassCache.TryGetValue(filePath, out var cached) && cached.LastWriteUtc == lastWrite)
+            {
+                return cached.ClassName;
+            }
+
+            XDocument doc = XDocument.Load(filePath, LoadOptions.None);
+            XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+            string? className = doc.Root?.Attribute(x + "Class")?.Value;
+            _xamlClassCache[filePath] = (lastWrite, className);
+            return className;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -1729,7 +1888,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         await System.IO.File.WriteAllTextAsync(tempPath, defaultXaml);
 
-        DesignerDocumentViewModel doc = new(tempPath, _metadataService);
+        DesignerDocumentViewModel doc = new(tempPath, _metadataService, () => _workspace, OpenFileAsync);
         Documents.Add(doc);
         ActiveDocument = doc;
         AddDocumentToDock(doc);
@@ -2331,7 +2490,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IEditorDocumentViewModel doc;
         if (IsXamlFile(filePath))
         {
-            DesignerDocumentViewModel designer = new(filePath, _metadataService);
+            DesignerDocumentViewModel designer = new(filePath, _metadataService, () => _workspace, OpenFileAsync);
             Documents.Add(designer);
             ActiveDocument = designer;
             AddDocumentToDock(designer);
