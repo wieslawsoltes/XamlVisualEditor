@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -27,30 +28,89 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
     /// </summary>
     public static void EnsureMSBuildRegistered()
     {
+        EnsureDotnetRoot();
         if (!MSBuildLocator.IsRegistered)
         {
-            VisualStudioInstance? instance = MSBuildLocator.QueryVisualStudioInstances()
+            IReadOnlyList<VisualStudioInstance> instances = MSBuildLocator.QueryVisualStudioInstances()
                 .OrderByDescending(i => i.Version)
-                .FirstOrDefault();
+                .ToList();
 
+            LogMsBuildInstances(instances);
+
+            VisualStudioInstance? instance = instances.FirstOrDefault();
             if (instance is not null)
             {
-                MSBuildLocator.RegisterInstance(instance);
+                Console.WriteLine($"MSBuild selected: {instance.Name} {instance.Version} at {instance.MSBuildPath}");
+            }
+
+            VisualStudioInstance? instanceToRegister = instances.FirstOrDefault();
+            if (instanceToRegister is not null)
+            {
+                MSBuildLocator.RegisterInstance(instanceToRegister);
             }
             else
             {
+                Console.WriteLine("MSBuild instances not found. Falling back to defaults.");
                 MSBuildLocator.RegisterDefaults();
             }
+        }
+    }
+
+    private static void EnsureDotnetRoot()
+    {
+        string? dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (!string.IsNullOrWhiteSpace(dotnetRoot))
+        {
+            return;
+        }
+
+        string? arm64Root = Environment.GetEnvironmentVariable("DOTNET_ROOT_ARM64");
+        if (!string.IsNullOrWhiteSpace(arm64Root))
+        {
+            Environment.SetEnvironmentVariable("DOTNET_ROOT", arm64Root);
+            Console.WriteLine($"DOTNET_ROOT set to {arm64Root} from DOTNET_ROOT_ARM64");
+        }
+    }
+
+    private static void LogMsBuildInstances(IReadOnlyList<VisualStudioInstance> instances)
+    {
+        if (instances.Count == 0)
+        {
+            Console.WriteLine("MSBuild instances: none");
+            return;
+        }
+
+        Console.WriteLine("MSBuild instances:");
+        foreach (VisualStudioInstance instance in instances)
+        {
+            Console.WriteLine($"- {instance.Name} {instance.Version} at {instance.MSBuildPath}");
         }
     }
 
     /// <inheritdoc />
     public async Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
     {
-        EnsureMSBuildRegistered();
+        string? previousDirectory = Directory.GetCurrentDirectory();
+        string? workspaceDirectory = Path.GetDirectoryName(solutionPath);
+        if (!string.IsNullOrEmpty(workspaceDirectory))
+        {
+            Directory.SetCurrentDirectory(workspaceDirectory);
+        }
 
-        _workspace = MSBuildWorkspace.Create();
-        _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: ct);
+        try
+        {
+            EnsureMSBuildRegistered();
+
+            _workspace = MSBuildWorkspace.Create();
+            _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: ct);
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(previousDirectory))
+            {
+                Directory.SetCurrentDirectory(previousDirectory);
+            }
+        }
 
         List<ProjectModel> projects = new();
 
@@ -111,10 +171,28 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
     /// <inheritdoc />
     public async Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default)
     {
-        EnsureMSBuildRegistered();
+        string? previousDirectory = Directory.GetCurrentDirectory();
+        string? workspaceDirectory = Path.GetDirectoryName(projectPath);
+        if (!string.IsNullOrEmpty(workspaceDirectory))
+        {
+            Directory.SetCurrentDirectory(workspaceDirectory);
+        }
 
-        _workspace = MSBuildWorkspace.Create();
-        Project project = await _workspace.OpenProjectAsync(projectPath, cancellationToken: ct);
+        Project project;
+        try
+        {
+            EnsureMSBuildRegistered();
+
+            _workspace = MSBuildWorkspace.Create();
+            project = await _workspace.OpenProjectAsync(projectPath, cancellationToken: ct);
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(previousDirectory))
+            {
+                Directory.SetCurrentDirectory(previousDirectory);
+            }
+        }
 
         Dictionary<string, XamlFileModel> xamlFiles = new(StringComparer.OrdinalIgnoreCase);
         List<AssemblyReference> references = new();

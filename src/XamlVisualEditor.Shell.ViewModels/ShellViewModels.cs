@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Diagnostics;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Core.Events;
@@ -134,14 +135,14 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
         };
 
         // Track modification state
-        this.WhenAnyValue(x => x.CodeEditor.IsModified)
-            .Subscribe(m => IsModified = m)
-            .DisposeWith(_disposables);
+        IDisposable isModifiedSubscription = this.WhenAnyValue(x => x.CodeEditor.IsModified)
+            .Subscribe(m => IsModified = m);
+        _disposables.Add(isModifiedSubscription);
 
         // Watch for property changes to raise Title notification
-        this.WhenAnyValue(x => x.IsModified)
-            .Subscribe(_ => this.RaisePropertyChanged(nameof(Title)))
-            .DisposeWith(_disposables);
+        IDisposable titleSubscription = this.WhenAnyValue(x => x.IsModified)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(Title)));
+        _disposables.Add(titleSubscription);
 
         // Sync caret→node from code editor to selected node
         CodeEditor.CaretNodeChanged += nodeId =>
@@ -150,7 +151,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
         };
 
         // When selected node changes, update property editor
-        this.WhenAnyValue(x => x.SelectedNodeId)
+        IDisposable selectedNodeClearSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
             .Subscribe(id =>
             {
                 if (id is null)
@@ -160,10 +161,10 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
                     PropertyEditor.Events.Clear();
                     PropertyEditor.SelectedTypeName = null;
                 }
-            })
-            .DisposeWith(_disposables);
+            });
+        _disposables.Add(selectedNodeClearSubscription);
 
-        this.WhenAnyValue(x => x.SelectedNodeId)
+        IDisposable selectedNodeLoadSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
             .Where(id => id is not null)
             .Subscribe(id =>
             {
@@ -173,11 +174,11 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
                     DesignItem item = new(objNode);
                     PropertyEditor.LoadFromDesignItem(item);
                 }
-            })
-            .DisposeWith(_disposables);
+            });
+        _disposables.Add(selectedNodeLoadSubscription);
 
         // Sync selection to design surface and code editor caret
-        this.WhenAnyValue(x => x.SelectedNodeId)
+        IDisposable selectedNodeSyncSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
             .Subscribe(id =>
             {
                 if (id is null)
@@ -197,11 +198,11 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
 
                     DesignSurface.SelectByAstNodeId(id.Value);
                 }
-            })
-            .DisposeWith(_disposables);
+            });
+        _disposables.Add(selectedNodeSyncSubscription);
 
         // Listen for sync events to update trees
-        SyncEngine.SyncEvents
+        IDisposable syncEventsSubscription = SyncEngine.SyncEvents
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(_ =>
             {
@@ -210,8 +211,8 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
 
                 // Rebuild the design surface from the updated AST
                 DesignSurface.RequestRebuild();
-            })
-            .DisposeWith(_disposables);
+            });
+        _disposables.Add(syncEventsSubscription);
 
         SaveCommand = ReactiveCommand.CreateFromTask(async () =>
         {
@@ -335,7 +336,7 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
         RegisterDefaultControls();
 
         // Filter items on search
-        this.WhenAnyValue(x => x.SearchText)
+        IDisposable filterSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(filter =>
@@ -345,8 +346,8 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
                     item.IsVisible = string.IsNullOrEmpty(filter) ||
                                      item.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase);
                 }
-            })
-            .DisposeWith(_disposables);
+            });
+        _disposables.Add(filterSubscription);
     }
 
     /// <summary>
@@ -821,60 +822,60 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         });
 
         // Update trees when active document changes
-        this.WhenAnyValue(x => x.ActiveDocument)
-            .Subscribe(doc => UpdateTrees(doc))
-            .DisposeWith(_disposables);
+        IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDocument)
+            .Subscribe(doc => UpdateTrees(doc));
+        _disposables.Add(activeDocumentTreesSubscription);
 
-        this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable activeDocumentDockSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Where(doc => doc is not null)
-            .Subscribe(doc => SetActiveDockDocument(doc!))
-            .DisposeWith(_disposables);
+            .Subscribe(doc => SetActiveDockDocument(doc!));
+        _disposables.Add(activeDocumentDockSubscription);
 
         // Refresh trees on sync events from active document (Switch unsubscribes from previous)
-        this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable activeDocumentSyncSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Where(d => d is not null)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(d => UpdateTrees(d))
-            .DisposeWith(_disposables);
+            .Subscribe(d => UpdateTrees(d));
+        _disposables.Add(activeDocumentSyncSubscription);
 
         // Sync tree selection when active document selection changes
-        this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Select(doc => doc is null
                 ? Observable.Return<Guid?>(null)
                 : doc.WhenAnyValue(d => d.SelectedNodeId))
             .Switch()
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(id => ApplySelectionToTrees(id))
-            .DisposeWith(_disposables);
+            .Subscribe(id => ApplySelectionToTrees(id));
+        _disposables.Add(selectionSyncSubscription);
 
         // Sync grid selections back to the active document
-        this.WhenAnyValue(x => x.VisualTree.SelectedNode)
+        IDisposable visualTreeSelectionSubscription = this.WhenAnyValue(x => x.VisualTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(t => t.doc!.SelectedNodeId = t.node?.AstNodeId)
-            .DisposeWith(_disposables);
+            .Subscribe(t => t.doc!.SelectedNodeId = t.node?.AstNodeId);
+        _disposables.Add(visualTreeSelectionSubscription);
 
-        this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
+        IDisposable logicalTreeSelectionSubscription = this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(t => t.doc!.SelectedNodeId = t.node?.AstNodeId)
-            .DisposeWith(_disposables);
+            .Subscribe(t => t.doc!.SelectedNodeId = t.node?.AstNodeId);
+        _disposables.Add(logicalTreeSelectionSubscription);
 
         // Update title when active document changes
-        this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable titleUpdateSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Select(doc => doc is not null ? $"XAML Visual Editor — {doc.FileName}" : "XAML Visual Editor")
-            .Subscribe(t => Title = t)
-            .DisposeWith(_disposables);
+            .Subscribe(t => Title = t);
+        _disposables.Add(titleUpdateSubscription);
 
         // Update collaboration status
-        this.WhenAnyValue(x => x.Collaboration.IsSessionActive)
+        IDisposable collaborationStatusSubscription = this.WhenAnyValue(x => x.Collaboration.IsSessionActive)
             .Select(active => active ? "● Collab Connected" : string.Empty)
-            .Subscribe(s => CollaborationStatusText = s)
-            .DisposeWith(_disposables);
+            .Subscribe(s => CollaborationStatusText = s);
+        _disposables.Add(collaborationStatusSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFileAsync(path); };
     }
@@ -1238,10 +1239,23 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         string extension = System.IO.Path.GetExtension(workspacePath);
         StatusText = $"Loading workspace {System.IO.Path.GetFileName(workspacePath)}";
 
-        WorkspaceModel workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
-                                    extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
-            ? await _workspaceService.LoadSolutionAsync(workspacePath)
-            : await _workspaceService.LoadProjectAsync(workspacePath);
+        WorkspaceModel workspace;
+        try
+        {
+            workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+                ? await _workspaceService.LoadSolutionAsync(workspacePath)
+                : await _workspaceService.LoadProjectAsync(workspacePath);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Workspace load failed: {ex.Message}");
+            Console.WriteLine($"Workspace load failed: {ex.Message}");
+            LogWorkspaceEnvironment(workspacePath);
+            StatusText = $"Workspace load failed: {ex.Message}";
+            HasWorkspace = false;
+            return;
+        }
 
         _workspace = workspace;
         _workspacePath = workspacePath;
@@ -1528,6 +1542,60 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         return outputs;
+    }
+
+    private static void LogWorkspaceEnvironment(string workspacePath)
+    {
+        try
+        {
+            Console.WriteLine($"Workspace path: {workspacePath}");
+            Console.WriteLine($"Working directory: {System.IO.Directory.GetCurrentDirectory()}");
+            Console.WriteLine($"DOTNET_ROOT: {Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? string.Empty}");
+            Console.WriteLine($"PATH: {Environment.GetEnvironmentVariable("PATH") ?? string.Empty}");
+
+            string info = GetDotNetInfo();
+            if (!string.IsNullOrWhiteSpace(info))
+            {
+                Console.WriteLine("dotnet --info:\n" + info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to log workspace environment: {ex.Message}");
+        }
+    }
+
+    private static string GetDotNetInfo()
+    {
+        try
+        {
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = "dotnet",
+                Arguments = "--info",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using Process process = new() { StartInfo = startInfo };
+            process.Start();
+            string stdOut = process.StandardOutput.ReadToEnd();
+            string stdErr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            if (!string.IsNullOrWhiteSpace(stdOut))
+            {
+                return stdOut.Trim();
+            }
+
+            return stdErr.Trim();
+        }
+        catch (Exception ex)
+        {
+            return $"dotnet --info failed: {ex.Message}";
+        }
     }
 
     private void ApplyAssemblyResolver(IEnumerable<string> assemblyPaths)
