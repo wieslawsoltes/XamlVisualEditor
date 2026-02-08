@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reflection.PortableExecutable;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -915,6 +916,11 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// </summary>
     public void LoadAssembly(string assemblyPath)
     {
+        if (!ShouldLoadAssembly(assemblyPath, out _))
+        {
+            return;
+        }
+
         try
         {
             System.Reflection.Assembly asm = System.Reflection.Assembly.LoadFrom(assemblyPath);
@@ -934,6 +940,70 @@ public sealed class TypeMetadataService : ITypeMetadataService
         foreach (string path in assemblyPaths)
         {
             LoadAssembly(path);
+        }
+    }
+
+    private bool ShouldLoadAssembly(string assemblyPath, out string? assemblyName)
+    {
+        assemblyName = null;
+        if (string.IsNullOrWhiteSpace(assemblyPath) || !File.Exists(assemblyPath))
+        {
+            return false;
+        }
+
+        string extension = Path.GetExtension(assemblyPath);
+        if (!extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (IsReferenceAssemblyPath(assemblyPath))
+        {
+            return false;
+        }
+
+        if (!IsManagedAssembly(assemblyPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            assemblyName = System.Reflection.AssemblyName.GetAssemblyName(assemblyPath).Name;
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(assemblyName))
+        {
+            return false;
+        }
+
+        return !_loadedAssemblyNames.Contains(assemblyName);
+    }
+
+    private static bool IsReferenceAssemblyPath(string assemblyPath)
+    {
+        string normalized = assemblyPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        string marker = Path.DirectorySeparatorChar.ToString();
+        return normalized.Contains(marker + "ref" + marker, StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains(marker + "refint" + marker, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsManagedAssembly(string assemblyPath)
+    {
+        try
+        {
+            using FileStream stream = File.OpenRead(assemblyPath);
+            using PEReader reader = new(stream);
+            return reader.HasMetadata && reader.PEHeaders?.CorHeader is not null;
+        }
+        catch
+        {
+            return false;
         }
     }
 

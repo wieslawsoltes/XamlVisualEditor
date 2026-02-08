@@ -10,6 +10,10 @@ using System.Reactive.Linq;
 using System.Text;
 using System.Xml.Linq;
 using System.Diagnostics;
+using Avalonia.Controls.DataGridFiltering;
+using Avalonia.Controls.DataGridHierarchical;
+using Avalonia.Controls.DataGridSearching;
+using Avalonia.Controls.DataGridSorting;
 using Avalonia.Threading;
 using Dock.Model.Controls;
 using Dock.Model.Core;
@@ -1122,6 +1126,7 @@ public sealed class ReferencesGroupViewModel : ReactiveObject
     public string FilePath { get; }
     public string FileName { get; }
     public ObservableCollection<ReferenceLocationViewModel> Items { get; } = new();
+    public string DisplayText => FileName;
 
     [Reactive]
     public bool IsExpanded { get; set; }
@@ -1139,16 +1144,32 @@ public sealed class ReferencesGroupViewModel : ReactiveObject
 public sealed class ReferencesViewModel : ReactiveObject
 {
     private readonly Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> _navigateAsync;
-    private readonly CompositeDisposable _disposables = new();
+    private readonly CompositeDisposable _groupDisposables = new();
+    private readonly CompositeDisposable _lifetimeDisposables = new();
     private readonly HashSet<string> _expandedFiles = new(StringComparer.OrdinalIgnoreCase);
+    private const string FilterPropertyPath = "Item.DisplayText";
 
     public ObservableCollection<ReferencesGroupViewModel> Groups { get; } = new();
+
+    public HierarchicalModel Model { get; }
+
+    [Reactive]
+    public HierarchicalNode? SelectedRow { get; set; }
 
     [Reactive]
     public object? SelectedItem { get; set; }
 
     [Reactive]
     public int TotalCount { get; private set; }
+
+    [Reactive]
+    public string? FilterText { get; set; }
+
+    public SortingModel SortingModel { get; }
+
+    public FilteringModel FilteringModel { get; }
+
+    public SearchModel SearchModel { get; }
 
     public ReactiveCommand<ReferenceLocationViewModel, Unit> OpenLocationCommand { get; }
 
@@ -1159,11 +1180,47 @@ public sealed class ReferencesViewModel : ReactiveObject
         _navigateAsync = navigateAsync;
         OpenLocationCommand = ReactiveCommand.CreateFromTask<ReferenceLocationViewModel>(_navigateAsync);
         OpenSelectedCommand = ReactiveCommand.CreateFromTask(OpenSelectedAsync);
+
+        SortingModel = new SortingModel();
+        FilteringModel = new FilteringModel();
+        SearchModel = new SearchModel
+        {
+            HighlightMode = SearchHighlightMode.TextAndCell,
+            HighlightCurrent = true,
+            WrapNavigation = true,
+            UpdateSelectionOnNavigate = true
+        };
+
+        var options = new HierarchicalOptions
+        {
+            ChildrenSelector = item => item is ReferencesGroupViewModel group ? group.Items : null,
+            IsLeafSelector = item => item is ReferenceLocationViewModel,
+            IsExpandedSelector = item => item is ReferencesGroupViewModel group && group.IsExpanded,
+            IsExpandedSetter = (item, value) =>
+            {
+                if (item is ReferencesGroupViewModel group)
+                {
+                    group.IsExpanded = value;
+                }
+            },
+            VirtualizeChildren = true
+        };
+
+        Model = new HierarchicalModel(options);
+        Model.SetRoots(Groups);
+
+        _lifetimeDisposables.Add(this.WhenAnyValue(x => x.SelectedRow)
+            .Subscribe(row => SelectedItem = row?.Item));
+
+        _lifetimeDisposables.Add(this.WhenAnyValue(x => x.FilterText)
+            .Throttle(TimeSpan.FromMilliseconds(150))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(ApplyFilterAndSearch));
     }
 
     public void ReplaceItems(IEnumerable<ReferenceLocationViewModel> items)
     {
-        _disposables.Clear();
+        _groupDisposables.Clear();
         Groups.Clear();
         TotalCount = 0;
 
@@ -1173,7 +1230,7 @@ public sealed class ReferencesViewModel : ReactiveObject
             groupVm.IsExpanded = _expandedFiles.Contains(group.Key);
             IDisposable expandedSubscription = groupVm.WhenAnyValue(x => x.IsExpanded)
                 .Subscribe(isExpanded => UpdateExpanded(group.Key, isExpanded));
-            _disposables.Add(expandedSubscription);
+            _groupDisposables.Add(expandedSubscription);
             foreach (ReferenceLocationViewModel item in group)
             {
                 groupVm.Items.Add(item);
@@ -1181,6 +1238,9 @@ public sealed class ReferencesViewModel : ReactiveObject
             }
             Groups.Add(groupVm);
         }
+
+        Model.Refresh();
+        ApplyFilterAndSearch(FilterText);
     }
 
     private void UpdateExpanded(string filePath, bool isExpanded)
@@ -1201,6 +1261,102 @@ public sealed class ReferencesViewModel : ReactiveObject
         {
             await _navigateAsync(location);
         }
+    }
+
+    private void ApplyFilterAndSearch(string? text)
+    {
+        ApplyFiltering(text);
+        ApplySearch(text);
+    }
+
+    private void ApplyFiltering(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            FilteringModel.Remove(FilterPropertyPath);
+            return;
+        }
+
+        string query = text.Trim();
+        HashSet<object> matches = BuildMatchSet(Groups, query);
+        FilteringModel.SetOrUpdate(new FilteringDescriptor(
+            columnId: FilterPropertyPath,
+            @operator: FilteringOperator.Custom,
+            propertyPath: FilterPropertyPath,
+            predicate: item => MatchesFilter(item, matches)));
+    }
+
+    private void ApplySearch(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            SearchModel.Clear();
+            return;
+        }
+
+        string query = text.Trim();
+        SearchModel.SetOrUpdate(new SearchDescriptor(
+            query,
+            matchMode: SearchMatchMode.Contains,
+            termMode: SearchTermCombineMode.Any,
+            scope: SearchScope.VisibleColumns,
+            comparison: StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool MatchesFilter(object? item, HashSet<object> matches)
+    {
+        return item is not null && matches.Contains(item);
+    }
+
+    private static HashSet<object> BuildMatchSet(
+        IEnumerable<ReferencesGroupViewModel> groups,
+        string text)
+    {
+        HashSet<object> matches = new();
+        foreach (ReferencesGroupViewModel group in groups)
+        {
+            CollectMatches(group, text, matches);
+        }
+
+        return matches;
+    }
+
+    private static bool CollectMatches(
+        ReferencesGroupViewModel group,
+        string text,
+        HashSet<object> matches)
+    {
+        bool groupMatch = group.DisplayText.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || group.FilePath.Contains(text, StringComparison.OrdinalIgnoreCase);
+        bool childMatch = false;
+
+        foreach (ReferenceLocationViewModel item in group.Items)
+        {
+            if (item.DisplayText.Contains(text, StringComparison.OrdinalIgnoreCase))
+            {
+                matches.Add(item);
+                childMatch = true;
+            }
+        }
+
+        if (groupMatch)
+        {
+            matches.Add(group);
+            foreach (ReferenceLocationViewModel item in group.Items)
+            {
+                matches.Add(item);
+            }
+
+            return true;
+        }
+
+        if (childMatch)
+        {
+            matches.Add(group);
+            return true;
+        }
+
+        return false;
     }
 }
 
@@ -3208,9 +3364,27 @@ public enum SolutionExplorerNodeKind
 /// </summary>
 public sealed class SolutionExplorerViewModel : ReactiveObject
 {
+    private const string FilterPropertyPath = "Item.Name";
+
     /// <summary>Gets or sets the root node of the solution tree.</summary>
     [Reactive]
     public SolutionExplorerNodeViewModel? Root { get; set; }
+
+    public ObservableCollection<SolutionExplorerNodeViewModel> RootItems { get; } = new();
+
+    public HierarchicalModel Model { get; }
+
+    public SortingModel SortingModel { get; }
+
+    public FilteringModel FilteringModel { get; }
+
+    public SearchModel SearchModel { get; }
+
+    [Reactive]
+    public HierarchicalNode? SelectedRow { get; set; }
+
+    [Reactive]
+    public SolutionExplorerNodeViewModel? SelectedNode { get; private set; }
 
     /// <summary>Gets or sets whether the panel is visible.</summary>
     [Reactive]
@@ -3225,11 +3399,35 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
 
     public SolutionExplorerViewModel()
     {
-        // Filter support (future enhancement)
+        SortingModel = new SortingModel();
+        FilteringModel = new FilteringModel();
+        SearchModel = new SearchModel
+        {
+            HighlightMode = SearchHighlightMode.TextAndCell,
+            HighlightCurrent = true,
+            WrapNavigation = true,
+            UpdateSelectionOnNavigate = true
+        };
+
+        var options = new HierarchicalOptions
+        {
+            ChildrenSelector = item => ((SolutionExplorerNodeViewModel)item).Children,
+            IsLeafSelector = item => ((SolutionExplorerNodeViewModel)item).Children.Count == 0,
+            IsExpandedSelector = item => ((SolutionExplorerNodeViewModel)item).IsExpanded,
+            IsExpandedSetter = (item, value) => ((SolutionExplorerNodeViewModel)item).IsExpanded = value,
+            VirtualizeChildren = true
+        };
+
+        Model = new HierarchicalModel(options);
+        Model.SetRoots(RootItems);
+
+        this.WhenAnyValue(x => x.SelectedRow)
+            .Subscribe(row => SelectedNode = row?.Item as SolutionExplorerNodeViewModel);
+
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(_ => { /* Filtering can be added here */ });
+            .Subscribe(ApplyFilterAndSearch);
     }
 
     /// <summary>
@@ -3239,6 +3437,19 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
     {
         Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName);
         WireFileOpen(Root);
+        SetRoot(Root);
+    }
+
+    private void SetRoot(SolutionExplorerNodeViewModel? root)
+    {
+        RootItems.Clear();
+        if (root is not null)
+        {
+            RootItems.Add(root);
+        }
+
+        Model.Refresh();
+        ApplyFilterAndSearch(FilterText);
     }
 
     private void WireFileOpen(SolutionExplorerNodeViewModel node)
@@ -3248,6 +3459,107 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
         foreach (SolutionExplorerNodeViewModel child in node.Children)
         {
             WireFileOpen(child);
+        }
+    }
+
+    private void ApplyFilterAndSearch(string? text)
+    {
+        ApplyFiltering(text);
+        ApplySearch(text);
+    }
+
+    private void ApplyFiltering(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            FilteringModel.Remove(FilterPropertyPath);
+            return;
+        }
+
+        string query = text.Trim();
+        HashSet<object> matches = BuildMatchSet(RootItems, query);
+        FilteringModel.SetOrUpdate(new FilteringDescriptor(
+            columnId: FilterPropertyPath,
+            @operator: FilteringOperator.Custom,
+            propertyPath: FilterPropertyPath,
+            predicate: item => MatchesFilter(item, matches)));
+    }
+
+    private void ApplySearch(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            SearchModel.Clear();
+            return;
+        }
+
+        string query = text.Trim();
+        SearchModel.SetOrUpdate(new SearchDescriptor(
+            query,
+            matchMode: SearchMatchMode.Contains,
+            termMode: SearchTermCombineMode.Any,
+            scope: SearchScope.VisibleColumns,
+            comparison: StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool MatchesFilter(object? item, HashSet<object> matches)
+    {
+        return item is not null && matches.Contains(item);
+    }
+
+    private static HashSet<object> BuildMatchSet(
+        IEnumerable<SolutionExplorerNodeViewModel> roots,
+        string text)
+    {
+        HashSet<object> matches = new();
+        foreach (SolutionExplorerNodeViewModel root in roots)
+        {
+            CollectMatches(root, text, matches);
+        }
+
+        return matches;
+    }
+
+    private static bool CollectMatches(
+        SolutionExplorerNodeViewModel node,
+        string text,
+        HashSet<object> matches)
+    {
+        bool isMatch = node.Name.Contains(text, StringComparison.OrdinalIgnoreCase);
+        bool childMatch = false;
+
+        foreach (SolutionExplorerNodeViewModel child in node.Children)
+        {
+            if (CollectMatches(child, text, matches))
+            {
+                childMatch = true;
+            }
+        }
+
+        if (isMatch)
+        {
+            matches.Add(node);
+            AddDescendants(node, matches);
+            return true;
+        }
+
+        if (childMatch)
+        {
+            matches.Add(node);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void AddDescendants(SolutionExplorerNodeViewModel node, HashSet<object> matches)
+    {
+        foreach (SolutionExplorerNodeViewModel child in node.Children)
+        {
+            if (matches.Add(child))
+            {
+                AddDescendants(child, matches);
+            }
         }
     }
 }
