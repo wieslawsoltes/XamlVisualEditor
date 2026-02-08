@@ -25,6 +25,24 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_New" Command="{CompiledBinding NewDocumentCommand}" InputGesture="Ctrl+N" />
                 <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
+                <MenuItem Header="Open _Recent">
+                    <MenuItem.ItemsSource>
+                        <CompiledBinding Path="RecentFiles" />
+                    </MenuItem.ItemsSource>
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RecentFileEntry">
+                            <MenuItem ToolTip.Tip="{CompiledBinding FilePath}"
+                                      Command="{CompiledBinding DataContext.OpenPathCommand, ElementName=MainWin}"
+                                      CommandParameter="{CompiledBinding FilePath}">
+                                <MenuItem.Header>
+                                    <TextBlock Text="{CompiledBinding DisplayName}"
+                                               MaxWidth="420"
+                                               TextTrimming="CharacterEllipsis" />
+                                </MenuItem.Header>
+                            </MenuItem>
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
                 <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />

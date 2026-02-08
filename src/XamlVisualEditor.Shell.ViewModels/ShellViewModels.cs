@@ -8,6 +8,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Xml.Linq;
 using System.Diagnostics;
 using Avalonia.Controls.DataGridFiltering;
@@ -1401,6 +1402,21 @@ public sealed record OutputMessage(
     string? FilePath = null);
 
 /// <summary>
+/// Represents a recent file entry.
+/// </summary>
+public sealed class RecentFileEntry
+{
+    public RecentFileEntry(string filePath)
+    {
+        FilePath = filePath;
+    }
+
+    public string FilePath { get; }
+
+    public string DisplayName => System.IO.Path.GetFileName(FilePath);
+}
+
+/// <summary>
 /// Specifies how XAML changes are saved to disk.
 /// </summary>
 public enum SaveBehavior
@@ -1420,6 +1436,7 @@ public enum SaveBehavior
 /// </summary>
 public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 {
+    private const int RecentFilesLimit = 10;
     private readonly CompositeDisposable _disposables = new();
     private bool _suppressTreeSelectionSync;
     private string? _clipboard;
@@ -1436,6 +1453,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private bool _isClosingFromDock;
     private readonly ObservableAsPropertyHelper<int> _activeLine;
     private readonly ObservableAsPropertyHelper<int> _activeColumn;
+    private bool _isLoadingRecentFiles;
 
     /// <summary>
     /// Gets the open documents.
@@ -1544,7 +1562,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Gets the recent files list.
     /// </summary>
-    public ObservableCollection<string> RecentFiles { get; } = new();
+    public ObservableCollection<RecentFileEntry> RecentFiles { get; } = new();
 
     /// <summary>
     /// Gets whether a workspace is currently loaded.
@@ -1681,6 +1699,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
         OpenDocumentCommand = ReactiveCommand.CreateFromTask(OpenDocumentAsync);
         OpenPathCommand = ReactiveCommand.CreateFromTask<string>(OpenFileAsync);
+
+        LoadRecentFiles();
+        RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
 
         IObservable<bool> hasActiveDoc = this.WhenAnyValue(x => x.ActiveDocument).Select(d => d is not null);
         IObservable<bool> hasDesignerDoc = this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(d => d is not null);
@@ -2620,12 +2641,23 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         bool addRecent,
         bool updateStatus)
     {
+        if (!System.IO.File.Exists(filePath))
+        {
+            RemoveRecentFile(filePath);
+            StatusText = $"File not found: {System.IO.Path.GetFileName(filePath)}";
+            return null;
+        }
+
         string extension = System.IO.Path.GetExtension(filePath);
         if (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
             extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) ||
             extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
         {
             await LoadWorkspaceAsync(filePath);
+            if (addRecent)
+            {
+                AddRecentFile(filePath);
+            }
             return null;
         }
 
@@ -2667,13 +2699,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             doc = textDoc;
         }
 
-        if (addRecent && !RecentFiles.Contains(filePath))
+        if (addRecent)
         {
-            RecentFiles.Insert(0, filePath);
-            if (RecentFiles.Count > 10)
-            {
-                RecentFiles.RemoveAt(RecentFiles.Count - 1);
-            }
+            AddRecentFile(filePath);
         }
 
         if (updateStatus)
@@ -2682,6 +2710,124 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         return doc;
+    }
+
+    private void LoadRecentFiles()
+    {
+        _isLoadingRecentFiles = true;
+        try
+        {
+            string path = GetRecentFilesPath();
+            if (!System.IO.File.Exists(path))
+            {
+                return;
+            }
+
+            string json = System.IO.File.ReadAllText(path);
+            List<string>? recent = JsonSerializer.Deserialize<List<string>>(json);
+            if (recent is null)
+            {
+                return;
+            }
+
+            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string filePath in recent)
+            {
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    continue;
+                }
+
+                if (!System.IO.File.Exists(filePath))
+                {
+                    continue;
+                }
+
+                if (!seen.Add(filePath))
+                {
+                    continue;
+                }
+
+                RecentFiles.Add(new RecentFileEntry(filePath));
+                if (RecentFiles.Count >= RecentFilesLimit)
+                {
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Failed to load recent files: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingRecentFiles = false;
+        }
+    }
+
+    private void SaveRecentFiles()
+    {
+        if (_isLoadingRecentFiles)
+        {
+            return;
+        }
+
+        try
+        {
+            string path = GetRecentFilesPath();
+            List<string> recent = RecentFiles.Select(entry => entry.FilePath).ToList();
+            string json = JsonSerializer.Serialize(recent, new JsonSerializerOptions { WriteIndented = true });
+            System.IO.File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Failed to save recent files: {ex.Message}");
+        }
+    }
+
+    private static string GetRecentFilesPath()
+    {
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string dir = System.IO.Path.Combine(appData, "XamlVisualEditor");
+        System.IO.Directory.CreateDirectory(dir);
+        return System.IO.Path.Combine(dir, "recent-files.json");
+    }
+
+    private int IndexOfRecentFile(string filePath)
+    {
+        for (int i = 0; i < RecentFiles.Count; i++)
+        {
+            if (string.Equals(RecentFiles[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void AddRecentFile(string filePath)
+    {
+        int existingIndex = IndexOfRecentFile(filePath);
+        if (existingIndex >= 0)
+        {
+            RecentFiles.RemoveAt(existingIndex);
+        }
+
+        RecentFiles.Insert(0, new RecentFileEntry(filePath));
+        while (RecentFiles.Count > RecentFilesLimit)
+        {
+            RecentFiles.RemoveAt(RecentFiles.Count - 1);
+        }
+    }
+
+    private void RemoveRecentFile(string filePath)
+    {
+        int index = IndexOfRecentFile(filePath);
+        if (index >= 0)
+        {
+            RecentFiles.RemoveAt(index);
+        }
     }
 
     private async System.Threading.Tasks.Task LoadWorkspaceAsync(string workspacePath)

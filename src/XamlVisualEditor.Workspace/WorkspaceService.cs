@@ -899,8 +899,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
         // Search loaded assemblies
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
-            Type? type = asm.GetType(fullTypeName, throwOnError: false);
-            if (type is not null)
+            if (TryGetTypeSafe(asm, fullTypeName, out Type? type) && type is not null)
             {
                 TypeMetadata meta = BuildMetadata(type);
                 _cache[fullTypeName] = meta;
@@ -1021,8 +1020,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 }
             }
 
-            Type? resolved = asm.GetType(type.FullName, throwOnError: false);
-            if (resolved is not null)
+            if (TryGetTypeSafe(asm, type.FullName, out Type? resolved))
             {
                 return resolved;
             }
@@ -1035,8 +1033,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     {
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
-            Type? type = asm.GetType(fullTypeName, throwOnError: false);
-            if (type is not null)
+            if (TryGetTypeSafe(asm, fullTypeName, out Type? type))
             {
                 return type;
             }
@@ -1353,8 +1350,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                     }
                 }
 
-                Type? match = asm.GetType(fullName, throwOnError: false);
-                if (match is not null)
+                if (TryGetTypeSafe(asm, fullName, out Type? match))
                 {
                     resolved = match;
                     return true;
@@ -1387,6 +1383,22 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
 
         return false;
+    }
+
+    private static bool TryGetTypeSafe(System.Reflection.Assembly asm, string typeName, out Type? type)
+    {
+        type = null;
+        try
+        {
+            type = asm.GetType(typeName, throwOnError: false);
+            return type is not null;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Failed to resolve type '{typeName}' from '{asm.FullName}': {ex.Message}");
+            return false;
+        }
     }
 
     private static bool TryParseClrNamespace(string xmlNamespace, out string? clrNamespace, out string? assemblyName)
