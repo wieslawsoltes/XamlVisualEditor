@@ -88,6 +88,10 @@ public sealed class WorkspaceModel
 {
     /// <summary>Gets the projects in this workspace.</summary>
     public required IReadOnlyList<ProjectModel> Projects { get; init; }
+
+    /// <summary>Gets the solution folder path for each project (if any).</summary>
+    public IReadOnlyDictionary<string, string> ProjectFolders { get; init; }
+        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -104,8 +108,23 @@ public sealed class ProjectModel
     /// <summary>Gets the XAML files in this project.</summary>
     public required IReadOnlyList<XamlFileModel> XamlFiles { get; init; }
 
+    /// <summary>Gets all files in this project.</summary>
+    public required IReadOnlyList<ProjectFileModel> Files { get; init; }
+
     /// <summary>Gets the assembly references.</summary>
     public required IReadOnlyList<AssemblyReference> References { get; init; }
+}
+
+/// <summary>
+/// Represents a file within a project.
+/// </summary>
+public sealed class ProjectFileModel
+{
+    /// <summary>Gets the absolute file path.</summary>
+    public required string FilePath { get; init; }
+
+    /// <summary>Gets the path relative to the project.</summary>
+    public required string RelativePath { get; init; }
 }
 
 /// <summary>

@@ -97,15 +97,22 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             Directory.SetCurrentDirectory(workspaceDirectory);
         }
 
+        IDisposable? workspaceFailed = null;
         try
         {
             EnsureMSBuildRegistered();
 
             _workspace = MSBuildWorkspace.Create();
-            _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: ct);
+            workspaceFailed = _workspace.RegisterWorkspaceFailedHandler(OnWorkspaceFailed);
+            Console.WriteLine($"Loading solution: {solutionPath}");
+            Progress<ProjectLoadProgress> progress = new(p =>
+                Console.WriteLine($"Workspace load: {FormatProgress(p)}"));
+            _solution = await _workspace.OpenSolutionAsync(solutionPath, progress, ct);
         }
         finally
         {
+            workspaceFailed?.Dispose();
+
             if (!string.IsNullOrEmpty(previousDirectory))
             {
                 Directory.SetCurrentDirectory(previousDirectory);
@@ -113,37 +120,39 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
 
         List<ProjectModel> projects = new();
+        IReadOnlyDictionary<string, string> projectFolders = ParseSolutionFolders(solutionPath);
 
         foreach (Project project in _solution.Projects)
         {
             Dictionary<string, XamlFileModel> xamlFiles = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, ProjectFileModel> files = new(StringComparer.OrdinalIgnoreCase);
             List<AssemblyReference> references = new();
+
+            if (!string.IsNullOrWhiteSpace(project.FilePath))
+            {
+                AddProjectFile(files, project.FilePath, project.FilePath, project.Name + ".csproj");
+            }
 
             // Find XAML files
             foreach (AdditionalDocument additional in project.AdditionalDocuments)
             {
                 string filePath = additional.FilePath ?? additional.Name;
-                if (filePath.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) ||
-                    filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddXamlFile(xamlFiles, filePath, additional.Name);
-                }
+                AddProjectFile(files, project.FilePath, filePath, additional.Name);
+                AddXamlFile(xamlFiles, filePath, additional.Name);
             }
 
             // Also check documents for XAML
             foreach (Document doc in project.Documents)
             {
                 string filePath = doc.FilePath ?? doc.Name;
-                if (filePath.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) ||
-                    filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
-                {
-                    AddXamlFile(xamlFiles, filePath, doc.Name);
-                }
+                AddProjectFile(files, project.FilePath, filePath, doc.Name);
+                AddXamlFile(xamlFiles, filePath, doc.Name);
             }
 
             foreach (XamlFileModel file in LoadXamlFromProjectFile(project.FilePath))
             {
                 AddXamlFile(xamlFiles, file.FilePath, file.RelativePath);
+                AddProjectFile(files, project.FilePath, file.FilePath, file.RelativePath);
             }
 
             // Collect assembly references
@@ -161,11 +170,16 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 Name = project.Name,
                 ProjectPath = project.FilePath ?? string.Empty,
                 XamlFiles = xamlFiles.Values.ToList(),
+                Files = files.Values.ToList(),
                 References = references
             });
         }
 
-        return new WorkspaceModel { Projects = projects };
+        return new WorkspaceModel
+        {
+            Projects = projects,
+            ProjectFolders = projectFolders
+        };
     }
 
     /// <inheritdoc />
@@ -178,16 +192,23 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             Directory.SetCurrentDirectory(workspaceDirectory);
         }
 
+        IDisposable? workspaceFailed = null;
         Project project;
         try
         {
             EnsureMSBuildRegistered();
 
             _workspace = MSBuildWorkspace.Create();
-            project = await _workspace.OpenProjectAsync(projectPath, cancellationToken: ct);
+            workspaceFailed = _workspace.RegisterWorkspaceFailedHandler(OnWorkspaceFailed);
+            Console.WriteLine($"Loading project: {projectPath}");
+            Progress<ProjectLoadProgress> progress = new(p =>
+                Console.WriteLine($"Workspace load: {FormatProgress(p)}"));
+            project = await _workspace.OpenProjectAsync(projectPath, progress, ct);
         }
         finally
         {
+            workspaceFailed?.Dispose();
+
             if (!string.IsNullOrEmpty(previousDirectory))
             {
                 Directory.SetCurrentDirectory(previousDirectory);
@@ -195,21 +216,25 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
 
         Dictionary<string, XamlFileModel> xamlFiles = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, ProjectFileModel> files = new(StringComparer.OrdinalIgnoreCase);
         List<AssemblyReference> references = new();
+
+        if (!string.IsNullOrWhiteSpace(project.FilePath))
+        {
+            AddProjectFile(files, project.FilePath, project.FilePath, project.Name + ".csproj");
+        }
 
         foreach (Document doc in project.Documents)
         {
             string filePath = doc.FilePath ?? doc.Name;
-            if (filePath.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) ||
-                filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
-            {
-                AddXamlFile(xamlFiles, filePath, doc.Name);
-            }
+            AddProjectFile(files, project.FilePath, filePath, doc.Name);
+            AddXamlFile(xamlFiles, filePath, doc.Name);
         }
 
         foreach (XamlFileModel file in LoadXamlFromProjectFile(project.FilePath))
         {
             AddXamlFile(xamlFiles, file.FilePath, file.RelativePath);
+            AddProjectFile(files, project.FilePath, file.FilePath, file.RelativePath);
         }
 
         foreach (MetadataReference metaRef in project.MetadataReferences)
@@ -226,10 +251,15 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             Name = project.Name,
             ProjectPath = project.FilePath ?? string.Empty,
             XamlFiles = xamlFiles.Values.ToList(),
+            Files = files.Values.ToList(),
             References = references
         };
 
-        return new WorkspaceModel { Projects = new List<ProjectModel> { projectModel } };
+        return new WorkspaceModel
+        {
+            Projects = new List<ProjectModel> { projectModel },
+            ProjectFolders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        };
     }
 
     /// <inheritdoc />
@@ -242,10 +272,22 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             Name = fileName,
             ProjectPath = string.Empty,
             XamlFiles = new List<XamlFileModel> { xamlFile },
+            Files = new List<ProjectFileModel>
+            {
+                new()
+                {
+                    FilePath = xamlFilePath,
+                    RelativePath = fileName
+                }
+            },
             References = Array.Empty<AssemblyReference>()
         };
 
-        return new WorkspaceModel { Projects = new List<ProjectModel> { project } };
+        return new WorkspaceModel
+        {
+            Projects = new List<ProjectModel> { project },
+            ProjectFolders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        };
     }
 
     public void Dispose()
@@ -272,6 +314,203 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 RelativePath = relativePath
             };
         }
+    }
+
+    private static void AddProjectFile(
+        Dictionary<string, ProjectFileModel> files,
+        string? projectPath,
+        string filePath,
+        string fallbackName)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return;
+        }
+
+        if (files.ContainsKey(filePath))
+        {
+            return;
+        }
+
+        string relative = GetRelativePath(projectPath, filePath, fallbackName);
+        files[filePath] = new ProjectFileModel
+        {
+            FilePath = filePath,
+            RelativePath = relative
+        };
+    }
+
+    private static string GetRelativePath(string? projectPath, string filePath, string fallbackName)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            return fallbackName;
+        }
+
+        string? projectDir = System.IO.Path.GetDirectoryName(projectPath);
+        if (string.IsNullOrWhiteSpace(projectDir))
+        {
+            return fallbackName;
+        }
+
+        try
+        {
+            return System.IO.Path.GetRelativePath(projectDir, filePath);
+        }
+        catch
+        {
+            return fallbackName;
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseSolutionFolders(string solutionPath)
+    {
+        if (string.IsNullOrWhiteSpace(solutionPath) || !System.IO.File.Exists(solutionPath))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        const string solutionFolderGuid = "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}";
+        string solutionDir = System.IO.Path.GetDirectoryName(solutionPath) ?? string.Empty;
+        Dictionary<string, string> projectPaths = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> folderNames = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> nested = new(StringComparer.OrdinalIgnoreCase);
+
+        string[] lines;
+        try
+        {
+            lines = System.IO.File.ReadAllLines(solutionPath);
+        }
+        catch
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        bool inNested = false;
+        foreach (string line in lines)
+        {
+            if (line.StartsWith("Project(", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseProjectLine(line, out string? typeGuid, out string? name, out string? path, out string? projectGuid))
+                {
+                    continue;
+                }
+
+                if (string.Equals(typeGuid, solutionFolderGuid, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.IsNullOrWhiteSpace(projectGuid) && !string.IsNullOrWhiteSpace(name))
+                    {
+                        folderNames[projectGuid] = name;
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(projectGuid) && !string.IsNullOrWhiteSpace(path))
+                {
+                    string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(solutionDir, path));
+                    projectPaths[projectGuid] = fullPath;
+                }
+
+                continue;
+            }
+
+            if (line.TrimStart().StartsWith("GlobalSection(NestedProjects)", StringComparison.OrdinalIgnoreCase))
+            {
+                inNested = true;
+                continue;
+            }
+
+            if (inNested)
+            {
+                if (line.TrimStart().StartsWith("EndGlobalSection", StringComparison.OrdinalIgnoreCase))
+                {
+                    inNested = false;
+                    continue;
+                }
+
+                string[] parts = line.Split('=', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 2)
+                {
+                    nested[parts[0]] = parts[1];
+                }
+            }
+        }
+
+        Dictionary<string, string> result = new(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> project in projectPaths)
+        {
+            string projectGuid = project.Key;
+            string projectPath = project.Value;
+            List<string> folders = new();
+
+            string? parent = nested.TryGetValue(projectGuid, out string? parentGuid) ? parentGuid : null;
+            while (!string.IsNullOrWhiteSpace(parent) && folderNames.TryGetValue(parent, out string? folderName))
+            {
+                folders.Add(folderName);
+                parent = nested.TryGetValue(parent, out string? next) ? next : null;
+            }
+
+            if (folders.Count > 0)
+            {
+                folders.Reverse();
+                result[projectPath] = string.Join('/', folders);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool TryParseProjectLine(
+        string line,
+        out string? typeGuid,
+        out string? name,
+        out string? path,
+        out string? projectGuid)
+    {
+        typeGuid = null;
+        name = null;
+        path = null;
+        projectGuid = null;
+
+        int typeStart = line.IndexOf('"');
+        if (typeStart < 0)
+        {
+            return false;
+        }
+
+        int typeEnd = line.IndexOf('"', typeStart + 1);
+        if (typeEnd < 0)
+        {
+            return false;
+        }
+
+        typeGuid = line.Substring(typeStart + 1, typeEnd - typeStart - 1);
+
+        string[] parts = line.Split('=', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+        {
+            return false;
+        }
+
+        string[] fields = parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (fields.Length < 3)
+        {
+            return false;
+        }
+
+        name = TrimQuotes(fields[0]);
+        path = TrimQuotes(fields[1]);
+        projectGuid = TrimQuotes(fields[2]);
+        return true;
+    }
+
+    private static string TrimQuotes(string value)
+    {
+        string trimmed = value.Trim();
+        if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[^1] == '"')
+        {
+            return trimmed[1..^1];
+        }
+
+        return trimmed;
     }
 
     private static IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
@@ -456,6 +695,33 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             .Replace("\\?", "[^/]");
 
         return Regex.IsMatch(text, "^" + regex + "$", RegexOptions.IgnoreCase);
+    }
+
+    private static void OnWorkspaceFailed(WorkspaceDiagnosticEventArgs e)
+    {
+        if (e.Diagnostic is not null)
+        {
+            Console.WriteLine($"Workspace diagnostic [{e.Diagnostic.Kind}]: {e.Diagnostic.Message}");
+        }
+    }
+
+    private static string FormatProgress(ProjectLoadProgress progress)
+    {
+        string operation = progress.Operation.ToString();
+        string filePath = progress.FilePath ?? string.Empty;
+        string fileName = string.IsNullOrWhiteSpace(filePath)
+            ? string.Empty
+            : System.IO.Path.GetFileName(filePath);
+        string tfm = string.IsNullOrWhiteSpace(progress.TargetFramework)
+            ? string.Empty
+            : $" ({progress.TargetFramework})";
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return operation;
+        }
+
+        return $"{operation}: {fileName}{tfm}";
     }
 }
 
@@ -701,7 +967,19 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
-            foreach (Type type in asm.GetExportedTypes())
+            Type[] exportedTypes;
+            try
+            {
+                exportedTypes = asm.GetExportedTypes();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Failed to enumerate exported types from '{asm.FullName}': {ex.Message}");
+                continue;
+            }
+
+            foreach (Type type in exportedTypes)
             {
                 if (string.Equals(type.Name, typeName, StringComparison.OrdinalIgnoreCase))
                 {
