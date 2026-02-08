@@ -864,6 +864,16 @@ public sealed partial class DesignSurfaceView : UserControl
         }
     }
 
+    private void RefreshSelectionAdorners()
+    {
+        if (_adornerLayer is null || _currentVm is null)
+        {
+            return;
+        }
+
+        _adornerLayer.UpdateSelection(_currentVm.Selection.SelectedItems);
+    }
+
     private void StartDrag(DesignItem item, Point startPoint)
     {
         DragState state = new()
@@ -977,6 +987,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _adornerLayer?.UpdateDropTarget(null, null);
         _adornerLayer?.UpdateSnapLines(Array.Empty<double>(), Array.Empty<double>());
+        RefreshSelectionAdorners();
     }
 
     private void UpdateCanvasMove(DragState state, Point currentPoint)
@@ -1025,6 +1036,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _adornerLayer?.UpdateSnapLines(snapHorizontal, snapVertical);
+        RefreshSelectionAdorners();
     }
 
     private void UpdateGridMove(DragState state, Point currentPoint)
@@ -1040,6 +1052,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         SetAttachedInt(state.Item, "Grid.Row", row);
         SetAttachedInt(state.Item, "Grid.Column", column);
+        RefreshSelectionAdorners();
     }
 
     private void UpdateDockMove(DragState state, Point currentPoint)
@@ -1068,6 +1081,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         SetAttachedString(state.Item, "DockPanel.Dock", dock.ToString());
+        RefreshSelectionAdorners();
     }
 
     private void UpdateReorderDrag(DragState state, Point currentPoint)
@@ -1172,6 +1186,8 @@ public sealed partial class DesignSurfaceView : UserControl
             SetAttachedDouble(state.Item, "Canvas.Left", left);
             SetAttachedDouble(state.Item, "Canvas.Top", top);
         }
+
+        RefreshSelectionAdorners();
     }
 
     private DropPosition ComputeDropPosition(DesignItem target, Point surfacePoint)
