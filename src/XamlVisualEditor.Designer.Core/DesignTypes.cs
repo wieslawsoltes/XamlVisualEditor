@@ -427,8 +427,8 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
 
     public DesignSurfaceViewModel()
     {
-        ZoomInCommand = ReactiveCommand.Create(() => { Zoom = Math.Min(Zoom + 0.25, 4.0); });
-        ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = Math.Max(Zoom - 0.25, 0.25); });
+        ZoomInCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom * 1.1, 0.1, 8.0); });
+        ZoomOutCommand = ReactiveCommand.Create(() => { Zoom = Math.Clamp(Zoom / 1.1, 0.1, 8.0); });
         ResetZoomCommand = ReactiveCommand.Create(() => { Zoom = 1.0; });
         DeleteSelectedCommand = ReactiveCommand.Create(DeleteSelected);
     }

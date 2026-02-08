@@ -280,9 +280,9 @@ public sealed class XamlEditorDockFactory : Factory
     /// </summary>
     public IRootDock CreateDefaultLayout()
     {
-        // Left tools: Toolbox
-        ToolboxTool toolboxTool = new(_mainVm.Toolbox);
+        // Left tools: Solution Explorer, Toolbox
         SolutionExplorerTool solutionExplorerTool = new(_mainVm.SolutionExplorer);
+        ToolboxTool toolboxTool = new(_mainVm.Toolbox);
 
         // Right tools: Properties, Visual Tree, Logical Tree
         PropertyEditorTool propertyTool = new(_mainVm);
@@ -300,8 +300,8 @@ public sealed class XamlEditorDockFactory : Factory
             Id = "LeftToolDock",
             Title = "Left Tools",
             Proportion = 0.2,
-            ActiveDockable = toolboxTool,
-            VisibleDockables = CreateList<IDockable>(toolboxTool, solutionExplorerTool),
+            ActiveDockable = solutionExplorerTool,
+            VisibleDockables = CreateList<IDockable>(solutionExplorerTool, toolboxTool),
             Alignment = Alignment.Left
         };
 

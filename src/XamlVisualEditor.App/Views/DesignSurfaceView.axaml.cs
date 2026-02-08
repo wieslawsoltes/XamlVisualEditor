@@ -41,6 +41,10 @@ public sealed partial class DesignSurfaceView : UserControl
     private bool _rebuildPending;
     private Panel? _canvas;
     private Control? _rootControl;
+    private Control? _zoomSurface;
+    private TopLevel? _topLevel;
+    private const double MinZoom = 0.1;
+    private const double MaxZoom = 8.0;
     private DesignAdornerLayer? _adornerLayer;
     private ScrollViewer? _scrollViewer;
     private RulerControl? _horizontalRuler;
@@ -48,6 +52,10 @@ public sealed partial class DesignSurfaceView : UserControl
     private IDesignItem? _hoveredItem;
     private DragState? _dragState;
     private MarqueeState? _marqueeState;
+    private bool _isSpaceDown;
+    private bool _isPanning;
+    private Point _panStart;
+    private Vector _panStartOffset;
     private readonly SurfaceDropHandler _surfaceDropHandler = new();
     private NotifyCollectionChangedEventHandler? _guideChangedHandler;
     private readonly ContextMenu _surfaceContextMenu;
@@ -82,6 +90,31 @@ public sealed partial class DesignSurfaceView : UserControl
             OnKeyDown,
             Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
             true);
+        AddHandler(
+            KeyUpEvent,
+            OnKeyUp,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
+            true);
+
+        AddHandler(
+            PointerWheelChangedEvent,
+            OnPointerWheelChanged,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
+            true);
+
+        DetachedFromLogicalTree += OnDetachedFromLogicalTree;
+    }
+
+    private void OnDetachedFromLogicalTree(object? sender, Avalonia.LogicalTree.LogicalTreeAttachmentEventArgs e)
+    {
+        if (_topLevel is null)
+        {
+            return;
+        }
+
+        _topLevel.RemoveHandler(KeyDownEvent, OnKeyDown);
+        _topLevel.RemoveHandler(KeyUpEvent, OnKeyUp);
+        _topLevel = null;
     }
 
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -89,10 +122,18 @@ public sealed partial class DesignSurfaceView : UserControl
         _isLoaded = true;
 
         _canvas = this.FindControl<Panel>("DesignCanvas");
+        _zoomSurface = this.FindControl<Control>("ZoomSurface");
         _adornerLayer = this.FindControl<DesignAdornerLayer>("AdornerLayer");
         _scrollViewer = this.FindControl<ScrollViewer>("SurfaceScrollViewer");
         _horizontalRuler = this.FindControl<RulerControl>("HorizontalRuler");
         _verticalRuler = this.FindControl<RulerControl>("VerticalRuler");
+        _topLevel = TopLevel.GetTopLevel(this);
+        _topLevel?.AddHandler(KeyDownEvent, OnKeyDown,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
+            true);
+        _topLevel?.AddHandler(KeyUpEvent, OnKeyUp,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel | Avalonia.Interactivity.RoutingStrategies.Bubble,
+            true);
         if (_canvas is not null)
         {
             _canvas.PointerPressed += OnCanvasPointerPressed;
@@ -110,7 +151,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_adornerLayer is not null && _canvas is not null)
         {
-            _adornerLayer.SetSurfaceRoot(_canvas);
+            _adornerLayer.SetSurfaceRoot(GetSurfaceRoot());
         }
 
         // If a rebuild was requested before we were loaded, do it now
@@ -207,6 +248,7 @@ public sealed partial class DesignSurfaceView : UserControl
         {
             UpdateRulerOffsets();
             UpdateRulerSelectionBounds();
+            RefreshSelectionAdorners();
         }
     }
 
@@ -261,6 +303,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private void OnSurfaceScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
         UpdateRulerOffsets();
+        RefreshSelectionAdorners();
     }
 
     private void UpdateRulerOffsets()
@@ -287,12 +330,13 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private Point GetCanvasOriginInScrollViewer()
     {
-        if (_canvas is null || _scrollViewer is null)
+        if (_scrollViewer is null)
         {
             return default;
         }
 
-        Point? origin = _canvas.TranslatePoint(new Point(0, 0), _scrollViewer);
+        Control? surfaceRoot = GetSurfaceRoot();
+        Point? origin = surfaceRoot?.TranslatePoint(new Point(0, 0), _scrollViewer);
         return origin ?? default;
     }
 
@@ -324,6 +368,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return null;
         }
 
+        Control? surfaceRoot = GetSurfaceRoot();
         Rect? bounds = null;
         foreach (IDesignItem item in _currentVm.Selection.SelectedItems)
         {
@@ -332,7 +377,7 @@ public sealed partial class DesignSurfaceView : UserControl
                 continue;
             }
 
-            Rect itemBounds = designItem.GetBoundsRelativeTo(_canvas);
+            Rect itemBounds = designItem.GetBoundsRelativeTo(surfaceRoot);
             bounds = bounds is null ? itemBounds : bounds.Value.Union(itemBounds);
         }
 
@@ -341,7 +386,25 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (_currentVm is null || !_currentVm.IsEditMode)
+        if (e.Key == Key.Space)
+        {
+            _isSpaceDown = true;
+            UpdatePanCursor();
+            e.Handled = true;
+            return;
+        }
+
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        if (HandleZoomShortcuts(e))
+        {
+            return;
+        }
+
+        if (!_currentVm.IsEditMode)
         {
             return;
         }
@@ -401,6 +464,263 @@ public sealed partial class DesignSurfaceView : UserControl
                 e.Handled = true;
                 break;
         }
+    }
+
+    private void OnKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space)
+        {
+            return;
+        }
+
+        _isSpaceDown = false;
+        UpdatePanCursor();
+        if (_isPanning)
+        {
+            EndPan();
+        }
+        e.Handled = true;
+    }
+
+    private bool HandleZoomShortcuts(KeyEventArgs e)
+    {
+        if (_currentVm is null || _scrollViewer is null)
+        {
+            return false;
+        }
+
+        bool zoomModifier = e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (zoomModifier)
+        {
+            Point center = GetViewportCenter();
+            if (e.Key is Key.OemPlus or Key.Add)
+            {
+                if (TryGetCanvasFocus(center, out Point canvasFocus))
+                {
+                    ApplyZoom(ClampZoom(_currentVm.Zoom * 1.1), center, canvasFocus);
+                }
+                else
+                {
+                    ApplyZoom(ClampZoom(_currentVm.Zoom * 1.1), center);
+                }
+                e.Handled = true;
+                return true;
+            }
+
+            if (e.Key is Key.OemMinus or Key.Subtract)
+            {
+                if (TryGetCanvasFocus(center, out Point canvasFocus))
+                {
+                    ApplyZoom(ClampZoom(_currentVm.Zoom / 1.1), center, canvasFocus);
+                }
+                else
+                {
+                    ApplyZoom(ClampZoom(_currentVm.Zoom / 1.1), center);
+                }
+                e.Handled = true;
+                return true;
+            }
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            if (e.Key == Key.D1)
+            {
+                ZoomToFit();
+                e.Handled = true;
+                return true;
+            }
+
+            if (e.Key == Key.D2)
+            {
+                ZoomToSelection();
+                e.Handled = true;
+                return true;
+            }
+
+            if (e.Key == Key.D0)
+            {
+                Point center = GetViewportCenter();
+                if (TryGetCanvasFocus(center, out Point canvasFocus))
+                {
+                    ApplyZoom(1.0, center, canvasFocus);
+                }
+                else
+                {
+                    ApplyZoom(1.0, center);
+                }
+                e.Handled = true;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void OnZoomToFitClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ZoomToFit();
+    }
+
+    private void OnZoomToSelectionClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ZoomToSelection();
+    }
+
+    private void ZoomToSelection()
+    {
+        Rect? selectionBounds = GetSelectionBounds();
+        if (selectionBounds is null || selectionBounds.Value.Width <= 0 || selectionBounds.Value.Height <= 0)
+        {
+            ZoomToFit();
+            return;
+        }
+
+        ZoomToBounds(selectionBounds.Value);
+    }
+
+    private void ZoomToFit()
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        Rect bounds = new(0, 0, _currentVm.CanvasWidth, _currentVm.CanvasHeight);
+        ZoomToBounds(bounds);
+    }
+
+    private void ZoomToBounds(Rect bounds)
+    {
+        if (_currentVm is null || _scrollViewer is null)
+        {
+            return;
+        }
+
+        Size viewport = _scrollViewer.Viewport;
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return;
+        }
+
+        const double padding = 32;
+        double width = Math.Max(1, bounds.Width);
+        double height = Math.Max(1, bounds.Height);
+        double zoomX = (viewport.Width - padding * 2) / width;
+        double zoomY = (viewport.Height - padding * 2) / height;
+        double targetZoom = ClampZoom(Math.Min(zoomX, zoomY));
+        _currentVm.Zoom = targetZoom;
+
+        Point center = bounds.Center;
+        Vector targetOffset = new(
+            center.X * targetZoom - viewport.Width / 2,
+            center.Y * targetZoom - viewport.Height / 2);
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_scrollViewer is null)
+            {
+                return;
+            }
+
+            _scrollViewer.Offset = targetOffset;
+        }, DispatcherPriority.Render);
+    }
+
+    private void ApplyZoom(double newZoom, Point focusInScrollViewer)
+    {
+        ApplyZoom(newZoom, focusInScrollViewer, null);
+    }
+
+    private void ApplyZoom(double newZoom, Point focusInScrollViewer, Point? canvasFocus)
+    {
+        if (_currentVm is null || _scrollViewer is null || _canvas is null)
+        {
+            return;
+        }
+
+        double clamped = ClampZoom(newZoom);
+        double oldZoom = _currentVm.Zoom;
+        if (Math.Abs(oldZoom - clamped) < 0.0001 || oldZoom <= 0)
+        {
+            return;
+        }
+
+        Vector focus = new(focusInScrollViewer.X, focusInScrollViewer.Y);
+        Vector offset = _scrollViewer.Offset;
+        double scale = clamped / oldZoom;
+
+        _currentVm.Zoom = clamped;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_scrollViewer is null)
+            {
+                return;
+            }
+
+            if (canvasFocus.HasValue)
+            {
+                Point logical = canvasFocus.Value;
+                _scrollViewer.Offset = new Vector(
+                    logical.X * clamped - focus.X,
+                    logical.Y * clamped - focus.Y);
+            }
+            else
+            {
+                _scrollViewer.Offset = (offset + focus) * scale - focus;
+            }
+        }, DispatcherPriority.Render);
+    }
+
+    private bool TryGetCanvasFocus(Point focusInScrollViewer, out Point canvasFocus)
+    {
+        canvasFocus = default;
+        if (_scrollViewer is null || _canvas is null)
+        {
+            return false;
+        }
+
+        Point? focusOnCanvas = _scrollViewer.TranslatePoint(focusInScrollViewer, _canvas);
+        if (!focusOnCanvas.HasValue)
+        {
+            return false;
+        }
+
+        canvasFocus = GetLogicalPoint(focusOnCanvas.Value);
+        return true;
+    }
+
+    private Point GetLogicalPoint(Point point)
+    {
+        if (_currentVm is null || Math.Abs(_currentVm.Zoom) < 0.0001)
+        {
+            return point;
+        }
+
+        double inv = 1.0 / _currentVm.Zoom;
+        return new Point(point.X * inv, point.Y * inv);
+    }
+
+    private Control? GetSurfaceRoot()
+    {
+        return _canvas;
+    }
+
+    private Point GetViewportCenter()
+    {
+        if (_scrollViewer is null)
+        {
+            return default;
+        }
+
+        return new Point(_scrollViewer.Viewport.Width / 2, _scrollViewer.Viewport.Height / 2);
+    }
+
+    private static double ClampZoom(double zoom)
+    {
+        return Math.Clamp(zoom, MinZoom, MaxZoom);
     }
 
     private void OnRebuildRequested()
@@ -527,6 +847,8 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        _zoomSurface ??= this.FindControl<Control>("ZoomSurface");
+
         canvas.Children.Clear();
 
         // Walk up to find the DesignerDocumentViewModel that owns the SyncEngine & ControlFactory
@@ -564,7 +886,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_adornerLayer is not null)
         {
-            _adornerLayer.SetSurfaceRoot(canvas);
+            _adornerLayer.SetSurfaceRoot(GetSurfaceRoot());
             _adornerLayer.UpdateSelection(_currentVm?.Selection.SelectedItems ?? Array.Empty<IDesignItem>());
             ApplyAdornerVisibility();
             UpdateGuideLines();
@@ -715,12 +1037,18 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        Focus();
+
+        if (TryStartPan(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (!_currentVm.IsEditMode)
         {
             return;
         }
-
-        Focus();
 
         PointerPoint pointInfo = e.GetCurrentPoint(_canvas);
         if (!pointInfo.Properties.IsLeftButtonPressed)
@@ -730,17 +1058,17 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_adornerLayer is not null)
         {
-            ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(e.GetPosition(_adornerLayer));
+            ResizeHandle? handle = _adornerLayer.HitTestResizeHandles(GetLogicalPoint(e.GetPosition(_adornerLayer)));
             if (handle is not null && _currentVm.Selection.PrimarySelection is DesignItem primary)
             {
-                StartResize(primary, handle, e.GetPosition(_canvas));
+                StartResize(primary, handle, GetLogicalPoint(e.GetPosition(_canvas)));
                 e.Pointer.Capture(_canvas);
                 e.Handled = true;
                 return;
             }
         }
 
-        Point position = e.GetPosition(_rootControl);
+        Point position = GetLogicalPoint(e.GetPosition(_rootControl));
         Control? hit = ControlFactory.HitTest(_rootControl, position);
         if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
         {
@@ -757,7 +1085,7 @@ public sealed partial class DesignSurfaceView : UserControl
                 e.Handled = true;
                 return;
             }
-            StartDrag(item, e.GetPosition(_canvas));
+            StartDrag(item, GetLogicalPoint(e.GetPosition(_canvas)));
             e.Pointer.Capture(_canvas);
             e.Handled = true;
             return;
@@ -765,7 +1093,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         _currentVm.Selection.ClearSelection();
         UpdateSelectedNode(null);
-        StartMarquee(e.GetPosition(_canvas), e.KeyModifiers);
+        StartMarquee(GetLogicalPoint(e.GetPosition(_canvas)), e.KeyModifiers);
         e.Pointer.Capture(_canvas);
     }
 
@@ -799,6 +1127,12 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        if (_isPanning)
+        {
+            UpdatePan(e);
+            return;
+        }
+
         if (!_currentVm.IsEditMode)
         {
             return;
@@ -806,23 +1140,30 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (_dragState is not null)
         {
-            UpdateDragState(e.GetPosition(_canvas));
+            UpdateDragState(GetLogicalPoint(e.GetPosition(_canvas)));
             return;
         }
 
         if (_marqueeState is not null)
         {
-            UpdateMarquee(e.GetPosition(_canvas));
+            UpdateMarquee(GetLogicalPoint(e.GetPosition(_canvas)));
             return;
         }
 
-        UpdateHover(e.GetPosition(_rootControl));
+        UpdateHover(GetLogicalPoint(e.GetPosition(_rootControl)));
     }
 
     private void OnCanvasPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (_currentVm is null || _canvas is null)
         {
+            return;
+        }
+
+        if (_isPanning)
+        {
+            EndPan();
+            e.Pointer.Capture(null);
             return;
         }
 
@@ -844,6 +1185,12 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void OnCanvasPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
+        if (_isPanning)
+        {
+            EndPan();
+            return;
+        }
+
         if (_dragState is null)
         {
             if (_marqueeState is not null)
@@ -856,6 +1203,94 @@ public sealed partial class DesignSurfaceView : UserControl
 
         CommitDragState();
         _dragState = null;
+    }
+
+    private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (_currentVm is null || _scrollViewer is null)
+        {
+            return;
+        }
+
+        bool zoomModifier = e.KeyModifiers.HasFlag(KeyModifiers.Control)
+            || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (!zoomModifier)
+        {
+            return;
+        }
+
+        double factor = Math.Pow(1.2, e.Delta.Y);
+        double targetZoom = ClampZoom(_currentVm.Zoom * factor);
+        Point focus = e.GetPosition(_scrollViewer);
+        if (TryGetCanvasFocus(focus, out Point canvasFocus))
+        {
+            ApplyZoom(targetZoom, focus, canvasFocus);
+        }
+        else
+        {
+            ApplyZoom(targetZoom, focus);
+        }
+        e.Handled = true;
+    }
+
+    private bool TryStartPan(PointerPressedEventArgs e)
+    {
+        if (_scrollViewer is null)
+        {
+            return false;
+        }
+
+        PointerPoint pointInfo = e.GetCurrentPoint(_scrollViewer);
+        bool middle = pointInfo.Properties.IsMiddleButtonPressed;
+        bool spaceDrag = _isSpaceDown && pointInfo.Properties.IsLeftButtonPressed;
+        if (!middle && !spaceDrag)
+        {
+            return false;
+        }
+
+        _isPanning = true;
+        _panStart = e.GetPosition(_scrollViewer);
+        _panStartOffset = _scrollViewer.Offset;
+        e.Pointer.Capture(_canvas);
+        UpdatePanCursor();
+        return true;
+    }
+
+    private void UpdatePan(PointerEventArgs e)
+    {
+        if (_scrollViewer is null)
+        {
+            return;
+        }
+
+        Point current = e.GetPosition(_scrollViewer);
+        Vector delta = current - _panStart;
+        _scrollViewer.Offset = new Vector(
+            _panStartOffset.X - delta.X,
+            _panStartOffset.Y - delta.Y);
+    }
+
+    private void EndPan()
+    {
+        _isPanning = false;
+        UpdatePanCursor();
+    }
+
+    private void UpdatePanCursor()
+    {
+        if (_canvas is null)
+        {
+            return;
+        }
+
+        if (_isPanning || _isSpaceDown)
+        {
+            _canvas.Cursor = new Cursor(StandardCursorType.Hand);
+        }
+        else
+        {
+            _canvas.Cursor = null;
+        }
     }
 
     private void ApplySelection(DesignItem item, KeyModifiers modifiers)
@@ -919,9 +1354,10 @@ public sealed partial class DesignSurfaceView : UserControl
             _currentVm.Selection.ClearSelection();
         }
 
+        Control? surfaceRoot = GetSurfaceRoot();
         foreach (DesignItem item in _currentVm.ItemMap.Values)
         {
-            Rect bounds = item.GetBoundsRelativeTo(_canvas);
+            Rect bounds = item.GetBoundsRelativeTo(surfaceRoot);
             if (bounds.Intersects(box))
             {
                 _currentVm.Selection.Select(item, addToSelection: true);
@@ -1137,7 +1573,7 @@ public sealed partial class DesignSurfaceView : UserControl
             StartPoint = startPoint,
             LastPoint = startPoint,
             Mode = GetDragMode(item),
-            StartBounds = item.GetBoundsRelativeTo(_canvas),
+            StartBounds = item.GetBoundsRelativeTo(GetSurfaceRoot()),
             StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
             StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
         };
@@ -1172,7 +1608,7 @@ public sealed partial class DesignSurfaceView : UserControl
             LastPoint = startPoint,
             Mode = DragMode.Resize,
             ResizeDirection = handle.Direction,
-            StartBounds = item.GetBoundsRelativeTo(_canvas),
+            StartBounds = item.GetBoundsRelativeTo(GetSurfaceRoot()),
             StartCanvasLeft = GetAttachedDouble(item, "Canvas.Left"),
             StartCanvasTop = GetAttachedDouble(item, "Canvas.Top")
         };
@@ -1375,7 +1811,7 @@ public sealed partial class DesignSurfaceView : UserControl
         state.DropTarget = target;
         state.DropPosition = position;
 
-        Rect bounds = target.GetBoundsRelativeTo(_canvas);
+        Rect bounds = target.GetBoundsRelativeTo(GetSurfaceRoot());
         _adornerLayer?.UpdateDropTarget(bounds, position);
     }
 
@@ -1460,7 +1896,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private DropPosition ComputeDropPosition(DesignItem target, Point surfacePoint)
     {
-        Rect bounds = target.GetBoundsRelativeTo(_canvas);
+        Rect bounds = target.GetBoundsRelativeTo(GetSurfaceRoot());
         double inset = Math.Min(bounds.Width, bounds.Height) * 0.25;
 
         if (surfacePoint.Y <= bounds.Top + inset || surfacePoint.X <= bounds.Left + inset)
@@ -1613,7 +2049,7 @@ public sealed partial class DesignSurfaceView : UserControl
                 continue;
             }
 
-            Rect bounds = item.GetBoundsRelativeTo(_canvas);
+            Rect bounds = item.GetBoundsRelativeTo(GetSurfaceRoot());
             candidateX.Add(bounds.Left);
             candidateX.Add(bounds.Center.X);
             candidateX.Add(bounds.Right);
@@ -1827,7 +2263,7 @@ public sealed partial class DesignSurfaceView : UserControl
                 continue;
             }
 
-            Rect bounds = item.GetBoundsRelativeTo(_canvas);
+            Rect bounds = item.GetBoundsRelativeTo(GetSurfaceRoot());
 
             if (TryGetVerticalOverlap(selectionBounds, bounds, out double overlapY))
             {
