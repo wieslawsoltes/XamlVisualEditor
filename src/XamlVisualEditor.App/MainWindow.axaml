@@ -29,6 +29,21 @@
                 <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
                 <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />
                 <Separator />
+                <MenuItem Header="Save _Mode">
+                    <MenuItem Header="_Auto Save"
+                              ToggleType="Radio"
+                              IsChecked="{CompiledBinding IsAutoSaveSelected}"
+                              Command="{CompiledBinding SetAutoSaveCommand}" />
+                    <MenuItem Header="Save _Manually"
+                              ToggleType="Radio"
+                              IsChecked="{CompiledBinding IsManualSaveSelected}"
+                              Command="{CompiledBinding SetManualSaveCommand}" />
+                    <MenuItem Header="_No Saving"
+                              ToggleType="Radio"
+                              IsChecked="{CompiledBinding IsNoSaveSelected}"
+                              Command="{CompiledBinding SetNoSaveCommand}" />
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="E_xit" Command="{CompiledBinding ExitCommand}" InputGesture="Alt+F4" />
             </MenuItem>
             <MenuItem Header="_Edit">
@@ -119,8 +134,8 @@
                     <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="Ln {0}, Col {1}">
-                                <CompiledBinding Path="ActiveDocument.CodeEditor.CurrentLine" FallbackValue="1" />
-                                <CompiledBinding Path="ActiveDocument.CodeEditor.CurrentColumn" FallbackValue="1" />
+                                <CompiledBinding Path="ActiveDocument.CurrentLine" FallbackValue="1" />
+                                <CompiledBinding Path="ActiveDocument.CurrentColumn" FallbackValue="1" />
                             </MultiBinding>
                         </TextBlock.Text>
                     </TextBlock>

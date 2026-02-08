@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -32,11 +33,25 @@ using XamlVisualEditor.Shell;
 namespace XamlVisualEditor.Shell.ViewModels;
 
 /// <summary>
+/// Common interface for editor documents.
+/// </summary>
+public interface IEditorDocumentViewModel : IDisposable
+{
+    string FilePath { get; }
+    string FileName { get; }
+    bool IsModified { get; }
+    int CurrentLine { get; }
+    int CurrentColumn { get; }
+    ReactiveCommand<Unit, Unit> SaveCommand { get; }
+}
+
+/// <summary>
 /// ViewModel for a XAML document tab (designer + code split view).
 /// </summary>
-public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
+public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
 {
     private readonly CompositeDisposable _disposables = new();
+    private SyncSource _selectionSource = SyncSource.DesignSurface;
 
     /// <summary>
     /// Gets the file path of the XAML document.
@@ -47,6 +62,16 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
     /// Gets the file name for display.
     /// </summary>
     public string FileName => System.IO.Path.GetFileName(FilePath);
+
+    /// <summary>
+    /// Gets the current caret line (1-based).
+    /// </summary>
+    public int CurrentLine => CodeEditor.CurrentLine;
+
+    /// <summary>
+    /// Gets the current caret column (1-based).
+    /// </summary>
+    public int CurrentColumn => CodeEditor.CurrentColumn;
 
     /// <summary>
     /// Gets or sets whether the document is modified.
@@ -81,6 +106,20 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
     /// </summary>
     [Reactive]
     public Guid? SelectedNodeId { get; set; }
+
+    /// <summary>
+    /// Gets the source of the most recent selection change.
+    /// </summary>
+    public SyncSource SelectionSource => _selectionSource;
+
+    /// <summary>
+    /// Updates selection with an explicit source to avoid feedback loops.
+    /// </summary>
+    public void SetSelectedNode(Guid? nodeId, SyncSource source)
+    {
+        _selectionSource = source;
+        SelectedNodeId = nodeId;
+    }
 
     /// <summary>
     /// Command to save the document.
@@ -147,7 +186,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
         // Sync caret→node from code editor to selected node
         CodeEditor.CaretNodeChanged += nodeId =>
         {
-            SelectedNodeId = nodeId;
+            if (nodeId is null)
+            {
+                return;
+            }
+
+            SetSelectedNode(nodeId, SyncSource.CodeEditor);
         };
 
         // When selected node changes, update property editor
@@ -181,9 +225,13 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
         IDisposable selectedNodeSyncSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
             .Subscribe(id =>
             {
+                SyncSource source = SelectionSource;
                 if (id is null)
                 {
-                    DesignSurface.Selection.ClearSelection();
+                    if (source != SyncSource.DesignSurface)
+                    {
+                        DesignSurface.ClearSelectionFromSync();
+                    }
                     return;
                 }
 
@@ -193,10 +241,16 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
                     int? offset = CodeEditor.GetOffsetForNode(objNode);
                     if (offset is not null)
                     {
-                        CodeEditor.SetCaretOffset(offset.Value);
+                        if (source != SyncSource.CodeEditor)
+                        {
+                            CodeEditor.SetCaretOffsetFromSync(offset.Value);
+                        }
                     }
 
-                    DesignSurface.SelectByAstNodeId(id.Value);
+                    if (source != SyncSource.DesignSurface)
+                    {
+                        DesignSurface.SelectByAstNodeIdFromSync(id.Value);
+                    }
                 }
             });
         _disposables.Add(selectedNodeSyncSubscription);
@@ -254,6 +308,122 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IDisposable
         PropertyEditor.Dispose();
         CodeEditor.Dispose();
         SyncEngine.Dispose();
+    }
+}
+
+/// <summary>
+/// ViewModel for a non-XAML text document.
+/// </summary>
+public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
+{
+    private readonly CompositeDisposable _disposables = new();
+    private bool _suppressTextChanged;
+
+    public string FilePath { get; }
+
+    public string FileName => System.IO.Path.GetFileName(FilePath);
+
+    public AvaloniaEdit.Document.TextDocument Document { get; } = new();
+
+    [Reactive]
+    public int CaretOffset { get; set; }
+
+    [Reactive]
+    public int CurrentLine { get; set; } = 1;
+
+    [Reactive]
+    public int CurrentColumn { get; set; } = 1;
+
+    [Reactive]
+    public bool IsModified { get; set; }
+
+    [Reactive]
+    public bool WordWrap { get; set; }
+
+    [Reactive]
+    public bool ShowLineNumbers { get; set; } = true;
+
+    [Reactive]
+    public double FontSize { get; set; } = 14.0;
+
+    public string? LanguageId { get; }
+
+    public ReactiveCommand<Unit, Unit> SaveCommand { get; }
+
+    public TextDocumentViewModel(string filePath)
+    {
+        FilePath = filePath;
+        LanguageId = GetLanguageIdForFile(filePath);
+
+        IDisposable textChangedSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => Document.TextChanged += h,
+                h => Document.TextChanged -= h)
+            .Where(_ => !_suppressTextChanged)
+            .Subscribe(_ => IsModified = true);
+        _disposables.Add(textChangedSubscription);
+
+        SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
+    }
+
+    public async System.Threading.Tasks.Task LoadAsync()
+    {
+        if (!System.IO.File.Exists(FilePath))
+        {
+            return;
+        }
+
+        string text = await System.IO.File.ReadAllTextAsync(FilePath);
+        _suppressTextChanged = true;
+        try
+        {
+            Document.Text = text;
+            IsModified = false;
+        }
+        finally
+        {
+            _suppressTextChanged = false;
+        }
+    }
+
+    private async System.Threading.Tasks.Task SaveAsync()
+    {
+        await System.IO.File.WriteAllTextAsync(FilePath, Document.Text);
+        IsModified = false;
+    }
+
+    public void Dispose()
+    {
+        _disposables.Dispose();
+    }
+
+    private static string? GetLanguageIdForFile(string filePath)
+    {
+        string ext = System.IO.Path.GetExtension(filePath).ToLowerInvariant();
+        return ext switch
+        {
+            ".axaml" => "xml",
+            ".xaml" => "xml",
+            ".xml" => "xml",
+            ".csproj" => "xml",
+            ".props" => "xml",
+            ".targets" => "xml",
+            ".cs" => "csharp",
+            ".fs" => "fsharp",
+            ".vb" => "vb",
+            ".json" => "json",
+            ".yml" => "yaml",
+            ".yaml" => "yaml",
+            ".md" => "markdown",
+            ".js" => "javascript",
+            ".ts" => "typescript",
+            ".css" => "css",
+            ".scss" => "scss",
+            ".less" => "less",
+            ".html" => "html",
+            ".htm" => "html",
+            ".sln" => "ini",
+            _ => null
+        };
     }
 }
 
@@ -442,6 +612,14 @@ public sealed class OutputViewModel : ReactiveObject
     }
 
     /// <summary>
+    /// Adds a plain output message.
+    /// </summary>
+    public void AddMessage(string level, string text)
+    {
+        Messages.Add(new OutputMessage(level, text, 0, 0, false));
+    }
+
+    /// <summary>
     /// Adds a diagnostic as an output message.
     /// </summary>
     public void AddDiagnostic(XamlDiagnostic diagnostic)
@@ -455,7 +633,8 @@ public sealed class OutputViewModel : ReactiveObject
             },
             diagnostic.Message,
             diagnostic.Line,
-            diagnostic.Column));
+            diagnostic.Column,
+            true));
 
         if (diagnostic.Severity == DiagnosticSeverity.Error)
         {
@@ -464,6 +643,28 @@ public sealed class OutputViewModel : ReactiveObject
         else if (diagnostic.Severity == DiagnosticSeverity.Warning)
         {
             WarningCount++;
+        }
+    }
+
+    /// <summary>
+    /// Replaces existing diagnostics with the provided list.
+    /// </summary>
+    public void ReplaceDiagnostics(IReadOnlyList<XamlDiagnostic> diagnostics)
+    {
+        for (int i = Messages.Count - 1; i >= 0; i--)
+        {
+            if (Messages[i].IsDiagnostic)
+            {
+                Messages.RemoveAt(i);
+            }
+        }
+
+        ErrorCount = 0;
+        WarningCount = 0;
+
+        foreach (XamlDiagnostic diagnostic in diagnostics)
+        {
+            AddDiagnostic(diagnostic);
         }
     }
 }
@@ -475,7 +676,23 @@ public sealed record OutputMessage(
     string Level,
     string Text,
     int Line,
-    int Column);
+    int Column,
+    bool IsDiagnostic = false);
+
+/// <summary>
+/// Specifies how XAML changes are saved to disk.
+/// </summary>
+public enum SaveBehavior
+{
+    /// <summary>Save automatically after changes.</summary>
+    AutoSave,
+
+    /// <summary>Save only when invoked manually.</summary>
+    SaveManually,
+
+    /// <summary>Do not save changes to disk.</summary>
+    NoSaving
+}
 
 /// <summary>
 /// Main window ViewModel orchestrating the docking layout and document management.
@@ -483,27 +700,35 @@ public sealed record OutputMessage(
 public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 {
     private readonly CompositeDisposable _disposables = new();
+    private bool _suppressTreeSelectionSync;
     private string? _clipboard;
     private readonly HashSet<Guid> _visualExpandedIds = new();
     private readonly HashSet<Guid> _logicalExpandedIds = new();
     private readonly IWorkspaceService? _workspaceService;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _autoSaveSubscriptions = new();
     private WorkspaceAssemblyResolver? _assemblyResolver;
     private WorkspaceModel? _workspace;
     private string? _workspacePath;
-    private readonly Dictionary<string, DesignerDocument> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IDockable> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
     private bool _isClosingFromDock;
 
     /// <summary>
     /// Gets the open documents.
     /// </summary>
-    public ObservableCollection<DesignerDocumentViewModel> Documents { get; } = new();
+    public ObservableCollection<IEditorDocumentViewModel> Documents { get; } = new();
 
     /// <summary>
     /// Gets or sets the active document.
     /// </summary>
     [Reactive]
-    public DesignerDocumentViewModel? ActiveDocument { get; set; }
+    public IEditorDocumentViewModel? ActiveDocument { get; set; }
+
+    [Reactive]
+    public DesignerDocumentViewModel? ActiveDesignerDocument { get; private set; }
+
+    [Reactive]
+    public TextDocumentViewModel? ActiveTextDocument { get; private set; }
 
     /// <summary>
     /// Gets the toolbox ViewModel.
@@ -519,6 +744,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// Gets the output ViewModel.
     /// </summary>
     public OutputViewModel Output { get; } = new();
+
+    /// <summary>
+    /// Gets or sets the save behavior for XAML changes.
+    /// </summary>
+    [Reactive]
+    public SaveBehavior SaveBehavior { get; set; } = SaveBehavior.SaveManually;
+
+    public bool IsAutoSaveSelected => SaveBehavior == SaveBehavior.AutoSave;
+    public bool IsManualSaveSelected => SaveBehavior == SaveBehavior.SaveManually;
+    public bool IsNoSaveSelected => SaveBehavior == SaveBehavior.NoSaving;
 
     /// <summary>
     /// Gets the visual tree grid ViewModel for the active document.
@@ -601,6 +836,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> SaveAllCommand { get; }
     public ReactiveCommand<Unit, Unit> ExitCommand { get; }
 
+    // Save behavior commands
+    public ReactiveCommand<Unit, Unit> SetAutoSaveCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetManualSaveCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetNoSaveCommand { get; }
+
     // Edit Commands
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
     public ReactiveCommand<Unit, Unit> RedoCommand { get; }
@@ -631,7 +871,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Command to close a specific document (used by tab close button).
     /// </summary>
-    public ReactiveCommand<DesignerDocumentViewModel, Unit> CloseDocumentCommand { get; }
+    public ReactiveCommand<IEditorDocumentViewModel, Unit> CloseDocumentCommand { get; }
 
     public MainWindowViewModel(IWorkspaceService? workspaceService = null, ITypeMetadataService? metadataService = null)
     {
@@ -646,7 +886,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         WireDockEvents();
 
         _dockDocuments.Clear();
-        foreach (DesignerDocumentViewModel doc in Documents)
+        foreach (IEditorDocumentViewModel doc in Documents)
         {
             AddDocumentToDock(doc);
         }
@@ -657,6 +897,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         OpenPathCommand = ReactiveCommand.CreateFromTask<string>(OpenFileAsync);
 
         IObservable<bool> hasActiveDoc = this.WhenAnyValue(x => x.ActiveDocument).Select(d => d is not null);
+        IObservable<bool> hasDesignerDoc = this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(d => d is not null);
         SaveDocumentCommand = ReactiveCommand.CreateFromTask(SaveActiveDocumentAsync, hasActiveDoc);
         SaveAllCommand = ReactiveCommand.CreateFromTask(SaveAllAsync);
         ExitCommand = ReactiveCommand.Create(() =>
@@ -668,40 +909,56 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             }
         });
 
+        SetAutoSaveCommand = ReactiveCommand.Create(() =>
+        {
+            SaveBehavior = SaveBehavior.AutoSave;
+            StatusText = "Save mode: Auto Save";
+        });
+        SetManualSaveCommand = ReactiveCommand.Create(() =>
+        {
+            SaveBehavior = SaveBehavior.SaveManually;
+            StatusText = "Save mode: Save Manually";
+        });
+        SetNoSaveCommand = ReactiveCommand.Create(() =>
+        {
+            SaveBehavior = SaveBehavior.NoSaving;
+            StatusText = "Save mode: No Saving";
+        });
+
         // Edit commands
         UndoCommand = ReactiveCommand.Create(() =>
         {
-            ActiveDocument?.SyncEngine.Undo();
-        }, hasActiveDoc);
+            ActiveDesignerDocument?.SyncEngine.Undo();
+        }, hasDesignerDoc);
 
         RedoCommand = ReactiveCommand.Create(() =>
         {
-            ActiveDocument?.SyncEngine.Redo();
-        }, hasActiveDoc);
+            ActiveDesignerDocument?.SyncEngine.Redo();
+        }, hasDesignerDoc);
 
         CutCommand = ReactiveCommand.Create(() =>
         {
-            if (ActiveDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
             {
-                MutableAstObjectNode? node = ActiveDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
+                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
                 if (node?.Parent is MutableAstObjectNode parent)
                 {
                     XamlSerializationService ser = new();
                     MutableAstDocument tempDoc = new() { Root = node };
                     _clipboard = ser.Serialize(tempDoc);
                     parent.Children.Remove(node);
-                    ActiveDocument.SelectedNodeId = null;
-                    ActiveDocument.SyncEngine.NotifyAstChanged(
-                        ActiveDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                    ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
+                    ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
+                        ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
                 }
             }
-        }, hasActiveDoc);
+        }, hasDesignerDoc);
 
         CopyCommand = ReactiveCommand.Create(() =>
         {
-            if (ActiveDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
             {
-                MutableAstObjectNode? node = ActiveDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
+                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
                 if (node is not null)
                 {
                     XamlSerializationService ser = new();
@@ -709,11 +966,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
                     _clipboard = ser.Serialize(tempDoc);
                 }
             }
-        }, hasActiveDoc);
+        }, hasDesignerDoc);
 
         PasteCommand = ReactiveCommand.Create(() =>
         {
-            if (!string.IsNullOrEmpty(_clipboard) && ActiveDocument is not null)
+            if (!string.IsNullOrEmpty(_clipboard) && ActiveDesignerDocument is not null)
             {
                 // Parse the clipboard XAML and add to selected parent or root
                 XamlParsingService parser = new();
@@ -721,45 +978,45 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
                 if (result.Document is MutableAstDocument pastedDoc && pastedDoc.Root is not null)
                 {
                     MutableAstObjectNode? parent = null;
-                    if (ActiveDocument.SelectedNodeId is { } selId)
+                    if (ActiveDesignerDocument.SelectedNodeId is { } selId)
                     {
-                        parent = ActiveDocument.NodeMap.FindById(selId) as MutableAstObjectNode;
+                        parent = ActiveDesignerDocument.NodeMap.FindById(selId) as MutableAstObjectNode;
                     }
 
-                    parent ??= ActiveDocument.SyncEngine.CurrentDocument?.Root;
+                    parent ??= ActiveDesignerDocument.SyncEngine.CurrentDocument?.Root;
 
                     if (parent is not null)
                     {
                         parent.Children.Add(pastedDoc.Root);
-                        ActiveDocument.SyncEngine.NotifyAstChanged(
-                            ActiveDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                        ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
+                            ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
                     }
                 }
             }
-        }, hasActiveDoc);
+        }, hasDesignerDoc);
 
         DeleteCommand = ReactiveCommand.Create(() =>
         {
-            if (ActiveDocument?.SelectedNodeId is { } nodeId)
+            if (ActiveDesignerDocument?.SelectedNodeId is { } nodeId)
             {
-                MutableAstObjectNode? node = ActiveDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
+                MutableAstObjectNode? node = ActiveDesignerDocument.NodeMap.FindById(nodeId) as MutableAstObjectNode;
                 if (node?.Parent is MutableAstObjectNode parent)
                 {
                     parent.Children.Remove(node);
-                    ActiveDocument.SelectedNodeId = null;
-                    ActiveDocument.SyncEngine.NotifyAstChanged(
-                        ActiveDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                    ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
+                    ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
+                        ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
                 }
             }
-        }, hasActiveDoc);
+        }, hasDesignerDoc);
 
         SelectAllCommand = ReactiveCommand.Create(() =>
         {
-            if (ActiveDocument is not null)
+            if (ActiveDesignerDocument is not null)
             {
-                ActiveDocument.CodeEditor.SelectAll();
+                ActiveDesignerDocument.CodeEditor.SelectAll();
             }
-        }, hasActiveDoc);
+        }, hasDesignerDoc);
 
         // View commands
         ToggleToolboxCommand = ReactiveCommand.Create(() =>
@@ -816,13 +1073,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             hasWorkspace);
 
         // Close document command (used by tab close buttons)
-        CloseDocumentCommand = ReactiveCommand.Create<DesignerDocumentViewModel>(doc =>
+        CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
         {
             CloseDocument(doc);
         });
 
         // Update trees when active document changes
-        IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Subscribe(doc => UpdateTrees(doc));
         _disposables.Add(activeDocumentTreesSubscription);
 
@@ -832,7 +1089,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _disposables.Add(activeDocumentDockSubscription);
 
         // Refresh trees on sync events from active document (Switch unsubscribes from previous)
-        IDisposable activeDocumentSyncSubscription = this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable activeDocumentSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Where(d => d is not null)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
@@ -840,8 +1097,30 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
 
+        IDisposable activeDocumentDiagnosticsSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+            .Select(doc => doc is null
+                ? Observable.Return<IReadOnlyList<XamlDiagnostic>>(Array.Empty<XamlDiagnostic>())
+                : doc.SyncEngine.SyncEvents.Select(e => e.Diagnostics ?? Array.Empty<XamlDiagnostic>()))
+            .Switch()
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(diags =>
+            {
+                Output.ReplaceDiagnostics(diags);
+                LogDiagnosticsSummary(diags);
+            });
+        _disposables.Add(activeDocumentDiagnosticsSubscription);
+
+        IDisposable saveBehaviorSubscription = this.WhenAnyValue(x => x.SaveBehavior)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(IsAutoSaveSelected));
+                this.RaisePropertyChanged(nameof(IsManualSaveSelected));
+                this.RaisePropertyChanged(nameof(IsNoSaveSelected));
+            });
+        _disposables.Add(saveBehaviorSubscription);
+
         // Sync tree selection when active document selection changes
-        IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDocument)
+        IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null
                 ? Observable.Return<Guid?>(null)
                 : doc.WhenAnyValue(d => d.SelectedNodeId))
@@ -852,17 +1131,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         // Sync grid selections back to the active document
         IDisposable visualTreeSelectionSubscription = this.WhenAnyValue(x => x.VisualTree.SelectedNode)
-            .CombineLatest(this.WhenAnyValue(x => x.ActiveDocument), (node, doc) => (node, doc))
+            .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(t => t.doc!.SelectedNodeId = t.node?.AstNodeId);
+            .Where(_ => !_suppressTreeSelectionSync)
+            .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(visualTreeSelectionSubscription);
 
         IDisposable logicalTreeSelectionSubscription = this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
-            .CombineLatest(this.WhenAnyValue(x => x.ActiveDocument), (node, doc) => (node, doc))
+            .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(t => t.doc!.SelectedNodeId = t.node?.AstNodeId);
+            .Where(_ => !_suppressTreeSelectionSync)
+            .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
 
         // Update title when active document changes
@@ -878,6 +1159,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _disposables.Add(collaborationStatusSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFileAsync(path); };
+
+        IDisposable activeDocumentTypeSubscription = this.WhenAnyValue(x => x.ActiveDocument)
+            .Subscribe(doc =>
+            {
+                ActiveDesignerDocument = doc as DesignerDocumentViewModel;
+                ActiveTextDocument = doc as TextDocumentViewModel;
+            });
+        _disposables.Add(activeDocumentTypeSubscription);
     }
 
     private async System.Threading.Tasks.Task NewDocumentAsync()
@@ -922,6 +1211,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         Documents.Add(doc);
         ActiveDocument = doc;
         AddDocumentToDock(doc);
+        AttachAutoSave(doc);
 
         try
         {
@@ -955,6 +1245,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     private async System.Threading.Tasks.Task SaveActiveDocumentAsync()
     {
+        if (SaveBehavior == SaveBehavior.NoSaving)
+        {
+            StatusText = "Saving is disabled";
+            return;
+        }
+
         if (ActiveDocument is not null)
         {
             await ActiveDocument.SaveCommand.Execute();
@@ -964,7 +1260,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     private async System.Threading.Tasks.Task SaveAllAsync()
     {
-        foreach (DesignerDocumentViewModel doc in Documents)
+        if (SaveBehavior == SaveBehavior.NoSaving)
+        {
+            StatusText = "Saving is disabled";
+            return;
+        }
+
+        foreach (IEditorDocumentViewModel doc in Documents)
         {
             if (doc.IsModified)
             {
@@ -972,6 +1274,84 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             }
         }
         StatusText = "All documents saved";
+    }
+
+    private void AttachAutoSave(DesignerDocumentViewModel doc)
+    {
+        if (_autoSaveSubscriptions.ContainsKey(doc))
+        {
+            return;
+        }
+
+        IDisposable subscription = doc.SyncEngine.SyncEvents
+            .Throttle(TimeSpan.FromMilliseconds(500))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(evt =>
+            {
+                _ = AutoSaveAsync(doc);
+            });
+
+        _autoSaveSubscriptions[doc] = subscription;
+    }
+
+    private void AttachAutoSave(TextDocumentViewModel doc)
+    {
+        if (_autoSaveSubscriptions.ContainsKey(doc))
+        {
+            return;
+        }
+
+        IDisposable subscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => doc.Document.TextChanged += h,
+                h => doc.Document.TextChanged -= h)
+            .Throttle(TimeSpan.FromMilliseconds(500))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(evt =>
+            {
+                _ = AutoSaveAsync(doc);
+            });
+
+        _autoSaveSubscriptions[doc] = subscription;
+    }
+
+    private void DetachAutoSave(IEditorDocumentViewModel doc)
+    {
+        if (_autoSaveSubscriptions.Remove(doc, out IDisposable? subscription))
+        {
+            subscription.Dispose();
+        }
+    }
+
+    private async System.Threading.Tasks.Task AutoSaveAsync(DesignerDocumentViewModel doc)
+    {
+        if (SaveBehavior != SaveBehavior.AutoSave)
+        {
+            return;
+        }
+
+        if (!doc.IsModified)
+        {
+            return;
+        }
+
+        await doc.SaveCommand.Execute();
+        StatusText = $"Auto-saved {doc.FileName}";
+    }
+
+    private async System.Threading.Tasks.Task AutoSaveAsync(TextDocumentViewModel doc)
+    {
+        if (SaveBehavior != SaveBehavior.AutoSave)
+        {
+            return;
+        }
+
+        if (!doc.IsModified)
+        {
+            return;
+        }
+
+        await doc.SaveCommand.Execute();
+        StatusText = $"Auto-saved {doc.FileName}";
     }
 
     private void ResetLayout()
@@ -1043,63 +1423,77 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     private void ApplySelectionToTrees(Guid? nodeId)
     {
-        if (nodeId is null)
+        _suppressTreeSelectionSync = true;
+        try
         {
-            VisualTree.SelectNode(null);
-            LogicalTree.SelectNode(null);
-            return;
-        }
+            if (nodeId is null)
+            {
+                VisualTree.SelectNode(null);
+                LogicalTree.SelectNode(null);
+                return;
+            }
 
-        VisualTreeNodeViewModel? visualNode = VisualTree.Root?.FindByNodeId(nodeId.Value);
-        if (visualNode is not null)
-        {
-            visualNode.ExpandPathToNode(nodeId.Value);
-        }
-        VisualTree.SelectNode(visualNode);
+            VisualTreeNodeViewModel? visualNode = VisualTree.Root?.FindByNodeId(nodeId.Value);
+            if (visualNode is not null)
+            {
+                visualNode.ExpandPathToNode(nodeId.Value);
+            }
+            VisualTree.SelectNode(visualNode);
 
-        LogicalTreeNodeViewModel? logicalNode = LogicalTree.Root?.FindByNodeId(nodeId.Value);
-        if (logicalNode is not null)
-        {
-            logicalNode.ExpandPathToNode(nodeId.Value);
+            LogicalTreeNodeViewModel? logicalNode = LogicalTree.Root?.FindByNodeId(nodeId.Value);
+            if (logicalNode is not null)
+            {
+                logicalNode.ExpandPathToNode(nodeId.Value);
+            }
+            LogicalTree.SelectNode(logicalNode);
         }
-        LogicalTree.SelectNode(logicalNode);
+        finally
+        {
+            _suppressTreeSelectionSync = false;
+        }
     }
 
-    private void AddDocumentToDock(DesignerDocumentViewModel document)
+    private void AddDocumentToDock(IEditorDocumentViewModel document)
     {
         if (DockLayout is null)
         {
             return;
         }
 
-        DesignerDocument? dockDoc = DockFactory.AddDocument(DockLayout, document);
+        IDockable? dockDoc = document switch
+        {
+            DesignerDocumentViewModel designer => DockFactory.AddDocument(DockLayout, designer),
+            TextDocumentViewModel text => DockFactory.AddTextDocument(DockLayout, text),
+            _ => null
+        };
+
         if (dockDoc is not null)
         {
             _dockDocuments[document.FilePath] = dockDoc;
         }
     }
 
-    private void SetActiveDockDocument(DesignerDocumentViewModel document)
+    private void SetActiveDockDocument(IEditorDocumentViewModel document)
     {
         if (DockLayout is null)
         {
             return;
         }
 
-        if (_dockDocuments.TryGetValue(document.FilePath, out DesignerDocument? dockDoc))
+        if (_dockDocuments.TryGetValue(document.FilePath, out IDockable? dockDoc))
         {
             DockFactory.SetActiveDockable(dockDoc);
         }
     }
 
-    private void CloseDockDocument(DesignerDocumentViewModel document)
+    private void CloseDockDocument(IEditorDocumentViewModel document)
     {
         if (DockLayout is null)
         {
             return;
         }
 
-        if (_dockDocuments.TryGetValue(document.FilePath, out DesignerDocument? dockDoc))
+        if (_dockDocuments.TryGetValue(document.FilePath, out IDockable? dockDoc))
         {
             DockFactory.CloseDockable(dockDoc);
             _dockDocuments.Remove(document.FilePath);
@@ -1114,20 +1508,39 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     private void OnActiveDockableChanged(object? sender, ActiveDockableChangedEventArgs e)
     {
-        if (e.Dockable is DesignerDocument doc)
+        switch (e.Dockable)
         {
-            ActiveDocument = doc.DocumentViewModel;
+            case DesignerDocument designer:
+                ActiveDocument = designer.DocumentViewModel;
+                break;
+            case TextDocument text:
+                ActiveDocument = text.DocumentViewModel;
+                break;
         }
     }
 
     private void OnDockableClosed(object? sender, DockableClosedEventArgs e)
     {
-        if (e.Dockable is DesignerDocument doc)
+        if (e.Dockable is DesignerDocument designer)
         {
             _isClosingFromDock = true;
             try
             {
-                CloseDocument(doc.DocumentViewModel);
+                CloseDocument(designer.DocumentViewModel);
+            }
+            finally
+            {
+                _isClosingFromDock = false;
+            }
+            return;
+        }
+
+        if (e.Dockable is TextDocument text)
+        {
+            _isClosingFromDock = true;
+            try
+            {
+                CloseDocument(text.DocumentViewModel);
             }
             finally
             {
@@ -1163,7 +1576,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Closes a document.
     /// </summary>
-    public void CloseDocument(DesignerDocumentViewModel doc)
+    public void CloseDocument(IEditorDocumentViewModel doc)
     {
         if (!_isClosingFromDock)
         {
@@ -1171,10 +1584,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         Documents.Remove(doc);
-        if (ActiveDocument == doc)
+        if (ReferenceEquals(ActiveDocument, doc))
         {
             ActiveDocument = Documents.FirstOrDefault();
         }
+        DetachAutoSave(doc);
         doc.Dispose();
         StatusText = $"Closed {doc.FileName}";
     }
@@ -1200,7 +1614,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         // Check if already open
-        DesignerDocumentViewModel? existing = Documents.FirstOrDefault(d => d.FilePath == filePath);
+        IEditorDocumentViewModel? existing = Documents.FirstOrDefault(d => d.FilePath == filePath);
         if (existing is not null)
         {
             ActiveDocument = existing;
@@ -1208,12 +1622,26 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        DesignerDocumentViewModel doc = new(filePath, _metadataService);
-        Documents.Add(doc);
-        ActiveDocument = doc;
-        AddDocumentToDock(doc);
-        await doc.LoadAsync();
-        UpdateTrees(doc);
+        if (IsXamlFile(filePath))
+        {
+            DesignerDocumentViewModel doc = new(filePath, _metadataService);
+            Documents.Add(doc);
+            ActiveDocument = doc;
+            AddDocumentToDock(doc);
+            AttachAutoSave(doc);
+            await doc.LoadAsync();
+            UpdateTrees(doc);
+        }
+        else
+        {
+            TextDocumentViewModel doc = new(filePath);
+            Documents.Add(doc);
+            ActiveDocument = doc;
+            AddDocumentToDock(doc);
+            AttachAutoSave(doc);
+            await doc.LoadAsync();
+            UpdateTrees(null);
+        }
 
         // Add to recent files
         if (!RecentFiles.Contains(filePath))
@@ -1225,7 +1653,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             }
         }
 
-        StatusText = $"Opened {doc.FileName}";
+        StatusText = $"Opened {System.IO.Path.GetFileName(filePath)}";
     }
 
     private async System.Threading.Tasks.Task LoadWorkspaceAsync(string workspacePath)
@@ -1237,7 +1665,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         string extension = System.IO.Path.GetExtension(workspacePath);
-        StatusText = $"Loading workspace {System.IO.Path.GetFileName(workspacePath)}";
+        string workspaceName = System.IO.Path.GetFileName(workspacePath);
+        StatusText = $"Loading workspace {workspaceName}";
+        LogOutput("Info", $"Loading workspace: {workspacePath}");
 
         WorkspaceModel workspace;
         try
@@ -1251,6 +1681,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             System.Diagnostics.Trace.TraceWarning($"Workspace load failed: {ex.Message}");
             Console.WriteLine($"Workspace load failed: {ex.Message}");
+            LogOutput("Error", $"Workspace load failed: {ex.Message}");
             LogWorkspaceEnvironment(workspacePath);
             StatusText = $"Workspace load failed: {ex.Message}";
             HasWorkspace = false;
@@ -1289,6 +1720,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         StatusText = $"Loaded workspace {name}";
+        LogOutput("Info", $"Loaded workspace: {name}");
     }
 
     private async System.Threading.Tasks.Task TryLoadWorkspaceForXamlAsync(string xamlFilePath)
@@ -1326,6 +1758,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         return false;
+    }
+
+    private static bool IsXamlFile(string filePath)
+    {
+        return filePath.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase)
+            || filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FindWorkspacePathForFile(string filePath)
@@ -1380,6 +1818,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
+        LogOutput("Info", $"dotnet {command} {workspacePath}");
+
         System.Diagnostics.ProcessStartInfo startInfo = new()
         {
             FileName = "dotnet",
@@ -1400,6 +1840,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             System.Diagnostics.Trace.TraceWarning($"Failed to run dotnet {command}: {ex.Message}");
             StatusText = $"dotnet {command} failed";
+            LogOutput("Error", $"dotnet {command} failed: {ex.Message}");
             return;
         }
 
@@ -1411,11 +1852,39 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             System.Diagnostics.Trace.TraceWarning($"dotnet {command} failed: {stdErr}");
             StatusText = $"dotnet {command} failed";
+            if (!string.IsNullOrWhiteSpace(stdErr))
+            {
+                LogOutput("Error", stdErr.Trim());
+            }
         }
         else if (!string.IsNullOrWhiteSpace(stdOut))
         {
             System.Diagnostics.Trace.TraceInformation(stdOut);
+            LogOutput("Info", stdOut.Trim());
         }
+    }
+
+    private void LogOutput(string level, string message)
+    {
+        Output.AddMessage(level, message);
+        Console.WriteLine(message);
+    }
+
+    private void LogDiagnosticsSummary(IReadOnlyList<XamlDiagnostic> diagnostics)
+    {
+        if (diagnostics.Count == 0)
+        {
+            return;
+        }
+
+        int errorCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
+        int warningCount = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
+        if (errorCount == 0 && warningCount == 0)
+        {
+            return;
+        }
+
+        LogOutput("Info", $"XAML diagnostics: {errorCount} error(s), {warningCount} warning(s)");
     }
 
     private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(string command)
@@ -1450,9 +1919,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     private void RefreshOpenDocumentsAfterMetadataLoad()
     {
-        foreach (DesignerDocumentViewModel doc in Documents)
+        foreach (IEditorDocumentViewModel doc in Documents)
         {
-            doc.DesignSurface.RequestRebuild();
+            if (doc is DesignerDocumentViewModel designer)
+            {
+                designer.DesignSurface.RequestRebuild();
+            }
         }
     }
 
@@ -1610,6 +2082,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         Collaboration.Dispose();
         _assemblyResolver?.Dispose();
 
+        foreach (IDisposable subscription in _autoSaveSubscriptions.Values)
+        {
+            subscription.Dispose();
+        }
+        _autoSaveSubscriptions.Clear();
+
         DockFactory.ActiveDockableChanged -= OnActiveDockableChanged;
         DockFactory.DockableClosed -= OnDockableClosed;
 
@@ -1618,7 +2096,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             XamlEditorDockFactory.SaveLayout(DockLayout);
         }
 
-        foreach (DesignerDocumentViewModel doc in Documents)
+        foreach (IEditorDocumentViewModel doc in Documents)
         {
             doc.Dispose();
         }
@@ -1672,7 +2150,7 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
         Kind = kind;
         FullPath = fullPath;
 
-        if (kind == SolutionExplorerNodeKind.XamlFile && fullPath is not null)
+        if ((kind == SolutionExplorerNodeKind.XamlFile || kind == SolutionExplorerNodeKind.File) && fullPath is not null)
         {
             OpenCommand = ReactiveCommand.Create(() => FileOpened?.Invoke(fullPath));
         }
@@ -1687,28 +2165,23 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
         SolutionExplorerNodeViewModel root = new(rootName, "🗂", SolutionExplorerNodeKind.Solution);
         root.IsExpanded = true;
 
+        Dictionary<string, SolutionExplorerNodeViewModel> folderNodes =
+            new(StringComparer.OrdinalIgnoreCase);
+
         foreach (ProjectModel project in workspace.Projects)
         {
             SolutionExplorerNodeViewModel projectNode = new(
                 project.Name, "📦", SolutionExplorerNodeKind.Project, project.ProjectPath);
             projectNode.IsExpanded = true;
 
-            // Group XAML files under a folder
-            if (project.XamlFiles.Count > 0)
+            SolutionExplorerNodeViewModel projectParent = root;
+            if (workspace.ProjectFolders.TryGetValue(project.ProjectPath, out string? folderPath) &&
+                !string.IsNullOrWhiteSpace(folderPath))
             {
-                SolutionExplorerNodeViewModel xamlFolder = new("XAML Files", "📁", SolutionExplorerNodeKind.Folder);
-                xamlFolder.IsExpanded = true;
-
-                foreach (XamlFileModel file in project.XamlFiles)
-                {
-                    string fileName = System.IO.Path.GetFileName(file.FilePath);
-                    SolutionExplorerNodeViewModel fileNode = new(
-                        fileName, "📄", SolutionExplorerNodeKind.XamlFile, file.FilePath);
-                    xamlFolder.Children.Add(fileNode);
-                }
-
-                projectNode.Children.Add(xamlFolder);
+                projectParent = EnsureFolderPath(root, folderNodes, folderPath);
             }
+
+            AddProjectFiles(projectNode, project.Files);
 
             // References folder
             if (project.References.Count > 0)
@@ -1725,10 +2198,101 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
                 projectNode.Children.Add(refsFolder);
             }
 
-            root.Children.Add(projectNode);
+            projectParent.Children.Add(projectNode);
         }
 
         return root;
+    }
+
+    private static void AddProjectFiles(
+        SolutionExplorerNodeViewModel projectNode,
+        IReadOnlyList<ProjectFileModel> files)
+    {
+        Dictionary<string, SolutionExplorerNodeViewModel> folders =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (ProjectFileModel file in files)
+        {
+            string relative = file.RelativePath.Replace('\\', '/');
+            string[] parts = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                continue;
+            }
+
+            SolutionExplorerNodeViewModel current = projectNode;
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                string folderPath = string.Join('/', parts.Take(i + 1));
+                if (!folders.TryGetValue(folderPath, out SolutionExplorerNodeViewModel? folderNode))
+                {
+                    folderNode = new SolutionExplorerNodeViewModel(parts[i], "📁", SolutionExplorerNodeKind.Folder);
+                    folders[folderPath] = folderNode;
+                    current.Children.Add(folderNode);
+                }
+
+                current = folderNode;
+            }
+
+            string fileName = parts[^1];
+            SolutionExplorerNodeKind kind = IsXamlFile(file.FilePath)
+                ? SolutionExplorerNodeKind.XamlFile
+                : SolutionExplorerNodeKind.File;
+
+            SolutionExplorerNodeViewModel fileNode = new(
+                fileName, GetFileIcon(file.FilePath), kind, file.FilePath);
+            current.Children.Add(fileNode);
+        }
+    }
+
+    private static SolutionExplorerNodeViewModel EnsureFolderPath(
+        SolutionExplorerNodeViewModel root,
+        Dictionary<string, SolutionExplorerNodeViewModel> folderNodes,
+        string folderPath)
+    {
+        string[] segments = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        SolutionExplorerNodeViewModel current = root;
+        string currentPath = string.Empty;
+
+        foreach (string segment in segments)
+        {
+            currentPath = string.IsNullOrEmpty(currentPath)
+                ? segment
+                : currentPath + "/" + segment;
+
+            if (!folderNodes.TryGetValue(currentPath, out SolutionExplorerNodeViewModel? node))
+            {
+                node = new SolutionExplorerNodeViewModel(segment, "📁", SolutionExplorerNodeKind.SolutionFolder);
+                node.IsExpanded = true;
+                folderNodes[currentPath] = node;
+                current.Children.Add(node);
+            }
+
+            current = node;
+        }
+
+        return current;
+    }
+
+    private static bool IsXamlFile(string filePath)
+    {
+        return filePath.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase)
+            || filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetFileIcon(string filePath)
+    {
+        string ext = System.IO.Path.GetExtension(filePath).ToLowerInvariant();
+        return ext switch
+        {
+            ".axaml" => "📄",
+            ".xaml" => "📄",
+            ".cs" => "🧩",
+            ".json" => "🧾",
+            ".xml" => "🧾",
+            ".md" => "📝",
+            _ => "📄"
+        };
     }
 }
 
@@ -1746,8 +2310,14 @@ public enum SolutionExplorerNodeKind
     /// <summary>Folder.</summary>
     Folder,
 
+    /// <summary>Solution folder.</summary>
+    SolutionFolder,
+
     /// <summary>XAML file.</summary>
     XamlFile,
+
+    /// <summary>Generic file.</summary>
+    File,
 
     /// <summary>Assembly reference.</summary>
     Reference

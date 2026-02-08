@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia.Data.Converters;
 using XamlVisualEditor.Shell.ViewModels;
 
@@ -6,23 +7,25 @@ namespace XamlVisualEditor.App.Views;
 
 public static class SolutionExplorerConverters
 {
-    public static readonly IValueConverter IsXamlFile = new KindEqualsConverter(SolutionExplorerNodeKind.XamlFile, true);
-    public static readonly IValueConverter IsNotXamlFile = new KindEqualsConverter(SolutionExplorerNodeKind.XamlFile, false);
+    public static readonly IValueConverter IsOpenableFile = new KindMultiEqualsConverter(
+        new[] { SolutionExplorerNodeKind.XamlFile, SolutionExplorerNodeKind.File }, true);
+    public static readonly IValueConverter IsNotOpenableFile = new KindMultiEqualsConverter(
+        new[] { SolutionExplorerNodeKind.XamlFile, SolutionExplorerNodeKind.File }, false);
 
-    private sealed class KindEqualsConverter : IValueConverter
+    private sealed class KindMultiEqualsConverter : IValueConverter
     {
-        private readonly SolutionExplorerNodeKind _kind;
+        private readonly HashSet<SolutionExplorerNodeKind> _kinds;
         private readonly bool _isMatch;
 
-        public KindEqualsConverter(SolutionExplorerNodeKind kind, bool isMatch)
+        public KindMultiEqualsConverter(IEnumerable<SolutionExplorerNodeKind> kinds, bool isMatch)
         {
-            _kind = kind;
+            _kinds = new HashSet<SolutionExplorerNodeKind>(kinds);
             _isMatch = isMatch;
         }
 
         public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
         {
-            return value is SolutionExplorerNodeKind kind && (kind == _kind) == _isMatch;
+            return value is SolutionExplorerNodeKind kind && _kinds.Contains(kind) == _isMatch;
         }
 
         public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)

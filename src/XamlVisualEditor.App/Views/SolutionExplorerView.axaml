@@ -19,7 +19,7 @@
                     Background="Transparent"
                     BorderThickness="0"
                     Padding="0"
-                    IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsXamlFile}}">
+                    IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsOpenableFile}}">
               <StackPanel Orientation="Horizontal" Spacing="4">
                 <TextBlock Text="{CompiledBinding Icon}" />
                 <TextBlock Text="{CompiledBinding Name}" />
@@ -27,7 +27,7 @@
             </Button>
 
             <StackPanel Orientation="Horizontal" Spacing="4"
-                        IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsNotXamlFile}}">
+                        IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsNotOpenableFile}}">
               <TextBlock Text="{CompiledBinding Icon}" />
               <TextBlock Text="{CompiledBinding Name}" />
             </StackPanel>

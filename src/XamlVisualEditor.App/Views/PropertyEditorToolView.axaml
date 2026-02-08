@@ -5,5 +5,5 @@
              x:Class="XamlVisualEditor.App.Views.PropertyEditorToolView"
              x:DataType="shell:PropertyEditorTool">
   <v:PropertyEditorView
-      DataContext="{CompiledBinding MainViewModel.ActiveDocument.PropertyEditor}" />
+      DataContext="{CompiledBinding MainViewModel.ActiveDesignerDocument.PropertyEditor}" />
 </UserControl>

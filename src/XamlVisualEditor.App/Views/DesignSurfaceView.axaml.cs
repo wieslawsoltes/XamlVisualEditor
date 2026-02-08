@@ -135,7 +135,10 @@ public sealed partial class DesignSurfaceView : UserControl
             selectedId = primary.AstNodeId;
         }
 
-        UpdateSelectedNode(selectedId);
+        if (_currentVm?.IsSelectionSyncing != true)
+        {
+            UpdateSelectedNode(selectedId);
+        }
 
         if (_adornerLayer is null)
         {
@@ -350,6 +353,15 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        List<Guid>? selectedIds = null;
+        if (_currentVm is not null)
+        {
+            selectedIds = _currentVm.Selection.SelectedItems
+                .OfType<DesignItem>()
+                .Select(item => item.AstNodeId)
+                .ToList();
+        }
+
         MutableAstDocument? doc = docVm.SyncEngine.CurrentDocument;
         if (doc?.Root is null)
         {
@@ -378,6 +390,26 @@ public sealed partial class DesignSurfaceView : UserControl
         Dictionary<Control, DesignItem> controlMap = new();
         DesignItem rootItem = BuildDesignItemTree(doc.Root, tree, itemMap, controlMap);
         _currentVm?.SetDesignTree(rootItem, itemMap, controlMap);
+
+        if (_currentVm is not null)
+        {
+            Guid? selectedId = docVm.SelectedNodeId;
+            if (selectedId is not null)
+            {
+                _currentVm.SelectByAstNodeIdFromSync(selectedId.Value);
+            }
+            else if (selectedIds is { Count: > 0 })
+            {
+                _currentVm.Selection.ClearSelection();
+                foreach (Guid id in selectedIds)
+                {
+                    if (_currentVm.ItemMap.TryGetValue(id, out DesignItem? item) && item is not null)
+                    {
+                        _currentVm.Selection.Select(item, addToSelection: true);
+                    }
+                }
+            }
+        }
     }
 
     private void ApplyEditMode()
@@ -624,7 +656,7 @@ public sealed partial class DesignSurfaceView : UserControl
         DesignerDocumentViewModel? docVm = FindDocumentViewModel();
         if (docVm is not null)
         {
-            docVm.SelectedNodeId = nodeId;
+            docVm.SetSelectedNode(nodeId, SyncSource.DesignSurface);
         }
     }
 

@@ -24,6 +24,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     private readonly SyncEngine _syncEngine;
     private readonly CompletionProviderRegistry _completionRegistry;
     private bool _suppressTextChanged;
+    private int _ignoreCaretUpdates;
 
     /// <summary>
     /// Gets the text document for AvaloniaEdit.
@@ -225,6 +226,23 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     }
 
     /// <summary>
+    /// Sets the caret offset without emitting a caret node change event.
+    /// </summary>
+    public void SetCaretOffsetFromSync(int offset)
+    {
+        if (Document.TextLength == 0)
+        {
+            _ignoreCaretUpdates++;
+            CaretOffset = 0;
+            return;
+        }
+
+        int clamped = Math.Clamp(offset, 0, Document.TextLength);
+        _ignoreCaretUpdates++;
+        CaretOffset = clamped;
+    }
+
+    /// <summary>
     /// Gets the document offset for the start of the specified AST node.
     /// </summary>
     public int? GetOffsetForNode(MutableAstObjectNode node)
@@ -282,6 +300,13 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     {
         try
         {
+            bool suppressCaretEvent = false;
+            if (_ignoreCaretUpdates > 0)
+            {
+                _ignoreCaretUpdates--;
+                suppressCaretEvent = true;
+            }
+
             if (offset < 0 || offset > Document.TextLength)
             {
                 return;
@@ -296,7 +321,10 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             if (nodeId != CaretNodeId)
             {
                 CaretNodeId = nodeId;
-                CaretNodeChanged?.Invoke(nodeId);
+                if (!suppressCaretEvent)
+                {
+                    CaretNodeChanged?.Invoke(nodeId);
+                }
             }
         }
         catch (Exception ex)

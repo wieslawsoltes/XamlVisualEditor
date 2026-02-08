@@ -143,7 +143,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 {
                     Source = source,
                     Changes = Array.Empty<AstChange>(),
-                    UpdatedText = newText
+                    UpdatedText = newText,
+                    Diagnostics = result.Diagnostics
                 };
 
                 SyncCompleted?.Invoke(syncEvent);
@@ -198,7 +199,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
                 {
                     Source = source,
                     Changes = _pendingChanges.ToList(),
-                    UpdatedText = newText
+                    UpdatedText = newText,
+                    Diagnostics = Array.Empty<XamlDiagnostic>()
                 };
 
                 _pendingChanges.Clear();
@@ -246,7 +248,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
             {
                 Source = source,
                 Changes = Array.Empty<AstChange>(),
-                UpdatedText = newText
+                UpdatedText = newText,
+                Diagnostics = Array.Empty<XamlDiagnostic>()
             };
 
             SyncCompleted?.Invoke(syncEvent);
@@ -408,7 +411,8 @@ public sealed class SyncEngine : ReactiveObject, ISyncEngine
         {
             Source = source,
             Changes = Array.Empty<AstChange>(),
-            UpdatedText = newText
+            UpdatedText = newText,
+            Diagnostics = Array.Empty<XamlDiagnostic>()
         };
 
         SyncCompleted?.Invoke(syncEvent);

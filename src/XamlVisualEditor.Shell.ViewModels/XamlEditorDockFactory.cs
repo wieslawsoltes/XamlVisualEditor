@@ -178,6 +178,22 @@ public sealed class DesignerDocument : Document
 }
 
 /// <summary>
+/// Dock document for a text file.
+/// </summary>
+public sealed class TextDocument : Document
+{
+    public TextDocumentViewModel DocumentViewModel { get; }
+
+    public TextDocument(TextDocumentViewModel documentViewModel)
+    {
+        DocumentViewModel = documentViewModel;
+        Id = documentViewModel.FilePath;
+        Title = documentViewModel.FileName;
+        CanClose = true;
+    }
+}
+
+/// <summary>
 /// Factory that creates the default VS/Blend-style docking layout.
 /// </summary>
 public sealed class XamlEditorDockFactory : Factory
@@ -343,6 +359,22 @@ public sealed class XamlEditorDockFactory : Factory
         DesignerDocument doc = new(documentVm);
 
         // Find the document dock
+        DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
+        if (docDock is not null)
+        {
+            AddDockable(docDock, doc);
+            SetActiveDockable(doc);
+            SetFocusedDockable(docDock, doc);
+            return doc;
+        }
+
+        return null;
+    }
+
+    public TextDocument? AddTextDocument(IRootDock rootDock, TextDocumentViewModel documentVm)
+    {
+        TextDocument doc = new(documentVm);
+
         DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
         if (docDock is not null)
         {

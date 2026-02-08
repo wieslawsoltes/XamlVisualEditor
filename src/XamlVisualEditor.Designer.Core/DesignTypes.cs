@@ -136,6 +136,7 @@ public sealed class DesignItem : ReactiveObject, IDesignItem
 public sealed class SelectionManager : ReactiveObject
 {
     private readonly List<IDesignItem> _selectedItems = new();
+    private int _suppressSelectionChanged;
 
     /// <summary>
     /// Gets the currently selected items.
@@ -152,6 +153,15 @@ public sealed class SelectionManager : ReactiveObject
     /// Fires when the selection changes.
     /// </summary>
     public event Action<IReadOnlyList<IDesignItem>>? SelectionChanged;
+
+    /// <summary>
+    /// Suppresses selection changed notifications until the returned scope is disposed.
+    /// </summary>
+    public IDisposable SuppressSelectionChanged()
+    {
+        _suppressSelectionChanged++;
+        return new SelectionChangedScope(this);
+    }
 
     /// <summary>
     /// Selects a single item, optionally adding to the selection.
@@ -173,7 +183,7 @@ public sealed class SelectionManager : ReactiveObject
         }
 
         PrimarySelection = _selectedItems.Count > 0 ? _selectedItems[0] : null;
-        SelectionChanged?.Invoke(_selectedItems);
+        RaiseSelectionChanged();
     }
 
     /// <summary>
@@ -183,7 +193,7 @@ public sealed class SelectionManager : ReactiveObject
     {
         ClearSelectionInternal();
         PrimarySelection = null;
-        SelectionChanged?.Invoke(_selectedItems);
+        RaiseSelectionChanged();
     }
 
     /// <summary>
@@ -209,7 +219,15 @@ public sealed class SelectionManager : ReactiveObject
         }
 
         PrimarySelection = _selectedItems.Count > 0 ? _selectedItems[0] : null;
-        SelectionChanged?.Invoke(_selectedItems);
+        RaiseSelectionChanged();
+    }
+
+    private void RaiseSelectionChanged()
+    {
+        if (_suppressSelectionChanged == 0)
+        {
+            SelectionChanged?.Invoke(_selectedItems);
+        }
     }
 
     private void ClearSelectionInternal()
@@ -223,6 +241,27 @@ public sealed class SelectionManager : ReactiveObject
         }
         _selectedItems.Clear();
     }
+
+    private sealed class SelectionChangedScope : IDisposable
+    {
+        private SelectionManager? _owner;
+
+        public SelectionChangedScope(SelectionManager owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_owner is null)
+            {
+                return;
+            }
+
+            _owner._suppressSelectionChanged = Math.Max(0, _owner._suppressSelectionChanged - 1);
+            _owner = null;
+        }
+    }
 }
 
 /// <summary>
@@ -230,6 +269,7 @@ public sealed class SelectionManager : ReactiveObject
 /// </summary>
 public sealed class DesignSurfaceViewModel : ReactiveObject
 {
+    private int _selectionSyncDepth;
     /// <summary>
     /// Gets the selection manager.
     /// </summary>
@@ -253,6 +293,11 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// Gets the design items indexed by control instance.
     /// </summary>
     public IReadOnlyDictionary<Control, DesignItem> ControlMap => _controlMap;
+
+    /// <summary>
+    /// Gets whether selection changes are being applied from sync.
+    /// </summary>
+    public bool IsSelectionSyncing => _selectionSyncDepth > 0;
 
     /// <summary>
     /// Gets or sets the zoom level (1.0 = 100%).
@@ -370,6 +415,34 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     }
 
     /// <summary>
+    /// Selects a design item by AST node id while marking the change as synced.
+    /// </summary>
+    public void SelectByAstNodeIdFromSync(Guid nodeId)
+    {
+        using (BeginSelectionSync())
+        {
+            SelectByAstNodeId(nodeId);
+        }
+    }
+
+    /// <summary>
+    /// Clears the selection while marking the change as synced.
+    /// </summary>
+    public void ClearSelectionFromSync()
+    {
+        using (BeginSelectionSync())
+        {
+            Selection.ClearSelection();
+        }
+    }
+
+    private IDisposable BeginSelectionSync()
+    {
+        _selectionSyncDepth++;
+        return new SelectionSyncScope(this);
+    }
+
+    /// <summary>
     /// Requests a full rebuild of the design surface from the AST.
     /// </summary>
     public void RequestRebuild()
@@ -390,5 +463,26 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
         }
         Selection.ClearSelection();
         RequestRebuild();
+    }
+
+    private sealed class SelectionSyncScope : IDisposable
+    {
+        private DesignSurfaceViewModel? _owner;
+
+        public SelectionSyncScope(DesignSurfaceViewModel owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_owner is null)
+            {
+                return;
+            }
+
+            _owner._selectionSyncDepth = Math.Max(0, _owner._selectionSyncDepth - 1);
+            _owner = null;
+        }
     }
 }
