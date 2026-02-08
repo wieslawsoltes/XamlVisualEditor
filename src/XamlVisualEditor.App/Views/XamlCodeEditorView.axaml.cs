@@ -103,16 +103,24 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Wire up caret position tracking
         _caretPositionChangedHandler = (_, _) =>
         {
-            if (_suppressCaretUpdate || _textEditor is null)
+            if (_suppressCaretUpdate)
+            {
+                return;
+            }
+
+            TextEditor? editor = _textEditor;
+            TextArea? textArea = editor?.TextArea;
+            Caret? caret = textArea?.Caret;
+            if (caret is null)
             {
                 return;
             }
 
             if (DataContext is CodeEditorViewModel vm)
             {
-                vm.CaretOffset = _textEditor.TextArea.Caret.Offset;
-                vm.CurrentLine = _textEditor.TextArea.Caret.Line;
-                vm.CurrentColumn = _textEditor.TextArea.Caret.Column;
+                vm.CaretOffset = caret.Offset;
+                vm.CurrentLine = caret.Line;
+                vm.CurrentColumn = caret.Column;
             }
         };
         _textEditor.TextArea.Caret.PositionChanged += _caretPositionChangedHandler;
@@ -160,27 +168,27 @@ public sealed partial class XamlCodeEditorView : UserControl
         _textEditor.WordWrap = vm.WordWrap;
 
         // Subscribe to ViewModel property changes
-        vm.WhenAnyValue(x => x.FontSize)
-            .Subscribe(size => _textEditor.FontSize = size)
-            .DisposeWith(_vmSubscriptions);
+        IDisposable fontSizeSubscription = vm.WhenAnyValue(x => x.FontSize)
+            .Subscribe(size => _textEditor.FontSize = size);
+        _vmSubscriptions.Add(fontSizeSubscription);
 
-        vm.WhenAnyValue(x => x.ShowLineNumbers)
-            .Subscribe(show => _textEditor.ShowLineNumbers = show)
-            .DisposeWith(_vmSubscriptions);
+        IDisposable lineNumbersSubscription = vm.WhenAnyValue(x => x.ShowLineNumbers)
+            .Subscribe(show => _textEditor.ShowLineNumbers = show);
+        _vmSubscriptions.Add(lineNumbersSubscription);
 
-        vm.WhenAnyValue(x => x.WordWrap)
-            .Subscribe(wrap => _textEditor.WordWrap = wrap)
-            .DisposeWith(_vmSubscriptions);
+        IDisposable wordWrapSubscription = vm.WhenAnyValue(x => x.WordWrap)
+            .Subscribe(wrap => _textEditor.WordWrap = wrap);
+        _vmSubscriptions.Add(wordWrapSubscription);
 
-        vm.WhenAnyValue(x => x.CaretOffset)
+        IDisposable caretSubscription = vm.WhenAnyValue(x => x.CaretOffset)
             .Subscribe(offset =>
             {
                 _suppressCaretUpdate = true;
                 _textEditor.TextArea.Caret.Offset = Math.Clamp(offset, 0, _textEditor.Document.TextLength);
                 _textEditor.TextArea.Caret.BringCaretToView();
                 _suppressCaretUpdate = false;
-            })
-            .DisposeWith(_vmSubscriptions);
+            });
+        _vmSubscriptions.Add(caretSubscription);
 
         // Add diagnostic colorizer for error squiggles
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.DiagnosticColorizer))

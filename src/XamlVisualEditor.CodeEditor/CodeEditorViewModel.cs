@@ -159,28 +159,28 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
         DecreaseFontSizeCommand = ReactiveCommand.Create(() => { FontSize = Math.Max(FontSize - 2, 8); });
 
         // Subscribe to text changes from the document (debounced)
-        Observable.FromEventPattern<EventHandler, EventArgs>(
+        IDisposable textChangedSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
                 h => Document.TextChanged += h,
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
             .Throttle(TimeSpan.FromMilliseconds(300))
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(_ => OnTextChanged())
-            .DisposeWith(_disposables);
+            .Subscribe(_ => OnTextChanged());
+        _disposables.Add(textChangedSubscription);
 
         // Subscribe to sync events to receive AST→text updates
-        _syncEngine.SyncEvents
+        IDisposable syncSubscription = _syncEngine.SyncEvents
             .Where(e => e.Source == SyncSource.DesignSurface || e.Source == SyncSource.Collaboration)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(OnSyncEvent)
-            .DisposeWith(_disposables);
+            .Subscribe(OnSyncEvent);
+        _disposables.Add(syncSubscription);
 
         // Map caret offset to line/column and AST node
-        this.WhenAnyValue(x => x.CaretOffset)
+        IDisposable caretSubscription = this.WhenAnyValue(x => x.CaretOffset)
             .Throttle(TimeSpan.FromMilliseconds(100))
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(offset => UpdateCaretPosition(offset))
-            .DisposeWith(_disposables);
+            .Subscribe(offset => UpdateCaretPosition(offset));
+        _disposables.Add(caretSubscription);
     }
 
     /// <summary>

@@ -155,11 +155,11 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
         _nodeMap = nodeMap;
 
         // Filter properties on search text change
-        this.WhenAnyValue(x => x.SearchText)
+        IDisposable searchSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(filter => FilterProperties(filter))
-            .DisposeWith(_disposables);
+            .Subscribe(filter => FilterProperties(filter));
+        _disposables.Add(searchSubscription);
     }
 
     /// <summary>
@@ -259,12 +259,12 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
 
             foreach (PropertyItemViewModel prop in cat.Properties)
             {
-                prop.WhenAnyValue(p => p.Value)
+                IDisposable valueSubscription = prop.WhenAnyValue(p => p.Value)
                     .Skip(1) // skip initial value
                     .Throttle(TimeSpan.FromMilliseconds(300))
                     .ObserveOn(RxApp.MainThreadScheduler)
-                    .Subscribe(_ => ApplyPropertyChange(prop))
-                    .DisposeWith(_propertySubscriptions);
+                    .Subscribe(_ => ApplyPropertyChange(prop));
+                _propertySubscriptions.Add(valueSubscription);
             }
         }
 
