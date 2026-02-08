@@ -8,10 +8,14 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Language\XamlVisualEditor.Language.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.CSharp.Language\XamlVisualEditor.CSharp.Language.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Language\XamlVisualEditor.Xaml.Language.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Serialization\XamlVisualEditor.Xaml.Serialization.csproj" />
@@ -21,5 +25,6 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Workspace\XamlVisualEditor.Workspace.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
   </ItemGroup>
 </Project>

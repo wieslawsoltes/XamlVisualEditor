@@ -20,6 +20,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="ReactiveUI" />
     <PackageReference Include="ReactiveUI.Fody" />
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
@@ -38,6 +39,9 @@
     <ProjectReference Include="..\XamlVisualEditor.TreeView\XamlVisualEditor.TreeView.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Language\XamlVisualEditor.Language.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.CSharp.Language\XamlVisualEditor.CSharp.Language.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Language\XamlVisualEditor.Xaml.Language.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />

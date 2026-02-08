@@ -2,7 +2,9 @@ using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.App.Views;
 
 namespace XamlVisualEditor.App;
 
@@ -13,9 +15,20 @@ public sealed partial class MainWindow : Window
 {
     private IDisposable? _openFileHandler;
     private IDisposable? _saveFileHandler;
+    private IDisposable? _renameSymbolHandler;
 
     public MainWindow()
+        : this(null)
     {
+    }
+
+    public MainWindow(MainWindowViewModel? viewModel)
+    {
+        if (viewModel is not null)
+        {
+            DataContext = viewModel;
+        }
+
         InitializeComponent();
 
         // Register interaction handlers when DataContext is set
@@ -32,6 +45,7 @@ public sealed partial class MainWindow : Window
         {
             _openFileHandler?.Dispose();
             _saveFileHandler?.Dispose();
+            _renameSymbolHandler?.Dispose();
         };
     }
 
@@ -40,6 +54,7 @@ public sealed partial class MainWindow : Window
         // Dispose previous handlers
         _openFileHandler?.Dispose();
         _saveFileHandler?.Dispose();
+        _renameSymbolHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
@@ -89,6 +104,22 @@ public sealed partial class MainWindow : Window
 
             var file = await StorageProvider.SaveFilePickerAsync(options);
             interaction.SetOutput(file?.Path.LocalPath);
+        });
+
+        _renameSymbolHandler = vm.RenameSymbolInteraction.RegisterHandler(async interaction =>
+        {
+            LanguageRenameInfo info = interaction.Input;
+            RenameSymbolDialogViewModel dialogVm = new(
+                "Rename Symbol",
+                "New name:",
+                info.Name);
+            RenameSymbolDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            string? result = await dialog.ShowDialog<string?>(this);
+            interaction.SetOutput(result);
         });
     }
 }

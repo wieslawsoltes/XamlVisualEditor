@@ -41,6 +41,8 @@ public sealed class ViewLocator : IDataTemplate
                     return new LogicalTreeToolView { DataContext = tool };
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
+                case ReferencesTool tool:
+                    return new ReferencesView { DataContext = tool.ReferencesViewModel };
                 case CollaborationTool tool:
                     return new CollaborationPanelView { DataContext = tool.CollaborationViewModel };
             }
@@ -51,6 +53,7 @@ public sealed class ViewLocator : IDataTemplate
             DesignerDocumentViewModel => new DesignerDocumentView(),
             ToolboxViewModel => new ToolboxView(),
             OutputViewModel => new OutputView(),
+            ReferencesViewModel => new ReferencesView(),
             CodeEditorViewModel => new XamlCodeEditorView(),
             TextDocumentViewModel => new TextFileView(),
             DesignSurfaceViewModel => new DesignSurfaceView(),
@@ -70,6 +73,7 @@ public sealed class ViewLocator : IDataTemplate
             or DesignerDocumentViewModel
             or ToolboxViewModel
             or OutputViewModel
+            or ReferencesViewModel
             or CodeEditorViewModel
             or TextDocumentViewModel
             or DesignSurfaceViewModel

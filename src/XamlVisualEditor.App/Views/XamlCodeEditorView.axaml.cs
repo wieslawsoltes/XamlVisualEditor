@@ -350,7 +350,7 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Trigger completion on '<', ' ' (inside tag), '=' or '"' (attribute values), ':'
         if (trigger is '<' or ' ' or '=' or '"' or ':' or '/')
         {
-            ShowCompletionWindow(vm, CompletionTrigger.CharacterTyped);
+            ShowCompletionWindow(vm, CompletionTrigger.CharacterTyped, trigger);
         }
 
         // Show insight window for markup extensions after '{'
@@ -360,7 +360,7 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
     }
 
-    private void ShowCompletionWindow(CodeEditorViewModel vm, CompletionTrigger trigger)
+    private void ShowCompletionWindow(CodeEditorViewModel vm, CompletionTrigger trigger, char? triggerCharacter)
     {
         if (_textEditor is null)
         {
@@ -382,8 +382,11 @@ public sealed partial class XamlCodeEditorView : UserControl
         CompletionContext context = new()
         {
             TextBefore = text[..offset],
+            DocumentText = text,
             Offset = offset,
-            Trigger = trigger
+            Trigger = trigger,
+            TriggerCharacter = triggerCharacter,
+            LanguageId = "xml"
         };
 
         IReadOnlyList<CompletionItem> items = vm.GetCompletions(context);

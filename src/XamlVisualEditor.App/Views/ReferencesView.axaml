@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.ReferencesView"
+             x:DataType="vm:ReferencesViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="4,2">
+      <TextBlock Text="References" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
+      <TextBlock Text="{CompiledBinding TotalCount, StringFormat='Count: {0}'}"
+                 VerticalAlignment="Center" Opacity="0.7" />
+    </StackPanel>
+
+    <TreeView ItemsSource="{CompiledBinding Groups}"
+              SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}">
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate DataType="vm:ReferencesGroupViewModel"
+                          ItemsSource="{CompiledBinding Items}">
+          <TextBlock Text="{CompiledBinding FileName}" FontWeight="SemiBold" />
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+      <TreeView.DataTemplates>
+        <DataTemplate DataType="vm:ReferenceLocationViewModel">
+          <TextBlock Text="{CompiledBinding DisplayText}" Margin="8,2,2,2" />
+        </DataTemplate>
+      </TreeView.DataTemplates>
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:ReferencesGroupViewModel">
+          <Setter Property="IsExpanded" Value="{CompiledBinding IsExpanded, Mode=TwoWay}" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{CompiledBinding OpenSelectedCommand}" />
+        <KeyBinding Gesture="Return" Command="{CompiledBinding OpenSelectedCommand}" />
+      </TreeView.KeyBindings>
+    </TreeView>
+  </DockPanel>
+</UserControl>

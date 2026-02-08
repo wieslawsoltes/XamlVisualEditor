@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Runtime.Serialization;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.ReactiveUI;
@@ -19,6 +20,7 @@ namespace XamlVisualEditor.Shell;
 /// </summary>
 public sealed class ToolboxTool : Tool
 {
+    [IgnoreDataMember]
     public ToolboxViewModel? ToolboxViewModel { get; set; }
 
     public ToolboxTool()
@@ -40,6 +42,7 @@ public sealed class ToolboxTool : Tool
 /// </summary>
 public sealed class SolutionExplorerTool : Tool
 {
+    [IgnoreDataMember]
     public SolutionExplorerViewModel? SolutionExplorerViewModel { get; set; }
 
     public SolutionExplorerTool()
@@ -61,6 +64,7 @@ public sealed class SolutionExplorerTool : Tool
 /// </summary>
 public sealed class PropertyEditorTool : Tool
 {
+    [IgnoreDataMember]
     public MainWindowViewModel? MainViewModel { get; set; }
 
     public PropertyEditorTool()
@@ -82,6 +86,7 @@ public sealed class PropertyEditorTool : Tool
 /// </summary>
 public sealed class VisualTreeTool : Tool
 {
+    [IgnoreDataMember]
     public MainWindowViewModel? MainViewModel { get; set; }
 
     public VisualTreeTool()
@@ -103,6 +108,7 @@ public sealed class VisualTreeTool : Tool
 /// </summary>
 public sealed class LogicalTreeTool : Tool
 {
+    [IgnoreDataMember]
     public MainWindowViewModel? MainViewModel { get; set; }
 
     public LogicalTreeTool()
@@ -124,6 +130,7 @@ public sealed class LogicalTreeTool : Tool
 /// </summary>
 public sealed class OutputTool : Tool
 {
+    [IgnoreDataMember]
     public OutputViewModel? OutputViewModel { get; set; }
 
     public OutputTool()
@@ -145,6 +152,7 @@ public sealed class OutputTool : Tool
 /// </summary>
 public sealed class CollaborationTool : Tool
 {
+    [IgnoreDataMember]
     public CollaborationPanelViewModel? CollaborationViewModel { get; set; }
 
     public CollaborationTool()
@@ -162,10 +170,33 @@ public sealed class CollaborationTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the references panel.
+/// </summary>
+public sealed class ReferencesTool : Tool
+{
+    [IgnoreDataMember]
+    public ReferencesViewModel? ReferencesViewModel { get; set; }
+
+    public ReferencesTool()
+    {
+        Id = "References";
+        Title = "References";
+    }
+
+    public ReferencesTool(ReferencesViewModel referencesViewModel)
+    {
+        ReferencesViewModel = referencesViewModel;
+        Id = "References";
+        Title = "References";
+    }
+}
+
+/// <summary>
 /// Dock document for a XAML designer document.
 /// </summary>
 public sealed class DesignerDocument : Document
 {
+    [IgnoreDataMember]
     public DesignerDocumentViewModel DocumentViewModel { get; }
 
     public DesignerDocument(DesignerDocumentViewModel documentViewModel)
@@ -182,6 +213,7 @@ public sealed class DesignerDocument : Document
 /// </summary>
 public sealed class TextDocument : Document
 {
+    [IgnoreDataMember]
     public TextDocumentViewModel DocumentViewModel { get; }
 
     public TextDocument(TextDocumentViewModel documentViewModel)
@@ -199,6 +231,7 @@ public sealed class TextDocument : Document
 public sealed class XamlEditorDockFactory : Factory
 {
     private readonly MainWindowViewModel _mainVm;
+    private static readonly DockSerializer s_serializer = new(typeof(ObservableCollection<>));
 
     public XamlEditorDockFactory(MainWindowViewModel mainVm)
     {
@@ -221,6 +254,7 @@ public sealed class XamlEditorDockFactory : Factory
 
         // Bottom tools: Output, Collaboration
         OutputTool outputTool = new(_mainVm.Output);
+        ReferencesTool referencesTool = new(_mainVm.References);
         CollaborationTool collabTool = new(_mainVm.Collaboration);
 
         // Left tool dock
@@ -252,7 +286,7 @@ public sealed class XamlEditorDockFactory : Factory
             Title = "Bottom Tools",
             Proportion = 0.25,
             ActiveDockable = outputTool,
-            VisibleDockables = CreateList<IDockable>(outputTool, collabTool),
+            VisibleDockables = CreateList<IDockable>(outputTool, referencesTool, collabTool),
             Alignment = Alignment.Bottom
         };
 
@@ -300,6 +334,8 @@ public sealed class XamlEditorDockFactory : Factory
             VisibleDockables = CreateList<IDockable>(mainLayout)
         };
 
+        EnsureLayoutDefaults(rootDock);
+
         return rootDock;
     }
 
@@ -344,11 +380,22 @@ public sealed class XamlEditorDockFactory : Factory
             outputTool.OutputViewModel = _mainVm.Output;
         }
 
+        ReferencesTool? referencesTool = FindDockable<ReferencesTool>(rootDock, "References");
+        if (referencesTool is not null)
+        {
+            referencesTool.ReferencesViewModel = _mainVm.References;
+        }
+
         CollaborationTool? collabTool = FindDockable<CollaborationTool>(rootDock, "Collaboration");
         if (collabTool is not null)
         {
             collabTool.CollaborationViewModel = _mainVm.Collaboration;
         }
+    }
+
+    public void EnsureOwnerReferences(IRootDock rootDock)
+    {
+        SetOwnerRecursive(rootDock, null);
     }
 
     /// <summary>
@@ -426,15 +473,23 @@ public sealed class XamlEditorDockFactory : Factory
     public static void SaveLayout(IRootDock rootDock, string? filePath = null)
     {
         filePath ??= GetDefaultLayoutPath();
+        List<Action> restoreActions = DetachToolViewModels(rootDock);
+        restoreActions.AddRange(DetachDockRuntimeReferences(rootDock));
         try
         {
-            DockSerializer serializer = new(typeof(ObservableCollection<>));
-            string json = serializer.Serialize(rootDock);
+            string json = s_serializer.Serialize(rootDock);
             File.WriteAllText(filePath, json);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceWarning($"Failed to save dock layout: {ex.Message}");
+        }
+        finally
+        {
+            foreach (Action restore in restoreActions)
+            {
+                restore();
+            }
         }
     }
 
@@ -452,13 +507,255 @@ public sealed class XamlEditorDockFactory : Factory
             }
 
             string json = File.ReadAllText(filePath);
-            DockSerializer serializer = new(typeof(ObservableCollection<>));
-            return serializer.Deserialize<RootDock>(json);
+            RootDock? rootDock = s_serializer.Deserialize<RootDock>(json);
+            if (rootDock is not null)
+            {
+                EnsureLayoutDefaults(rootDock);
+            }
+            return rootDock;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceWarning($"Failed to load dock layout: {ex.Message}");
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+            }
+            catch (Exception deleteEx)
+            {
+                System.Diagnostics.Trace.TraceWarning($"Failed to delete invalid dock layout: {deleteEx.Message}");
+            }
             return null;
+        }
+    }
+
+    public static void EnsureLayoutDefaults(IRootDock rootDock)
+    {
+        if (string.IsNullOrWhiteSpace(rootDock.Id))
+        {
+            rootDock.Id = "Root";
+        }
+
+        if (string.IsNullOrWhiteSpace(rootDock.Title))
+        {
+            rootDock.Title = "Root";
+        }
+
+        rootDock.VisibleDockables ??= new ObservableCollection<IDockable>();
+        rootDock.HiddenDockables ??= new ObservableCollection<IDockable>();
+        rootDock.LeftPinnedDockables ??= new ObservableCollection<IDockable>();
+        rootDock.RightPinnedDockables ??= new ObservableCollection<IDockable>();
+        rootDock.TopPinnedDockables ??= new ObservableCollection<IDockable>();
+        rootDock.BottomPinnedDockables ??= new ObservableCollection<IDockable>();
+
+        if (rootDock.PinnedDock is null)
+        {
+            rootDock.PinnedDock = new ToolDock
+            {
+                Id = "PinnedDock",
+                Title = "Pinned",
+                Alignment = Alignment.Left,
+                VisibleDockables = new ObservableCollection<IDockable>()
+            };
+        }
+
+        rootDock.DockGroup ??= "Root";
+        rootDock.CanDrag = true;
+        rootDock.CanDrop = true;
+    }
+
+    private static List<Action> DetachToolViewModels(IRootDock rootDock)
+    {
+        List<Action> restore = new();
+
+        DetachToolViewModel(
+            FindDockable<ToolboxTool>(rootDock, "Toolbox"),
+            tool => tool.ToolboxViewModel,
+            (tool, vm) => tool.ToolboxViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<SolutionExplorerTool>(rootDock, "SolutionExplorer"),
+            tool => tool.SolutionExplorerViewModel,
+            (tool, vm) => tool.SolutionExplorerViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<PropertyEditorTool>(rootDock, "Properties"),
+            tool => tool.MainViewModel,
+            (tool, vm) => tool.MainViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<VisualTreeTool>(rootDock, "VisualTree"),
+            tool => tool.MainViewModel,
+            (tool, vm) => tool.MainViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<LogicalTreeTool>(rootDock, "LogicalTree"),
+            tool => tool.MainViewModel,
+            (tool, vm) => tool.MainViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<OutputTool>(rootDock, "Output"),
+            tool => tool.OutputViewModel,
+            (tool, vm) => tool.OutputViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<ReferencesTool>(rootDock, "References"),
+            tool => tool.ReferencesViewModel,
+            (tool, vm) => tool.ReferencesViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<CollaborationTool>(rootDock, "Collaboration"),
+            tool => tool.CollaborationViewModel,
+            (tool, vm) => tool.CollaborationViewModel = vm,
+            restore);
+
+        return restore;
+    }
+
+    private static void DetachToolViewModel<TTool, TViewModel>(
+        TTool? tool,
+        Func<TTool, TViewModel?> getter,
+        Action<TTool, TViewModel?> setter,
+        List<Action> restore)
+        where TTool : class
+        where TViewModel : class
+    {
+        if (tool is null)
+        {
+            return;
+        }
+
+        TViewModel? current = getter(tool);
+        if (current is null)
+        {
+            return;
+        }
+
+        setter(tool, null);
+        restore.Add(() => setter(tool, current));
+    }
+
+    private static List<Action> DetachDockRuntimeReferences(IRootDock rootDock)
+    {
+        List<Action> restore = new();
+
+        if (rootDock.Window is not null)
+        {
+            IDockWindow? window = rootDock.Window;
+            rootDock.Window = null;
+            restore.Add(() => rootDock.Window = window);
+        }
+
+        if (rootDock.Windows is not null)
+        {
+            IList<IDockWindow>? windows = rootDock.Windows;
+            rootDock.Windows = null;
+            restore.Add(() => rootDock.Windows = windows);
+        }
+
+        DetachOwnersRecursive(rootDock, restore);
+        return restore;
+    }
+
+    private static void DetachOwnersRecursive(IDockable dockable, List<Action> restore)
+    {
+        if (dockable.Owner is not null)
+        {
+            IDockable? owner = dockable.Owner;
+            dockable.Owner = null;
+            restore.Add(() => dockable.Owner = owner);
+        }
+
+        if (dockable is not IDock dock || dock.VisibleDockables is null)
+        {
+            return;
+        }
+
+        foreach (IDockable child in dock.VisibleDockables)
+        {
+            DetachOwnersRecursive(child, restore);
+        }
+
+        if (dock is IRootDock rootDock)
+        {
+            DetachOwnersList(rootDock.HiddenDockables, restore);
+            DetachOwnersList(rootDock.LeftPinnedDockables, restore);
+            DetachOwnersList(rootDock.RightPinnedDockables, restore);
+            DetachOwnersList(rootDock.TopPinnedDockables, restore);
+            DetachOwnersList(rootDock.BottomPinnedDockables, restore);
+            if (rootDock.PinnedDock is not null)
+            {
+                DetachOwnersRecursive(rootDock.PinnedDock, restore);
+            }
+        }
+    }
+
+    private static void DetachOwnersList(IList<IDockable>? dockables, List<Action> restore)
+    {
+        if (dockables is null)
+        {
+            return;
+        }
+
+        foreach (IDockable dockable in dockables)
+        {
+            DetachOwnersRecursive(dockable, restore);
+        }
+    }
+
+    private void SetOwnerRecursive(IDockable dockable, IDockable? owner)
+    {
+        if (dockable.Owner is null)
+        {
+            dockable.Owner = owner;
+        }
+
+        if (dockable is IDock dock)
+        {
+            dock.Factory ??= this;
+            if (dock.VisibleDockables is not null)
+            {
+                foreach (IDockable child in dock.VisibleDockables)
+                {
+                    SetOwnerRecursive(child, dockable);
+                }
+            }
+        }
+
+        if (dockable is IRootDock rootDock)
+        {
+            SetOwnerList(rootDock.HiddenDockables, rootDock);
+            SetOwnerList(rootDock.LeftPinnedDockables, rootDock);
+            SetOwnerList(rootDock.RightPinnedDockables, rootDock);
+            SetOwnerList(rootDock.TopPinnedDockables, rootDock);
+            SetOwnerList(rootDock.BottomPinnedDockables, rootDock);
+            if (rootDock.PinnedDock is not null)
+            {
+                SetOwnerRecursive(rootDock.PinnedDock, rootDock);
+            }
+        }
+    }
+
+    private void SetOwnerList(IList<IDockable>? dockables, IDockable owner)
+    {
+        if (dockables is null)
+        {
+            return;
+        }
+
+        foreach (IDockable dockable in dockables)
+        {
+            SetOwnerRecursive(dockable, owner);
         }
     }
 }

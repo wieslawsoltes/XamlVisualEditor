@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.CSharp.Language</RootNamespace>
+    <Description>Roslyn-based C# language services (completion, diagnostics, navigation)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Features" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -23,6 +23,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     private readonly CompositeDisposable _disposables = new();
     private readonly SyncEngine _syncEngine;
     private readonly CompletionProviderRegistry _completionRegistry;
+    private readonly ITypeMetadataService? _metadataService;
     private bool _suppressTextChanged;
     private int _ignoreCaretUpdates;
 
@@ -147,10 +148,14 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public ReactiveCommand<Unit, Unit> DecreaseFontSizeCommand { get; }
 
-    public CodeEditorViewModel(SyncEngine syncEngine, CompletionProviderRegistry completionRegistry)
+    public CodeEditorViewModel(
+        SyncEngine syncEngine,
+        CompletionProviderRegistry completionRegistry,
+        ITypeMetadataService? metadataService = null)
     {
         _syncEngine = syncEngine;
         _completionRegistry = completionRegistry;
+        _metadataService = metadataService;
 
         TriggerCompletionCommand = ReactiveCommand.Create(TriggerCompletion);
         UndoCommand = ReactiveCommand.Create(() => Document.UndoStack.Undo());
@@ -223,6 +228,15 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
 
         int clamped = Math.Clamp(offset, 0, Document.TextLength);
         CaretOffset = clamped;
+    }
+
+    public int GetOffsetForLineColumn(int line, int column)
+    {
+        int lineNumber = Math.Clamp(line, 1, Document.LineCount);
+        DocumentLine docLine = Document.GetLineByNumber(lineNumber);
+        int col = Math.Max(1, column);
+        int offset = Math.Min(docLine.EndOffset, docLine.Offset + col - 1);
+        return offset;
     }
 
     /// <summary>
@@ -393,12 +407,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        CompletionContext context = new()
-        {
-            TextBefore = text.Substring(0, offset),
-            Offset = offset,
-            Trigger = CompletionTrigger.Invoked
-        };
+        CompletionContext context = BuildCompletionContext(text, offset, CompletionTrigger.Invoked, null);
 
         IReadOnlyList<CompletionItem> items = _completionRegistry.GetCompletions(context);
 
@@ -443,7 +452,49 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     public IReadOnlyList<CompletionItem> GetCompletions(CompletionContext context)
     {
-        return _completionRegistry.GetCompletions(context);
+        CompletionContext prepared = EnsureMetadata(context);
+        return _completionRegistry.GetCompletions(prepared);
+    }
+
+    private CompletionContext BuildCompletionContext(
+        string text,
+        int offset,
+        CompletionTrigger trigger,
+        char? triggerCharacter)
+    {
+        CompletionContext context = new()
+        {
+            TextBefore = text.Substring(0, offset),
+            DocumentText = text,
+            LanguageId = "xml",
+            Offset = offset,
+            Trigger = trigger,
+            TriggerCharacter = triggerCharacter,
+            Metadata = _metadataService
+        };
+
+        return context;
+    }
+
+    private CompletionContext EnsureMetadata(CompletionContext context)
+    {
+        if (context.Metadata is not null || _metadataService is null)
+        {
+            return context;
+        }
+
+        return new CompletionContext
+        {
+            Document = context.Document,
+            Offset = context.Offset,
+            TextBefore = context.TextBefore,
+            DocumentText = context.DocumentText,
+            FilePath = context.FilePath,
+            LanguageId = context.LanguageId,
+            Trigger = context.Trigger,
+            TriggerCharacter = context.TriggerCharacter,
+            Metadata = _metadataService
+        };
     }
 
     public void Dispose()

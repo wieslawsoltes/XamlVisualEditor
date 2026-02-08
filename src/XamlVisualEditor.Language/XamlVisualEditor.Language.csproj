@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Language</RootNamespace>
+    <Description>Shared language intellisense registry and helpers</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -5,6 +5,9 @@
     <Project Path="src/XamlVisualEditor.Xaml.Ast/XamlVisualEditor.Xaml.Ast.csproj" />
     <Project Path="src/XamlVisualEditor.Xaml.Serialization/XamlVisualEditor.Xaml.Serialization.csproj" />
     <Project Path="src/XamlVisualEditor.Xaml.Intellisense/XamlVisualEditor.Xaml.Intellisense.csproj" />
+    <Project Path="src/XamlVisualEditor.Language/XamlVisualEditor.Language.csproj" />
+    <Project Path="src/XamlVisualEditor.CSharp.Language/XamlVisualEditor.CSharp.Language.csproj" />
+    <Project Path="src/XamlVisualEditor.Xaml.Language/XamlVisualEditor.Xaml.Language.csproj" />
     <Project Path="src/XamlVisualEditor.Workspace/XamlVisualEditor.Workspace.csproj" />
     <Project Path="src/XamlVisualEditor.Designer.Core/XamlVisualEditor.Designer.Core.csproj" />
     <Project Path="src/XamlVisualEditor.Designer.Rendering/XamlVisualEditor.Designer.Rendering.csproj" />

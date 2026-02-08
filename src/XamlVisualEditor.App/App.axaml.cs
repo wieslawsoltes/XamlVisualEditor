@@ -3,11 +3,14 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.CSharp.Language;
+using XamlVisualEditor.Language;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Workspace;
 using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Intellisense;
+using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 
@@ -38,10 +41,7 @@ public sealed class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = mainVm
-            };
+            desktop.MainWindow = new MainWindow(mainVm);
 
             desktop.ShutdownRequested += (_, _) =>
             {
@@ -60,6 +60,11 @@ public sealed class App : Application
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
+
+        // Language services
+        services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();
+        services.AddSingleton<ILanguageIntellisenseService, XamlLanguageService>();
+        services.AddSingleton<ILanguageIntellisenseRegistry, LanguageServiceRegistry>();
 
         // Transient services (stateless/lightweight)
         services.AddTransient<CompletionProviderRegistry>(_ => CompletionProviderRegistry.CreateDefault());

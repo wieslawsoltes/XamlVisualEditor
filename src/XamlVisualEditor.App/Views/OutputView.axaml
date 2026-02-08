@@ -18,7 +18,8 @@
         </StackPanel>
 
         <!-- Message list -->
-        <ListBox ItemsSource="{CompiledBinding Messages}">
+        <ListBox ItemsSource="{CompiledBinding Messages}"
+             SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:OutputMessage">
                     <StackPanel Orientation="Horizontal" Spacing="8">

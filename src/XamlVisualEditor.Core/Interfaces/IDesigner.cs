@@ -1,3 +1,5 @@
+using XamlVisualEditor.Core;
+
 namespace XamlVisualEditor.Core.Interfaces;
 
 /// <summary>
@@ -97,8 +99,20 @@ public sealed class CompletionContext
     /// <summary>Gets the text before the caret (current line or relevant segment).</summary>
     public required string TextBefore { get; init; }
 
+    /// <summary>Gets the full document text when available.</summary>
+    public string? DocumentText { get; init; }
+
+    /// <summary>Gets the file path for the current document.</summary>
+    public string? FilePath { get; init; }
+
+    /// <summary>Gets the language identifier (e.g., "csharp", "xml").</summary>
+    public string? LanguageId { get; init; }
+
     /// <summary>Gets the trigger type.</summary>
     public required CompletionTrigger Trigger { get; init; }
+
+    /// <summary>Gets the trigger character when completion was triggered by typing.</summary>
+    public char? TriggerCharacter { get; init; }
 
     /// <summary>Gets the type metadata service for resolving types.</summary>
     public ITypeMetadataService? Metadata { get; init; }
@@ -117,6 +131,24 @@ public sealed class CompletionItem
 
     /// <summary>Gets an optional description.</summary>
     public string? Description { get; init; }
+
+    /// <summary>Gets an optional documentation string.</summary>
+    public string? Documentation { get; init; }
+
+    /// <summary>Gets an optional sort text override.</summary>
+    public string? SortText { get; init; }
+
+    /// <summary>Gets an optional filter text override.</summary>
+    public string? FilterText { get; init; }
+
+    /// <summary>Gets optional commit characters for this item.</summary>
+    public IReadOnlyList<char>? CommitCharacters { get; init; }
+
+    /// <summary>Gets whether this item represents a snippet.</summary>
+    public bool IsSnippet { get; init; }
+
+    /// <summary>Gets an optional text edit to apply instead of a simple insert.</summary>
+    public TextEdit? TextEdit { get; init; }
 
     /// <summary>Gets the sort priority (lower = higher priority).</summary>
     public int Priority { get; init; }
@@ -146,5 +178,47 @@ public enum CompletionItemKind
     MarkupExtension,
 
     /// <summary>A closing tag.</summary>
-    ClosingTag
+    ClosingTag,
+
+    /// <summary>A class symbol.</summary>
+    Class,
+
+    /// <summary>A struct symbol.</summary>
+    Struct,
+
+    /// <summary>An interface symbol.</summary>
+    Interface,
+
+    /// <summary>An enum symbol.</summary>
+    Enum,
+
+    /// <summary>A delegate symbol.</summary>
+    Delegate,
+
+    /// <summary>A namespace symbol.</summary>
+    NamespaceSymbol,
+
+    /// <summary>A method symbol.</summary>
+    Method,
+
+    /// <summary>A property symbol.</summary>
+    PropertySymbol,
+
+    /// <summary>A field symbol.</summary>
+    Field,
+
+    /// <summary>An event symbol.</summary>
+    Event,
+
+    /// <summary>A parameter symbol.</summary>
+    Parameter,
+
+    /// <summary>A local variable.</summary>
+    Variable,
+
+    /// <summary>A keyword completion.</summary>
+    Keyword,
+
+    /// <summary>A snippet completion.</summary>
+    Snippet
 }

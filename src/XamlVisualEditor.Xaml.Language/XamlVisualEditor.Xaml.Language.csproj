@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Xaml.Language</RootNamespace>
+    <Description>XAML language services (completion, diagnostics, hover)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
+  </ItemGroup>
+</Project>
