@@ -29,6 +29,8 @@ public sealed class RulerControl : Control
 
     private int _dragGuideIndex = -1;
     private bool _isDragging;
+    private System.Collections.Specialized.INotifyCollectionChanged? _guidesCollection;
+    private System.Collections.Specialized.NotifyCollectionChangedEventHandler? _guidesChangedHandler;
 
     public static readonly StyledProperty<RulerOrientation> OrientationProperty =
         AvaloniaProperty.Register<RulerControl, RulerOrientation>(
@@ -94,6 +96,23 @@ public sealed class RulerControl : Control
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
         PointerReleased += OnPointerReleased;
+        AttachGuidesCollection(Guides);
+    }
+
+    static RulerControl()
+    {
+        AffectsRender<RulerControl>(ZoomProperty, OffsetProperty, SelectionStartProperty, SelectionEndProperty, GuidesProperty);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == GuidesProperty)
+        {
+            AttachGuidesCollection(change.NewValue as IReadOnlyList<double>);
+            InvalidateVisual();
+        }
     }
 
     public override void Render(DrawingContext context)
@@ -321,6 +340,23 @@ public sealed class RulerControl : Control
         }
 
         return null;
+    }
+
+    private void AttachGuidesCollection(IReadOnlyList<double>? guides)
+    {
+        if (_guidesCollection is not null && _guidesChangedHandler is not null)
+        {
+            _guidesCollection.CollectionChanged -= _guidesChangedHandler;
+        }
+
+        _guidesCollection = guides as System.Collections.Specialized.INotifyCollectionChanged;
+        if (_guidesCollection is null)
+        {
+            return;
+        }
+
+        _guidesChangedHandler ??= (_, _) => InvalidateVisual();
+        _guidesCollection.CollectionChanged += _guidesChangedHandler;
     }
 
     private int FindNearestGuideIndex(IList<double> guides, double rulerPos)

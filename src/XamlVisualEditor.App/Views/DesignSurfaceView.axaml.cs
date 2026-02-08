@@ -320,14 +320,14 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void UpdateRulerOffsets()
     {
-        if (_scrollViewer is null || _canvas is null)
+        if (_scrollViewer is null)
         {
             return;
         }
 
         Point origin = GetCanvasOriginInScrollViewer();
-        double offsetX = _scrollViewer.Offset.X - origin.X;
-        double offsetY = _scrollViewer.Offset.Y - origin.Y;
+        double offsetX = -origin.X;
+        double offsetY = -origin.Y;
 
         if (_horizontalRuler is not null)
         {
@@ -1297,6 +1297,8 @@ public sealed partial class DesignSurfaceView : UserControl
         _scrollViewer.Offset = new Vector(
             _panStartOffset.X - delta.X,
             _panStartOffset.Y - delta.Y);
+        UpdateRulerOffsets();
+        RefreshSelectionAdorners();
     }
 
     private void EndPan()
