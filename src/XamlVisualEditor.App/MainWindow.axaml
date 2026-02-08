@@ -10,6 +10,7 @@
         Title="{CompiledBinding Title}"
     input:DragDrop.AllowDrop="True"
     v:FileDropBehavior.OpenFileCommand="{CompiledBinding OpenPathCommand}"
+    v:FileDropBehavior.OpenPathsCommand="{CompiledBinding OpenPathsCommand}"
         Width="1400"
         Height="900"
         WindowStartupLocation="CenterScreen"

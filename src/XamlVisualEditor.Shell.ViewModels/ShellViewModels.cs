@@ -204,7 +204,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         {
             if (SyncEngine.CurrentDocument is not null)
             {
-                SyncEngine.NotifyAstChanged(SyncEngine.CurrentDocument, SyncSource.DesignSurface);
+                SyncEngine.NotifyAstChanged(SyncEngine.CurrentDocument, SyncSource.PropertyEditor);
             }
         };
 
@@ -1459,6 +1459,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private WorkspaceModel? _workspace;
     private string? _workspacePath;
     private readonly Dictionary<string, IDockable> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _dockTitleSubscriptions = new();
     private bool _isClosingFromDock;
     private readonly ObservableAsPropertyHelper<int> _activeLine;
     private readonly ObservableAsPropertyHelper<int> _activeColumn;
@@ -1613,6 +1614,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenDocumentCommand { get; }
     public ReactiveCommand<string, Unit> OpenPathCommand { get; }
+    public ReactiveCommand<IReadOnlyList<string>, Unit> OpenPathsCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveDocumentCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveAllCommand { get; }
     public ReactiveCommand<Unit, Unit> ExitCommand { get; }
@@ -1721,6 +1723,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
         OpenDocumentCommand = ReactiveCommand.CreateFromTask(OpenDocumentAsync);
         OpenPathCommand = ReactiveCommand.CreateFromTask<string>(OpenFileAsync);
+        OpenPathsCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>>(OpenDroppedPathsAsync);
 
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
@@ -2021,7 +2024,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             .Subscribe(s => CollaborationStatusText = s);
         _disposables.Add(collaborationStatusSubscription);
 
-        SolutionExplorer.FileOpenRequested += path => { _ = OpenFileAsync(path); };
+        SolutionExplorer.FileOpenRequested += path => { _ = OpenFromSolutionExplorerAsync(path); };
 
         IDisposable activeDocumentTypeSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Subscribe(doc =>
@@ -2209,7 +2212,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         await System.IO.File.WriteAllTextAsync(targetPath, text);
 
-        await EnsureDocumentOpenAsync(targetPath, addRecent: true, updateStatus: false);
+        await EnsureDocumentOpenAsync(targetPath, addRecent: true, updateStatus: false, allowWorkspaceLoad: true);
         CloseDocument(doc);
         StatusText = $"Saved {System.IO.Path.GetFileName(targetPath)}";
         return true;
@@ -2362,7 +2365,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IEditorDocumentViewModel? doc = await EnsureDocumentOpenAsync(
             location.FilePath,
             addRecent: false,
-            updateStatus: false);
+            updateStatus: false,
+            allowWorkspaceLoad: true);
 
         if (doc is TextDocumentViewModel textDoc)
         {
@@ -2384,7 +2388,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IEditorDocumentViewModel? doc = await EnsureDocumentOpenAsync(
             message.FilePath,
             addRecent: false,
-            updateStatus: false);
+            updateStatus: false,
+            allowWorkspaceLoad: true);
 
         if (doc is TextDocumentViewModel textDoc)
         {
@@ -2625,7 +2630,47 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         if (dockDoc is not null)
         {
             _dockDocuments[document.FilePath] = dockDoc;
+            UpdateDockTitle(document, dockDoc);
+            SubscribeDockTitleUpdates(document, dockDoc);
         }
+    }
+
+    private void UpdateDockTitle(IEditorDocumentViewModel document, IDockable dockDoc)
+    {
+        dockDoc.Title = GetDockTitle(document);
+    }
+
+    private string GetDockTitle(IEditorDocumentViewModel document)
+    {
+        return document switch
+        {
+            DesignerDocumentViewModel designer => designer.Title,
+            TextDocumentViewModel text => text.IsModified ? $"{text.FileName}*" : text.FileName,
+            _ => document.IsModified ? $"{document.FileName}*" : document.FileName
+        };
+    }
+
+    private void SubscribeDockTitleUpdates(IEditorDocumentViewModel document, IDockable dockDoc)
+    {
+        if (document is not INotifyPropertyChanged notifying)
+        {
+            return;
+        }
+
+        if (_dockTitleSubscriptions.TryGetValue(document, out IDisposable? existing))
+        {
+            existing.Dispose();
+        }
+
+        IDisposable subscription = Observable.FromEventPattern<PropertyChangedEventHandler, PropertyChangedEventArgs>(
+                h => notifying.PropertyChanged += h,
+                h => notifying.PropertyChanged -= h)
+            .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) ||
+                        e.EventArgs.PropertyName == nameof(IEditorDocumentViewModel.IsModified))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(_ => UpdateDockTitle(document, dockDoc));
+
+        _dockTitleSubscriptions[document] = subscription;
     }
 
     private void SetActiveDockDocument(IEditorDocumentViewModel document)
@@ -2738,6 +2783,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             CloseDockDocument(doc);
         }
 
+        if (_dockTitleSubscriptions.Remove(doc, out IDisposable? subscription))
+        {
+            subscription.Dispose();
+        }
+
         InfiniteCanvas.RemoveOpenDocumentItem(doc);
         Documents.Remove(doc);
         if (ReferenceEquals(ActiveDocument, doc))
@@ -2754,13 +2804,40 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async System.Threading.Tasks.Task OpenFileAsync(string filePath)
     {
-        await EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true);
+        await EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: true);
+    }
+
+    private async System.Threading.Tasks.Task OpenFromSolutionExplorerAsync(string filePath)
+    {
+        await EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: false);
+    }
+
+    private async System.Threading.Tasks.Task OpenDroppedPathsAsync(IReadOnlyList<string> paths)
+    {
+        if (paths is null || paths.Count == 0)
+        {
+            return;
+        }
+
+        if (paths.Count == 1)
+        {
+            await OpenFileAsync(paths[0]);
+            return;
+        }
+
+        foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            await EnsureDocumentOpenAsync(path, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
+        }
+
+        StatusText = $"Opened {paths.Count} files";
     }
 
     private async System.Threading.Tasks.Task<IEditorDocumentViewModel?> EnsureDocumentOpenAsync(
         string filePath,
         bool addRecent,
-        bool updateStatus)
+        bool updateStatus,
+        bool allowWorkspaceLoad)
     {
         if (!System.IO.File.Exists(filePath))
         {
@@ -2770,9 +2847,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         string extension = System.IO.Path.GetExtension(filePath);
-        if (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+        if (allowWorkspaceLoad && (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
             extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) ||
-            extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+            extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase)))
         {
             await LoadWorkspaceAsync(filePath);
             if (addRecent)
@@ -2782,8 +2859,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             return null;
         }
 
-        if (extension.Equals(".xaml", StringComparison.OrdinalIgnoreCase) ||
-            extension.Equals(".axaml", StringComparison.OrdinalIgnoreCase))
+        if (allowWorkspaceLoad && (extension.Equals(".xaml", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".axaml", StringComparison.OrdinalIgnoreCase)))
         {
             await TryLoadWorkspaceForXamlAsync(filePath);
         }

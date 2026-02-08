@@ -91,51 +91,49 @@ public sealed class CanvasFileDropBehavior
     {
         paths = null;
         IDataTransfer data = e.DataTransfer;
-        object? value = null;
+        List<string> candidatePaths = new();
+
         if (data.Contains(DataFormat.File))
         {
-            value = data.TryGetValue(DataFormat.File);
-        }
-        else if (data.Contains(DataFormat.Text))
-        {
-            value = data.TryGetValue(DataFormat.Text);
-        }
-
-        if (value is null)
-        {
-            return false;
-        }
-
-        List<string> candidatePaths = new();
-        if (value is string text)
-        {
-            string[] parts = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (string part in parts)
+            object? value = data.TryGetValue(DataFormat.File);
+            if (value is IEnumerable<string> pathList)
             {
-                string trimmed = part.Trim();
-                if (trimmed.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                candidatePaths.AddRange(pathList);
+            }
+            else if (value is IStorageItem item)
+            {
+                candidatePaths.Add(item.Path.LocalPath);
+            }
+            else if (value is IEnumerable<IStorageItem> items)
+            {
+                foreach (IStorageItem storageItem in items)
                 {
-                    if (Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri))
-                    {
-                        candidatePaths.Add(uri.LocalPath);
-                        continue;
-                    }
+                    candidatePaths.Add(storageItem.Path.LocalPath);
                 }
-
-                candidatePaths.Add(trimmed);
             }
         }
-        else if (value is IEnumerable<string> pathList)
+
+        if (data.Contains(DataFormat.Text))
         {
-            candidatePaths.AddRange(pathList);
-        }
-        else if (value is IStorageItem item)
-        {
-            candidatePaths.Add(item.Path.LocalPath);
-        }
-        else if (value is IEnumerable<IStorageItem> list)
-        {
-            candidatePaths.AddRange(list.Select(storage => storage.Path.LocalPath));
+            object? textValue = data.TryGetValue(DataFormat.Text);
+            if (textValue is string text)
+            {
+                string[] parts = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string part in parts)
+                {
+                    string trimmed = part.Trim();
+                    if (trimmed.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri))
+                        {
+                            candidatePaths.Add(uri.LocalPath);
+                            continue;
+                        }
+                    }
+
+                    candidatePaths.Add(trimmed);
+                }
+            }
         }
 
         if (candidatePaths.Count == 0)
