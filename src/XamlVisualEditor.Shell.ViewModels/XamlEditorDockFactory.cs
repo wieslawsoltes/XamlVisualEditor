@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Reactive.Linq;
+using Dock.Avalonia.Controls;
 using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.ReactiveUI;
@@ -260,6 +261,31 @@ public sealed class TextDocument : Document
 }
 
 /// <summary>
+/// Dock document for the infinite editor canvas.
+/// </summary>
+public sealed class InfiniteCanvasDocument : Document
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public InfiniteCanvasViewModel? CanvasViewModel { get; set; }
+
+    public InfiniteCanvasDocument()
+    {
+        Id = "InfiniteCanvas";
+        Title = "Canvas";
+        CanClose = true;
+    }
+
+    public InfiniteCanvasDocument(InfiniteCanvasViewModel canvasViewModel)
+    {
+        CanvasViewModel = canvasViewModel;
+        Id = "InfiniteCanvas";
+        Title = "Canvas";
+        CanClose = true;
+    }
+}
+
+/// <summary>
 /// Factory that creates the default VS/Blend-style docking layout.
 /// </summary>
 public sealed class XamlEditorDockFactory : Factory
@@ -328,13 +354,16 @@ public sealed class XamlEditorDockFactory : Factory
         };
 
         // Document dock (center)
+        InfiniteCanvasDocument canvasDocument = new(_mainVm.InfiniteCanvas);
         DocumentDock documentDock = new()
         {
             Id = "DocumentDock",
             Title = "Documents",
             IsCollapsable = false,
-            VisibleDockables = CreateList<IDockable>(),
-            CanCreateDocument = false
+            VisibleDockables = CreateList<IDockable>(canvasDocument),
+            ActiveDockable = canvasDocument,
+            CanCreateDocument = false,
+            EnableWindowDrag = true
         };
 
         // Main layout: Left | (Center / Bottom) | Right
@@ -430,6 +459,28 @@ public sealed class XamlEditorDockFactory : Factory
         }
     }
 
+    /// <summary>
+    /// Ensures deserialized documents have their view model references wired.
+    /// </summary>
+    public void ConfigureDocumentViewModels(IRootDock rootDock)
+    {
+        InfiniteCanvasDocument? canvasDoc = FindDockable<InfiniteCanvasDocument>(rootDock, "InfiniteCanvas");
+        if (canvasDoc is not null)
+        {
+            canvasDoc.CanvasViewModel = _mainVm.InfiniteCanvas;
+        }
+    }
+
+    public override void InitLayout(IDockable layout)
+    {
+        HostWindowLocator = new Dictionary<string, Func<IHostWindow?>>
+        {
+            [nameof(IDockWindow)] = () => new HostWindow()
+        };
+
+        base.InitLayout(layout);
+    }
+
     public void EnsureOwnerReferences(IRootDock rootDock)
     {
         SetOwnerRecursive(rootDock, null);
@@ -458,6 +509,22 @@ public sealed class XamlEditorDockFactory : Factory
     public TextDocument? AddTextDocument(IRootDock rootDock, TextDocumentViewModel documentVm)
     {
         TextDocument doc = new(documentVm);
+
+        DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
+        if (docDock is not null)
+        {
+            AddDockable(docDock, doc);
+            SetActiveDockable(doc);
+            SetFocusedDockable(docDock, doc);
+            return doc;
+        }
+
+        return null;
+    }
+
+    public InfiniteCanvasDocument? AddCanvasDocument(IRootDock rootDock, InfiniteCanvasViewModel canvasViewModel)
+    {
+        InfiniteCanvasDocument doc = new(canvasViewModel);
 
         DocumentDock? docDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
         if (docDock is not null)
@@ -587,6 +654,7 @@ public sealed class XamlEditorDockFactory : Factory
         rootDock.RightPinnedDockables ??= new ObservableCollection<IDockable>();
         rootDock.TopPinnedDockables ??= new ObservableCollection<IDockable>();
         rootDock.BottomPinnedDockables ??= new ObservableCollection<IDockable>();
+        rootDock.Windows ??= new ObservableCollection<IDockWindow>();
 
         if (rootDock.PinnedDock is null)
         {

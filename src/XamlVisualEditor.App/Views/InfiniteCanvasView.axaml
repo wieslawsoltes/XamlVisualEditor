@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:v="using:XamlVisualEditor.App.Views"
+             xmlns:dock="using:Dock.Avalonia.Controls"
+             x:Class="XamlVisualEditor.App.Views.InfiniteCanvasView"
+             x:DataType="vm:InfiniteCanvasViewModel">
+  <DockPanel>
+    <Border DockPanel.Dock="Top"
+            Background="#1A1A1A"
+            BorderBrush="#2A2A2A"
+            BorderThickness="0,0,0,1"
+            Padding="8,6">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ComboBox Width="260"
+                  ItemsSource="{CompiledBinding OpenDocuments}"
+                  SelectedItem="{CompiledBinding SelectedOpenDocument, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:OpenDocumentEntry">
+              <TextBlock Text="{CompiledBinding DisplayName}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Add Open Doc"
+                Command="{CompiledBinding AddOpenDocumentCommand}"
+                CommandParameter="{CompiledBinding SelectedOpenDocument}" />
+        <Button Content="Add All Open Docs"
+                Command="{CompiledBinding AddAllOpenDocumentsCommand}" />
+      </StackPanel>
+    </Border>
+
+    <dock:DockControl Layout="{CompiledBinding DockLayout}"
+                      Factory="{CompiledBinding DockFactory}"
+                      v:CanvasFileDropBehavior.DropCommand="{CompiledBinding DropFilesCommand}" />
+  </DockPanel>
+</UserControl>

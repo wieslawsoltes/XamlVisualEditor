@@ -29,6 +29,12 @@ public sealed class ViewLocator : IDataTemplate
                     return new DesignerDocumentView { DataContext = doc.DocumentViewModel };
                 case TextDocument doc:
                     return new TextFileView { DataContext = doc.DocumentViewModel };
+                case InfiniteCanvasDocument doc:
+                    return new InfiniteCanvasView { DataContext = doc.CanvasViewModel };
+                case CanvasMdiDocument doc when doc.DocumentViewModel is DesignerDocumentViewModel designer:
+                    return new DesignerDocumentView { DataContext = designer };
+                case CanvasMdiDocument doc when doc.DocumentViewModel is TextDocumentViewModel text:
+                    return new TextFileView { DataContext = text };
                 case ToolboxTool tool:
                     return new ToolboxView { DataContext = tool.ToolboxViewModel };
                 case SolutionExplorerTool tool:
@@ -56,6 +62,7 @@ public sealed class ViewLocator : IDataTemplate
             ReferencesViewModel => new ReferencesView(),
             CodeEditorViewModel => new XamlCodeEditorView(),
             TextDocumentViewModel => new TextFileView(),
+            InfiniteCanvasViewModel => new InfiniteCanvasView(),
             DesignSurfaceViewModel => new DesignSurfaceView(),
             PropertyEditorViewModel => new PropertyEditorView(),
             CollaborationPanelViewModel => new CollaborationPanelView(),
@@ -76,6 +83,7 @@ public sealed class ViewLocator : IDataTemplate
             or ReferencesViewModel
             or CodeEditorViewModel
             or TextDocumentViewModel
+            or InfiniteCanvasViewModel
             or DesignSurfaceViewModel
             or PropertyEditorViewModel
             or CollaborationPanelViewModel

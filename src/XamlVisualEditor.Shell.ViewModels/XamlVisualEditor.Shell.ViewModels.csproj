@@ -4,6 +4,7 @@
     <Description>Top-level ViewModels: MainWindow, Document, Toolbox, Output, and tool panel management</Description>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Dock.Avalonia" />
     <PackageReference Include="Dock.Model.ReactiveUI" />
     <PackageReference Include="Dock.Serializer.SystemTextJson" />
     <PackageReference Include="ReactiveUI" />

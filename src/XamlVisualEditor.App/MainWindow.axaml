@@ -87,6 +87,8 @@
                 <MenuItem Header="_Output" Command="{CompiledBinding ToggleOutputCommand}" />
                 <MenuItem Header="_References" Command="{CompiledBinding ToggleReferencesCommand}" />
                 <Separator />
+                <MenuItem Header="Document _Canvas" Command="{CompiledBinding OpenCanvasCommand}" />
+                <Separator />
                 <MenuItem Header="Reset _Layout" Command="{CompiledBinding ResetLayoutCommand}" />
             </MenuItem>
             <MenuItem Header="_Tools">

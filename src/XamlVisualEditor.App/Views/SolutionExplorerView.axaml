@@ -22,23 +22,20 @@
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
                 CanUserSortColumns="True"
-                IsReadOnly="True">
+                IsReadOnly="True"
+                v:SolutionExplorerDragBehavior.IsEnabled="True"
+                v:SolutionExplorerOpenBehavior.IsEnabled="True">
+      <dg:DataGrid.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="Open"
+                    Command="{CompiledBinding SelectedNode.OpenCommand}"
+                    IsEnabled="{CompiledBinding SelectedNode.Kind, Converter={x:Static v:SolutionExplorerConverters.IsOpenableFile}}" />
+        </ContextMenu>
+      </dg:DataGrid.ContextMenu>
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:SolutionExplorerNodeViewModel" x:DataType="vm:SolutionExplorerNodeViewModel">
           <Grid>
-            <Button Command="{CompiledBinding OpenCommand}"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Padding="0"
-                    IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsOpenableFile}}">
-              <StackPanel Orientation="Horizontal" Spacing="4">
-                <TextBlock Text="{CompiledBinding Icon}" />
-                <TextBlock Text="{CompiledBinding Name}" />
-              </StackPanel>
-            </Button>
-
-            <StackPanel Orientation="Horizontal" Spacing="4"
-                        IsVisible="{CompiledBinding Kind, Converter={x:Static v:SolutionExplorerConverters.IsNotOpenableFile}}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
               <TextBlock Text="{CompiledBinding Icon}" />
               <TextBlock Text="{CompiledBinding Name}" />
             </StackPanel>

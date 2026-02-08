@@ -1454,6 +1454,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly ObservableAsPropertyHelper<int> _activeLine;
     private readonly ObservableAsPropertyHelper<int> _activeColumn;
     private bool _isLoadingRecentFiles;
+    private InfiniteCanvasDocument? _canvasDocument;
 
     /// <summary>
     /// Gets the open documents.
@@ -1495,6 +1496,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// Gets the references ViewModel.
     /// </summary>
     public ReferencesViewModel References { get; }
+
+    /// <summary>
+    /// Gets the infinite canvas ViewModel.
+    /// </summary>
+    public InfiniteCanvasViewModel InfiniteCanvas { get; }
 
     /// <summary>
     /// Gets or sets the save behavior for XAML changes.
@@ -1628,6 +1634,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleReferencesCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleCollaborationCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
 
     // Help Commands
     public ReactiveCommand<Unit, Unit> AboutCommand { get; }
@@ -1652,6 +1659,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _metadataService = metadataService;
         _languageRegistry = languageRegistry;
 
+        InfiniteCanvas = new InfiniteCanvasViewModel(_languageRegistry);
+
         References = new ReferencesViewModel(async item =>
         {
             LanguageLocation location = new()
@@ -1670,7 +1679,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DockFactory.InitLayout(layout);
         DockFactory.EnsureOwnerReferences(layout);
         DockFactory.ConfigureToolViewModels(layout);
+        DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+        EnsureCanvasDocument();
         WireDockEvents();
 
         IObservable<int> activeLine = this.WhenAnyValue(x => x.ActiveDocument)
@@ -1694,6 +1705,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             AddDocumentToDock(doc);
         }
+
+        InfiniteCanvas.UpdateOpenDocuments(Documents);
+        Documents.CollectionChanged += (_, _) => InfiniteCanvas.UpdateOpenDocuments(Documents);
 
         // File commands
         NewDocumentCommand = ReactiveCommand.CreateFromTask(NewDocumentAsync);
@@ -1868,6 +1882,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             SetDockableVisibility("Collaboration", IsCollaborationVisible);
         });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
+        OpenCanvasCommand = ReactiveCommand.Create(ShowCanvasDocument);
 
         // Help commands
         AboutCommand = ReactiveCommand.Create(() =>
@@ -2401,7 +2416,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
         DockFactory.ConfigureToolViewModels(layout);
+        DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+
+        EnsureCanvasDocument();
 
         // Delete persisted layout so it reloads default on next start
         try
@@ -2419,6 +2437,33 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         StatusText = "Layout reset";
+    }
+
+    private void EnsureCanvasDocument()
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        InfiniteCanvasDocument? existing = XamlEditorDockFactory.FindDockable<InfiniteCanvasDocument>(DockLayout, "InfiniteCanvas");
+        if (existing is not null)
+        {
+            existing.CanvasViewModel = InfiniteCanvas;
+            _canvasDocument = existing;
+            return;
+        }
+
+        _canvasDocument = DockFactory.AddCanvasDocument(DockLayout, InfiniteCanvas);
+    }
+
+    private void ShowCanvasDocument()
+    {
+        EnsureCanvasDocument();
+        if (_canvasDocument is not null)
+        {
+            DockFactory.SetActiveDockable(_canvasDocument);
+        }
     }
 
     private void UpdateTrees(DesignerDocumentViewModel? doc)
@@ -2618,6 +2663,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             CloseDockDocument(doc);
         }
 
+        InfiniteCanvas.RemoveOpenDocumentItem(doc);
         Documents.Remove(doc);
         if (ReferenceEquals(ActiveDocument, doc))
         {
@@ -3262,6 +3308,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     {
         _disposables.Dispose();
         Collaboration.Dispose();
+        InfiniteCanvas.Dispose();
         _assemblyResolver?.Dispose();
 
         foreach (IDisposable subscription in _autoSaveSubscriptions.Values)
@@ -3354,7 +3401,6 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
         {
             SolutionExplorerNodeViewModel projectNode = new(
                 project.Name, "📦", SolutionExplorerNodeKind.Project, project.ProjectPath);
-            projectNode.IsExpanded = true;
 
             SolutionExplorerNodeViewModel projectParent = root;
             if (workspace.ProjectFolders.TryGetValue(project.ProjectPath, out string? folderPath) &&
@@ -3445,7 +3491,6 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
             if (!folderNodes.TryGetValue(currentPath, out SolutionExplorerNodeViewModel? node))
             {
                 node = new SolutionExplorerNodeViewModel(segment, "📁", SolutionExplorerNodeKind.SolutionFolder);
-                node.IsExpanded = true;
                 folderNodes[currentPath] = node;
                 current.Children.Add(node);
             }
@@ -3582,8 +3627,32 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
     public void LoadWorkspace(WorkspaceModel workspace, string? solutionName = null)
     {
         Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName);
+        CollapseAll(Root);
         WireFileOpen(Root);
         SetRoot(Root);
+    }
+
+    private void CollapseAll(SolutionExplorerNodeViewModel? root)
+    {
+        if (root is null)
+        {
+            return;
+        }
+
+        root.IsExpanded = true;
+        foreach (SolutionExplorerNodeViewModel child in root.Children)
+        {
+            CollapseNode(child);
+        }
+    }
+
+    private void CollapseNode(SolutionExplorerNodeViewModel node)
+    {
+        node.IsExpanded = false;
+        foreach (SolutionExplorerNodeViewModel child in node.Children)
+        {
+            CollapseNode(child);
+        }
     }
 
     private void SetRoot(SolutionExplorerNodeViewModel? root)
