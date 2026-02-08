@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -13,15 +12,6 @@ public sealed class FileDropBehavior
 {
     public static readonly AttachedProperty<ICommand?> OpenFileCommandProperty =
         AvaloniaProperty.RegisterAttached<FileDropBehavior, Control, ICommand?>("OpenFileCommand");
-
-    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".xaml",
-        ".axaml",
-        ".sln",
-        ".slnx",
-        ".csproj"
-    };
 
     static FileDropBehavior()
     {
@@ -106,19 +96,7 @@ public sealed class FileDropBehavior
             return false;
         }
 
-        string path = file.Path.LocalPath;
-        if (IsSupportedPath(path))
-        {
-            filePath = path;
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsSupportedPath(string path)
-    {
-        string extension = System.IO.Path.GetExtension(path);
-        return SupportedExtensions.Contains(extension);
+        filePath = file.Path.LocalPath;
+        return !string.IsNullOrWhiteSpace(filePath);
     }
 }

@@ -43,30 +43,6 @@ public static class ViewModeConverters
     public static readonly IValueConverter ShowCode =
         new ViewModeSetConverter(DocumentViewMode.Code, DocumentViewMode.Split);
 
-    /// <summary>Row length for the designer panel.</summary>
-    public static readonly IMultiValueConverter DesignerRowLength =
-        new SplitLengthConverter(SplitLengthRole.Design, SplitLengthAxis.Row);
-
-    /// <summary>Row length for the splitter between panels.</summary>
-    public static readonly IMultiValueConverter SplitterRowLength =
-        new SplitLengthConverter(SplitLengthRole.Splitter, SplitLengthAxis.Row);
-
-    /// <summary>Row length for the code editor panel.</summary>
-    public static readonly IMultiValueConverter CodeRowLength =
-        new SplitLengthConverter(SplitLengthRole.Code, SplitLengthAxis.Row);
-
-    /// <summary>Column length for the designer panel.</summary>
-    public static readonly IMultiValueConverter DesignerColumnLength =
-        new SplitLengthConverter(SplitLengthRole.Design, SplitLengthAxis.Column);
-
-    /// <summary>Column length for the splitter between panels.</summary>
-    public static readonly IMultiValueConverter SplitterColumnLength =
-        new SplitLengthConverter(SplitLengthRole.Splitter, SplitLengthAxis.Column);
-
-    /// <summary>Column length for the code editor panel.</summary>
-    public static readonly IMultiValueConverter CodeColumnLength =
-        new SplitLengthConverter(SplitLengthRole.Code, SplitLengthAxis.Column);
-
     /// <summary>Row index for the designer panel.</summary>
     public static readonly IMultiValueConverter DesignerRowIndex =
         new SplitIndexConverter(SplitLengthRole.Design, SplitLengthAxis.Row);
@@ -99,6 +75,22 @@ public static class ViewModeConverters
     public static readonly IMultiValueConverter ShowHorizontalSplitter =
         new SplitterVisibilityConverter(Orientation.Horizontal);
 
+    /// <summary>Row span for the designer panel.</summary>
+    public static readonly IMultiValueConverter DesignerRowSpan =
+        new SplitSpanConverter(SplitLengthRole.Design, SplitLengthAxis.Row);
+
+    /// <summary>Column span for the designer panel.</summary>
+    public static readonly IMultiValueConverter DesignerColumnSpan =
+        new SplitSpanConverter(SplitLengthRole.Design, SplitLengthAxis.Column);
+
+    /// <summary>Row span for the code editor panel.</summary>
+    public static readonly IMultiValueConverter CodeRowSpan =
+        new SplitSpanConverter(SplitLengthRole.Code, SplitLengthAxis.Row);
+
+    /// <summary>Column span for the code editor panel.</summary>
+    public static readonly IMultiValueConverter CodeColumnSpan =
+        new SplitSpanConverter(SplitLengthRole.Code, SplitLengthAxis.Column);
+
     private sealed class ViewModeEqualityConverter : IValueConverter
     {
         private readonly DocumentViewMode _target;
@@ -130,58 +122,6 @@ public static class ViewModeConverters
             => Avalonia.Data.BindingOperations.DoNothing;
     }
 
-    private sealed class SplitLengthConverter : IMultiValueConverter
-    {
-        private readonly SplitLengthRole _role;
-        private readonly SplitLengthAxis _axis;
-
-        public SplitLengthConverter(SplitLengthRole role, SplitLengthAxis axis)
-        {
-            _role = role;
-            _axis = axis;
-        }
-
-        public object Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
-        {
-            DocumentViewMode mode = values.Count > 0 && values[0] is DocumentViewMode m
-                ? m
-                : DocumentViewMode.Split;
-            Orientation orientation = values.Count > 1 && values[1] is Orientation o
-                ? o
-                : Orientation.Vertical;
-
-            bool useColumns = mode == DocumentViewMode.Split && orientation == Orientation.Horizontal;
-            if ((_axis == SplitLengthAxis.Column && !useColumns) || (_axis == SplitLengthAxis.Row && useColumns))
-            {
-                return _role == SplitLengthRole.Design
-                    ? new GridLength(1, GridUnitType.Star)
-                    : new GridLength(0, GridUnitType.Pixel);
-            }
-
-            return mode switch
-            {
-                DocumentViewMode.Design => _role switch
-                {
-                    SplitLengthRole.Design => new GridLength(1, GridUnitType.Star),
-                    _ => new GridLength(0, GridUnitType.Pixel)
-                },
-                DocumentViewMode.Code => _role switch
-                {
-                    SplitLengthRole.Code => new GridLength(1, GridUnitType.Star),
-                    _ => new GridLength(0, GridUnitType.Pixel)
-                },
-                DocumentViewMode.Split => _role switch
-                {
-                    SplitLengthRole.Design => new GridLength(1, GridUnitType.Star),
-                    SplitLengthRole.Splitter => GridLength.Auto,
-                    SplitLengthRole.Code => new GridLength(1, GridUnitType.Star),
-                    _ => new GridLength(0, GridUnitType.Pixel)
-                },
-                _ => new GridLength(1, GridUnitType.Star)
-            };
-        }
-    }
-
     private sealed class SplitIndexConverter : IMultiValueConverter
     {
         private readonly SplitLengthRole _role;
@@ -202,13 +142,18 @@ public static class ViewModeConverters
                 ? o
                 : Orientation.Vertical;
 
-            bool useColumns = mode == DocumentViewMode.Split && orientation == Orientation.Horizontal;
-            if (_axis == SplitLengthAxis.Row)
+            if (mode != DocumentViewMode.Split)
             {
-                return useColumns ? 0 : GetRoleIndex(_role);
+                return 0;
             }
 
-            return useColumns ? GetRoleIndex(_role) : 0;
+            bool horizontal = orientation == Orientation.Horizontal;
+            if (_axis == SplitLengthAxis.Row)
+            {
+                return horizontal ? 0 : GetRoleIndex(_role);
+            }
+
+            return horizontal ? GetRoleIndex(_role) : 0;
         }
     }
 
@@ -247,6 +192,46 @@ public static class ViewModeConverters
             }
 
             return values[1] is Orientation orientation && orientation == _target;
+        }
+    }
+
+    private sealed class SplitSpanConverter : IMultiValueConverter
+    {
+        private readonly SplitLengthRole _role;
+        private readonly SplitLengthAxis _axis;
+
+        public SplitSpanConverter(SplitLengthRole role, SplitLengthAxis axis)
+        {
+            _role = role;
+            _axis = axis;
+        }
+
+        public object Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
+        {
+            DocumentViewMode mode = values.Count > 0 && values[0] is DocumentViewMode m
+                ? m
+                : DocumentViewMode.Split;
+            Orientation orientation = values.Count > 1 && values[1] is Orientation o
+                ? o
+                : Orientation.Vertical;
+
+            if (mode == DocumentViewMode.Design)
+            {
+                return _role == SplitLengthRole.Design ? 3 : 1;
+            }
+
+            if (mode == DocumentViewMode.Code)
+            {
+                return _role == SplitLengthRole.Code ? 3 : 1;
+            }
+
+            bool horizontal = orientation == Orientation.Horizontal;
+            if (_axis == SplitLengthAxis.Row)
+            {
+                return horizontal ? 3 : 1;
+            }
+
+            return horizontal ? 1 : 3;
         }
     }
 

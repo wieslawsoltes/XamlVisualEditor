@@ -16,20 +16,6 @@ public sealed class CanvasFileDropBehavior
     public static readonly AttachedProperty<ICommand?> DropCommandProperty =
         AvaloniaProperty.RegisterAttached<CanvasFileDropBehavior, Control, ICommand?>("DropCommand");
 
-    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".xaml",
-        ".axaml",
-        ".cs",
-        ".csx",
-        ".json",
-        ".xml",
-        ".txt",
-        ".md",
-        ".yaml",
-        ".yml"
-    };
-
     static CanvasFileDropBehavior()
     {
         DropCommandProperty.Changed.AddClassHandler<Control>(OnDropCommandChanged);
@@ -157,16 +143,11 @@ public sealed class CanvasFileDropBehavior
             return false;
         }
 
-        List<string> filtered = candidatePaths
+        paths = candidatePaths
             .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Where(path => SupportedExtensions.Contains(System.IO.Path.GetExtension(path)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        if (filtered.Count == 0)
-        {
-            return false;
-        }
 
-        paths = filtered;
-        return true;
+        return paths.Count > 0;
     }
 }

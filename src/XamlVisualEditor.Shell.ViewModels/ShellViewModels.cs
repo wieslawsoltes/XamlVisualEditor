@@ -2133,6 +2133,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         if (ActiveDocument is not null)
         {
+            if (!HasWorkspace && IsUntitledDocument(ActiveDocument))
+            {
+                bool saved = await TrySaveUntitledDocumentAsync(ActiveDocument);
+                if (!saved)
+                {
+                    return;
+                }
+
+                return;
+            }
+
             await ActiveDocument.SaveCommand.Execute();
             StatusText = $"Saved {ActiveDocument.FileName}";
         }
@@ -2146,14 +2157,72 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        foreach (IEditorDocumentViewModel doc in Documents)
+        foreach (IEditorDocumentViewModel doc in Documents.ToList())
         {
             if (doc.IsModified)
             {
+                if (!HasWorkspace && IsUntitledDocument(doc))
+                {
+                    bool saved = await TrySaveUntitledDocumentAsync(doc);
+                    if (!saved)
+                    {
+                        continue;
+                    }
+
+                    continue;
+                }
+
                 await doc.SaveCommand.Execute();
             }
         }
         StatusText = "All documents saved";
+    }
+
+    private static bool IsUntitledDocument(IEditorDocumentViewModel doc)
+    {
+        string tempRoot = System.IO.Path.GetTempPath();
+        if (!doc.FilePath.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string name = System.IO.Path.GetFileNameWithoutExtension(doc.FilePath);
+        return name.StartsWith("Untitled-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async System.Threading.Tasks.Task<bool> TrySaveUntitledDocumentAsync(IEditorDocumentViewModel doc)
+    {
+        string suggestedName = doc.FileName;
+        string? targetPath = await SaveFileInteraction.Handle(suggestedName);
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            StatusText = "Save canceled";
+            return false;
+        }
+
+        string? text = GetDocumentText(doc);
+        if (text is null)
+        {
+            StatusText = "Save failed: no document content";
+            return false;
+        }
+
+        await System.IO.File.WriteAllTextAsync(targetPath, text);
+
+        await EnsureDocumentOpenAsync(targetPath, addRecent: true, updateStatus: false);
+        CloseDocument(doc);
+        StatusText = $"Saved {System.IO.Path.GetFileName(targetPath)}";
+        return true;
+    }
+
+    private static string? GetDocumentText(IEditorDocumentViewModel doc)
+    {
+        return doc switch
+        {
+            DesignerDocumentViewModel designer => designer.SyncEngine.CurrentText ?? designer.CodeEditor.Document.Text,
+            TextDocumentViewModel text => text.Document.Text,
+            _ => null
+        };
     }
 
     private async System.Threading.Tasks.Task GoToDefinitionAsync()
