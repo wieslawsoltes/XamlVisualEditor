@@ -7,7 +7,10 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reflection;
 using System.Reflection.PortableExecutable;
+using System.Runtime.Loader;
+using System.ComponentModel;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -179,7 +182,8 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 ProjectPath = project.FilePath ?? string.Empty,
                 XamlFiles = xamlFiles.Values.ToList(),
                 Files = files.Values.ToList(),
-                References = references
+                References = references,
+                OutputAssemblyPath = project.OutputFilePath
             });
         }
 
@@ -260,7 +264,8 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             ProjectPath = project.FilePath ?? string.Empty,
             XamlFiles = xamlFiles.Values.ToList(),
             Files = files.Values.ToList(),
-            References = references
+            References = references,
+            OutputAssemblyPath = project.OutputFilePath
         };
 
         return new WorkspaceModel
@@ -741,6 +746,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     private readonly Dictionary<string, TypeMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<System.Reflection.Assembly> _loadedAssemblies = new();
     private readonly HashSet<string> _loadedAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<XmlnsDefinition>> _xmlnsMappings = new(StringComparer.OrdinalIgnoreCase);
 
     public TypeMetadataService()
     {
@@ -782,9 +788,48 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null)
     {
-        // In a full implementation, this would resolve xmlns URIs to CLR namespaces
-        // and return all types from those namespaces
-        return Array.Empty<TypeMetadata>();
+        if (string.IsNullOrWhiteSpace(xmlNamespace))
+        {
+            return Array.Empty<TypeMetadata>();
+        }
+
+        List<TypeMetadata> results = new();
+        if (_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
+        {
+            foreach (XmlnsDefinition mapping in mappings)
+            {
+                foreach (System.Reflection.Assembly asm in _loadedAssemblies)
+                {
+                    string? asmName = asm.GetName().Name;
+                    if (!string.Equals(asmName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    Type[] exportedTypes;
+                    try
+                    {
+                        exportedTypes = asm.GetExportedTypes();
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    foreach (Type type in exportedTypes)
+                    {
+                        if (!string.Equals(type.Namespace, mapping.ClrNamespace, StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        results.Add(BuildMetadata(type));
+                    }
+                }
+            }
+        }
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -799,13 +844,15 @@ public sealed class TypeMetadataService : ITypeMetadataService
         List<PropertyMetadata> properties = new();
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
 
-        foreach ((Avalonia.AvaloniaProperty prop, Type ownerType) in GetAvaloniaProperties(clrType))
+        foreach ((Avalonia.AvaloniaProperty prop, Type ownerType, System.Reflection.FieldInfo field) in GetAvaloniaProperties(clrType))
         {
             string name = prop.IsAttached ? $"{ownerType.Name}.{prop.Name}" : prop.Name;
             if (!seen.Add(name))
             {
                 continue;
             }
+
+            (string category, string? description) = GetCategoryAndDescription(field);
 
             properties.Add(new PropertyMetadata
             {
@@ -816,7 +863,9 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 DefaultValue = TryGetDefaultValue(prop, ownerType),
                 ClrType = prop.PropertyType,
                 IsAttached = prop.IsAttached,
-                OwnerType = prop.IsAttached ? ownerType.FullName : null
+                OwnerType = prop.IsAttached ? ownerType.FullName : null,
+                Category = category,
+                Description = description
             });
         }
 
@@ -843,13 +892,17 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 continue;
             }
 
+            (string category, string? description) = GetCategoryAndDescription(prop);
+
             properties.Add(new PropertyMetadata
             {
                 Name = prop.Name,
                 TypeFullName = prop.PropertyType.FullName ?? prop.PropertyType.Name,
                 Kind = MapValueKind(prop.PropertyType),
                 IsReadOnly = !prop.CanWrite,
-                ClrType = prop.PropertyType
+                ClrType = prop.PropertyType,
+                Category = category,
+                Description = description
             });
         }
 
@@ -882,8 +935,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
     /// <inheritdoc />
     public IReadOnlyList<string> GetAvailableNamespaces()
     {
-        // In a full implementation, this would return xmlns URIs from loaded assemblies
-        return Array.Empty<string>();
+        return _xmlnsMappings.Keys.ToList();
     }
 
     /// <summary>
@@ -922,7 +974,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
         try
         {
-            System.Reflection.Assembly asm = System.Reflection.Assembly.LoadFrom(assemblyPath);
+            System.Reflection.Assembly asm = AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
             AddAssembly(asm);
         }
         catch (Exception ex)
@@ -981,7 +1033,19 @@ public sealed class TypeMetadataService : ITypeMetadataService
             return false;
         }
 
-        return !_loadedAssemblyNames.Contains(assemblyName);
+        if (_loadedAssemblyNames.Contains(assemblyName))
+        {
+            if (TryGetLoadedAssembly(assemblyName, out System.Reflection.Assembly? loaded) &&
+                !string.IsNullOrWhiteSpace(loaded?.Location) &&
+                !string.Equals(loaded.Location, assemblyPath, StringComparison.OrdinalIgnoreCase))
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Assembly '{assemblyName}' already loaded from '{loaded.Location}'. Skipping '{assemblyPath}'.");
+            }
+            return false;
+        }
+
+        return true;
     }
 
     private static bool IsReferenceAssemblyPath(string assemblyPath)
@@ -1071,9 +1135,69 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
 
         _loadedAssemblies.Add(asm);
+        AddXmlnsDefinitions(asm);
     }
 
-    private IEnumerable<(Avalonia.AvaloniaProperty Prop, Type OwnerType)> GetAvaloniaProperties(Type type)
+    private void AddXmlnsDefinitions(System.Reflection.Assembly asm)
+    {
+        string? asmName = asm.GetName().Name;
+        if (string.IsNullOrWhiteSpace(asmName))
+        {
+            return;
+        }
+
+        foreach (System.Reflection.CustomAttributeData attr in asm.GetCustomAttributesData())
+        {
+            if (!IsXmlnsDefinitionAttribute(attr.AttributeType))
+            {
+                continue;
+            }
+
+            if (attr.ConstructorArguments.Count < 2)
+            {
+                continue;
+            }
+
+            string? xmlNamespace = attr.ConstructorArguments[0].Value as string;
+            string? clrNamespace = attr.ConstructorArguments[1].Value as string;
+            if (string.IsNullOrWhiteSpace(xmlNamespace) || string.IsNullOrWhiteSpace(clrNamespace))
+            {
+                continue;
+            }
+
+            if (!_xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? list))
+            {
+                list = new List<XmlnsDefinition>();
+                _xmlnsMappings[xmlNamespace] = list;
+            }
+
+            list.Add(new XmlnsDefinition(xmlNamespace, clrNamespace, asmName));
+        }
+    }
+
+    private static bool IsXmlnsDefinitionAttribute(Type attributeType)
+    {
+        return string.Equals(attributeType.Name, "XmlnsDefinitionAttribute", StringComparison.Ordinal)
+            || attributeType.FullName?.EndsWith(".XmlnsDefinitionAttribute", StringComparison.Ordinal) == true;
+    }
+
+    private bool TryGetLoadedAssembly(string assemblyName, out System.Reflection.Assembly? assembly)
+    {
+        foreach (System.Reflection.Assembly asm in _loadedAssemblies)
+        {
+            string? name = asm.GetName().Name;
+            if (string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase))
+            {
+                assembly = asm;
+                return true;
+            }
+        }
+
+        assembly = null;
+        return false;
+    }
+
+    private IEnumerable<(Avalonia.AvaloniaProperty Prop, Type OwnerType, System.Reflection.FieldInfo Field)> GetAvaloniaProperties(Type type)
     {
         Type? current = type;
         while (current is not null)
@@ -1090,12 +1214,33 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
                 if (field.GetValue(null) is Avalonia.AvaloniaProperty prop)
                 {
-                    yield return (prop, prop.OwnerType ?? current);
+                    yield return (prop, prop.OwnerType ?? current, field);
                 }
             }
 
             current = current.BaseType;
         }
+    }
+
+    private static (string Category, string? Description) GetCategoryAndDescription(System.Reflection.MemberInfo member)
+    {
+        string category = "Misc";
+        string? description = null;
+
+        if (member.GetCustomAttribute<CategoryAttribute>() is { } cat)
+        {
+            if (!string.IsNullOrWhiteSpace(cat.Category))
+            {
+                category = cat.Category;
+            }
+        }
+
+        if (member.GetCustomAttribute<DescriptionAttribute>() is { } desc)
+        {
+            description = desc.Description;
+        }
+
+        return (category, description);
     }
 
     private IReadOnlyList<PropertyMetadata> GetAttachedProperties()
@@ -1146,6 +1291,8 @@ public sealed class TypeMetadataService : ITypeMetadataService
                             continue;
                         }
 
+                        (string category, string? description) = GetCategoryAndDescription(field);
+
                         attached.Add(new PropertyMetadata
                         {
                             Name = name,
@@ -1155,7 +1302,9 @@ public sealed class TypeMetadataService : ITypeMetadataService
                             DefaultValue = TryGetDefaultValue(prop, type),
                             ClrType = prop.PropertyType,
                             IsAttached = true,
-                            OwnerType = type.FullName
+                            OwnerType = type.FullName,
+                            Category = category,
+                            Description = description
                         });
                     }
                     catch
@@ -1331,6 +1480,34 @@ public sealed class TypeMetadataService : ITypeMetadataService
             return false;
         }
 
+        if (!string.IsNullOrWhiteSpace(xmlNamespace) &&
+            _xmlnsMappings.TryGetValue(xmlNamespace, out List<XmlnsDefinition>? mappings))
+        {
+            foreach (XmlnsDefinition mapping in mappings)
+            {
+                string fullName = typeName.Contains('.')
+                    ? typeName
+                    : string.IsNullOrWhiteSpace(mapping.ClrNamespace)
+                        ? typeName
+                        : mapping.ClrNamespace + "." + typeName;
+
+                foreach (System.Reflection.Assembly asm in _loadedAssemblies)
+                {
+                    string? asmName = asm.GetName().Name;
+                    if (!string.Equals(asmName, mapping.AssemblyName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (TryGetTypeSafe(asm, fullName, out Type? match))
+                    {
+                        resolved = match;
+                        return true;
+                    }
+                }
+            }
+        }
+
         if (TryParseClrNamespace(xmlNamespace, out string? clrNamespace, out string? assemblyName))
         {
             string fullName = typeName.Contains('.')
@@ -1384,6 +1561,8 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
         return false;
     }
+
+    private readonly record struct XmlnsDefinition(string XmlNamespace, string ClrNamespace, string AssemblyName);
 
     private static bool TryGetTypeSafe(System.Reflection.Assembly asm, string typeName, out Type? type)
     {

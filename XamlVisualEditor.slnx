@@ -13,6 +13,7 @@
     <Project Path="src/XamlVisualEditor.Designer.Rendering/XamlVisualEditor.Designer.Rendering.csproj" />
     <Project Path="src/XamlVisualEditor.Designer.DragDrop/XamlVisualEditor.Designer.DragDrop.csproj" />
     <Project Path="src/XamlVisualEditor.Designer.Adorners/XamlVisualEditor.Designer.Adorners.csproj" />
+    <Project Path="src/XamlVisualEditor.Designer.PreviewerHost/XamlVisualEditor.Designer.PreviewerHost.csproj" />
     <Project Path="src/XamlVisualEditor.TreeView/XamlVisualEditor.TreeView.csproj" />
     <Project Path="src/XamlVisualEditor.PropertyEditor/XamlVisualEditor.PropertyEditor.csproj" />
     <Project Path="src/XamlVisualEditor.CodeEditor/XamlVisualEditor.CodeEditor.csproj" />

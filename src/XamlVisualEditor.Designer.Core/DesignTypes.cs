@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reactive;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Styling;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Core;
@@ -341,6 +342,22 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// </summary>
     [Reactive]
     public bool ShowRulers { get; set; } = true;
+
+    /// <summary>
+    /// Gets the available theme variants for preview.
+    /// </summary>
+    public IReadOnlyList<ThemeVariant> ThemeVariants { get; } = new List<ThemeVariant>
+    {
+        ThemeVariant.Default,
+        ThemeVariant.Light,
+        ThemeVariant.Dark
+    };
+
+    /// <summary>
+    /// Gets or sets the selected theme variant for preview.
+    /// </summary>
+    [Reactive]
+    public ThemeVariant PreviewThemeVariant { get; set; } = ThemeVariant.Default;
 
     /// <summary>
     /// Gets or sets whether guide lines are visible.

@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
     private IDisposable? _openFileHandler;
     private IDisposable? _saveFileHandler;
     private IDisposable? _renameSymbolHandler;
+    private IDisposable? _previewerTrustHandler;
 
     public MainWindow()
         : this(null)
@@ -41,6 +42,7 @@ public sealed partial class MainWindow : Window
             _openFileHandler?.Dispose();
             _saveFileHandler?.Dispose();
             _renameSymbolHandler?.Dispose();
+            _previewerTrustHandler?.Dispose();
         };
 
         if (viewModel is not null)
@@ -59,6 +61,7 @@ public sealed partial class MainWindow : Window
         _openFileHandler?.Dispose();
         _saveFileHandler?.Dispose();
         _renameSymbolHandler?.Dispose();
+        _previewerTrustHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
@@ -123,6 +126,18 @@ public sealed partial class MainWindow : Window
             };
 
             string? result = await dialog.ShowDialog<string?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _previewerTrustHandler = vm.PreviewerTrustInteraction.RegisterHandler(async interaction =>
+        {
+            PreviewerTrustDialogViewModel dialogVm = new(interaction.Input);
+            PreviewerTrustDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            PreviewerTrustDecision result = await dialog.ShowDialog<PreviewerTrustDecision>(this);
             interaction.SetOutput(result);
         });
     }

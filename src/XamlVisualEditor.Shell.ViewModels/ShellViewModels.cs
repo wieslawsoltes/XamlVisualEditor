@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 using System.Diagnostics;
+using System.IO;
 using Avalonia.Controls.DataGridFiltering;
 using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
@@ -119,6 +120,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     public DocumentViewMode ViewMode { get; set; } = DocumentViewMode.Split;
 
     /// <summary>
+    /// Gets or sets whether the external previewer replaces the in-app designer.
+    /// </summary>
+    [Reactive]
+    public bool UseExternalPreviewer { get; set; }
+
+    /// <summary>
     /// Gets or sets the split orientation when in split view.
     /// </summary>
     [Reactive]
@@ -168,6 +175,18 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// Command to switch to split view.
     /// </summary>
     public ReactiveCommand<Unit, Unit> SplitViewCommand { get; }
+
+    /// <summary>
+    /// Command to start the external previewer for this document.
+    /// </summary>
+    [Reactive]
+    public System.Windows.Input.ICommand? StartPreviewerCommand { get; set; }
+
+    /// <summary>
+    /// Gets the active previewer session for this document.
+    /// </summary>
+    [Reactive]
+    public PreviewerTcpSession? PreviewerSession { get; set; }
 
     /// <summary>
     /// Command to navigate to the selected control definition.
@@ -348,6 +367,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
                 Observable.Return(_metadataService is not null && _workspaceProvider is not null && _openFileAsync is not null),
                 (hasSelection, servicesAvailable) => hasSelection && servicesAvailable);
         NavigateToDefinitionCommand = ReactiveCommand.CreateFromTask(NavigateToDefinitionAsync, canNavigate);
+
+        IDisposable previewerToggleSubscription = this.WhenAnyValue(x => x.UseExternalPreviewer)
+            .Where(usePreviewer => usePreviewer)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(_ => StartPreviewerCommand?.Execute(null));
+        _disposables.Add(previewerToggleSubscription);
     }
 
     /// <summary>
@@ -1399,6 +1424,55 @@ public sealed class RenameSymbolDialogViewModel : ReactiveObject
     }
 }
 
+public enum PreviewerTrustDecision
+{
+    Cancel,
+    AllowOnce,
+    TrustWorkspace
+}
+
+public enum ThemeVariantOption
+{
+    Default,
+    Light,
+    Dark
+}
+
+public sealed record PreviewerTrustRequest(
+    string Title,
+    string Message,
+    string Location);
+
+/// <summary>
+/// ViewModel for the previewer trust warning dialog.
+/// </summary>
+public sealed class PreviewerTrustDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+    public string Message { get; }
+    public string Location { get; }
+
+    public Interaction<PreviewerTrustDecision, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> TrustCommand { get; }
+    public ReactiveCommand<Unit, Unit> AllowOnceCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public PreviewerTrustDialogViewModel(PreviewerTrustRequest request)
+    {
+        Title = request.Title;
+        Message = request.Message;
+        Location = request.Location;
+
+        TrustCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(PreviewerTrustDecision.TrustWorkspace));
+        AllowOnceCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(PreviewerTrustDecision.AllowOnce));
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(PreviewerTrustDecision.Cancel));
+    }
+}
+
 /// <summary>
 /// A message in the output panel.
 /// </summary>
@@ -1440,6 +1514,19 @@ public enum SaveBehavior
     NoSaving
 }
 
+internal sealed class WorkspaceAssemblySet
+{
+    public WorkspaceAssemblySet(IReadOnlyList<string> all, IReadOnlyList<string> preferred)
+    {
+        All = all;
+        Preferred = preferred;
+    }
+
+    public IReadOnlyList<string> All { get; }
+
+    public IReadOnlyList<string> Preferred { get; }
+}
+
 /// <summary>
 /// Main window ViewModel orchestrating the docking layout and document management.
 /// </summary>
@@ -1454,6 +1541,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly IWorkspaceService? _workspaceService;
     private readonly ITypeMetadataService? _metadataService;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
+    private readonly PreviewerLaunchService _previewerLaunchService = new();
+    private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _autoSaveSubscriptions = new();
     private WorkspaceAssemblyResolver? _assemblyResolver;
     private WorkspaceModel? _workspace;
@@ -1521,6 +1610,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public bool IsAutoSaveSelected => SaveBehavior == SaveBehavior.AutoSave;
     public bool IsManualSaveSelected => SaveBehavior == SaveBehavior.SaveManually;
     public bool IsNoSaveSelected => SaveBehavior == SaveBehavior.NoSaving;
+
+    /// <summary>
+    /// Gets or sets the selected theme variant for previews.
+    /// </summary>
+    [Reactive]
+    public ThemeVariantOption SelectedThemeVariant { get; set; } = ThemeVariantOption.Dark;
+
+    public bool IsThemeDefaultSelected => SelectedThemeVariant == ThemeVariantOption.Default;
+    public bool IsThemeLightSelected => SelectedThemeVariant == ThemeVariantOption.Light;
+    public bool IsThemeDarkSelected => SelectedThemeVariant == ThemeVariantOption.Dark;
 
     /// <summary>
     /// Gets the visual tree grid ViewModel for the active document.
@@ -1601,6 +1700,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public Interaction<LanguageRenameInfo, string?> RenameSymbolInteraction { get; } = new();
 
+    /// <summary>
+    /// Interaction for previewer trust warnings.
+    /// </summary>
+    public Interaction<PreviewerTrustRequest, PreviewerTrustDecision> PreviewerTrustInteraction { get; } = new();
+
+    /// <summary>
+    /// Interaction for applying theme variants.
+    /// </summary>
+    public Interaction<ThemeVariantOption, Unit> ThemeVariantInteraction { get; } = new();
+
     // Panel visibility
     [Reactive] public bool IsToolboxVisible { get; set; } = true;
     [Reactive] public bool IsPropertiesVisible { get; set; } = true;
@@ -1623,6 +1732,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> SetAutoSaveCommand { get; }
     public ReactiveCommand<Unit, Unit> SetManualSaveCommand { get; }
     public ReactiveCommand<Unit, Unit> SetNoSaveCommand { get; }
+
+    // Theme commands
+    public ReactiveCommand<Unit, Unit> SetThemeDefaultCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetThemeLightCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetThemeDarkCommand { get; }
 
     // Edit Commands
     public ReactiveCommand<Unit, Unit> UndoCommand { get; }
@@ -1656,6 +1770,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> RebuildWorkspaceCommand { get; }
     public ReactiveCommand<Unit, Unit> CleanWorkspaceCommand { get; }
 
+    // Previewer Commands
+    public ReactiveCommand<Unit, Unit> StartPreviewerCommand { get; }
+
     /// <summary>
     /// Command to close a specific document (used by tab close button).
     /// </summary>
@@ -1669,6 +1786,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _workspaceService = workspaceService;
         _metadataService = metadataService;
         _languageRegistry = languageRegistry;
+
+        LoadTrustedPreviewerRoots();
 
         InfiniteCanvas = new InfiniteCanvasViewModel(_languageRegistry);
 
@@ -1756,6 +1875,22 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             SaveBehavior = SaveBehavior.NoSaving;
             StatusText = "Save mode: No Saving";
+        });
+
+        SetThemeDefaultCommand = ReactiveCommand.Create(() =>
+        {
+            SelectedThemeVariant = ThemeVariantOption.Default;
+            StatusText = "Theme variant: Default";
+        });
+        SetThemeLightCommand = ReactiveCommand.Create(() =>
+        {
+            SelectedThemeVariant = ThemeVariantOption.Light;
+            StatusText = "Theme variant: Light";
+        });
+        SetThemeDarkCommand = ReactiveCommand.Create(() =>
+        {
+            SelectedThemeVariant = ThemeVariantOption.Dark;
+            StatusText = "Theme variant: Dark";
         });
 
         GoToDefinitionCommand = ReactiveCommand.CreateFromTask(GoToDefinitionAsync, hasTextDoc);
@@ -1915,6 +2050,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             () => RunWorkspaceCommandAsync("clean"),
             hasWorkspace);
 
+        StartPreviewerCommand = ReactiveCommand.CreateFromTask(
+            StartPreviewerForActiveDocumentAsync,
+            hasDesignerDoc.CombineLatest(hasWorkspace, (hasDoc, hasWs) => hasDoc && hasWs));
+
         // Close document command (used by tab close buttons)
         CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
         {
@@ -1939,6 +2078,51 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
+
+        IDisposable previewerUpdateSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+            .Where(d => d is not null)
+            .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
+            .Switch()
+            .Throttle(TimeSpan.FromMilliseconds(250))
+            .ObserveOn(RxApp.TaskpoolScheduler)
+            .Subscribe(d =>
+            {
+                if (_workspace is null)
+                {
+                    return;
+                }
+
+                string? xamlText = d.SyncEngine.CurrentText;
+                if (string.IsNullOrWhiteSpace(xamlText))
+                {
+                    return;
+                }
+
+                _ = _previewerLaunchService.SendUpdateXamlAsync(
+                    d.FilePath,
+                    xamlText,
+                    _workspace,
+                    (level, message) => LogOutput(level, message));
+            });
+        _disposables.Add(previewerUpdateSubscription);
+
+        IDisposable previewerSessionSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+            .Subscribe(doc =>
+            {
+                if (doc is null)
+                {
+                    return;
+                }
+
+                doc.PreviewerSession = _previewerLaunchService.TryGetSession(doc.FilePath, out PreviewerTcpSession? session)
+                    ? session
+                    : null;
+            });
+        _disposables.Add(previewerSessionSubscription);
+
+        _previewerLaunchService.PreviewerErrorReceived += OnPreviewerErrorReceived;
+        _disposables.Add(Disposable.Create(() =>
+            _previewerLaunchService.PreviewerErrorReceived -= OnPreviewerErrorReceived));
 
         IDisposable activeDocumentDiagnosticsSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null
@@ -1984,6 +2168,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
                 this.RaisePropertyChanged(nameof(IsNoSaveSelected));
             });
         _disposables.Add(saveBehaviorSubscription);
+
+        IDisposable themeVariantSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
+            .Subscribe(_ =>
+            {
+                this.RaisePropertyChanged(nameof(IsThemeDefaultSelected));
+                this.RaisePropertyChanged(nameof(IsThemeLightSelected));
+                this.RaisePropertyChanged(nameof(IsThemeDarkSelected));
+            });
+        _disposables.Add(themeVariantSubscription);
+
+        IDisposable themeVariantInteractionSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
+            .Skip(1)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(option => _ = ThemeVariantInteraction.Handle(option));
+        _disposables.Add(themeVariantInteractionSubscription);
 
         // Sync tree selection when active document selection changes
         IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
@@ -2092,6 +2291,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         await System.IO.File.WriteAllTextAsync(tempPath, defaultXaml);
 
         DesignerDocumentViewModel doc = new(tempPath, _metadataService, () => _workspace, OpenFileAsync);
+        doc.StartPreviewerCommand = StartPreviewerCommand;
         Documents.Add(doc);
         ActiveDocument = doc;
         AddDocumentToDock(doc);
@@ -2877,6 +3077,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         if (IsXamlFile(filePath))
         {
             DesignerDocumentViewModel designer = new(filePath, _metadataService, () => _workspace, OpenFileAsync);
+            designer.StartPreviewerCommand = StartPreviewerCommand;
             Documents.Add(designer);
             ActiveDocument = designer;
             AddDocumentToDock(designer);
@@ -3070,7 +3271,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         bool hasAnyProjectOutputs;
         bool hasMissingProjectOutputs;
-        HashSet<string> assemblyPaths = CollectWorkspaceAssemblies(
+        WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
             workspace,
             out hasAnyProjectOutputs,
             out hasMissingProjectOutputs);
@@ -3078,16 +3279,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             await RunDotNetCommandAsync(workspacePath, "restore");
             await RunDotNetCommandAsync(workspacePath, "build");
-            assemblyPaths = CollectWorkspaceAssemblies(
+            assemblySet = CollectWorkspaceAssemblies(
                 workspace,
                 out hasAnyProjectOutputs,
                 out hasMissingProjectOutputs);
         }
 
-        if (assemblyPaths.Count > 0)
+        LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+
+        if (assemblySet.All.Count > 0)
         {
-            ApplyAssemblyResolver(assemblyPaths);
-            _metadataService.LoadAssemblies(assemblyPaths);
+            ApplyAssemblyResolver(assemblySet);
+            _metadataService.LoadAssemblies(assemblySet.All);
             RefreshOpenDocumentsAfterMetadataLoad();
         }
 
@@ -3250,6 +3453,135 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         Console.WriteLine(message);
     }
 
+    private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
+    {
+        if (ActiveDesignerDocument is null || _workspace is null)
+        {
+            return;
+        }
+
+        if (!await EnsurePreviewerTrustAsync(ActiveDesignerDocument.FilePath))
+        {
+            StatusText = "Previewer start cancelled";
+            return;
+        }
+
+        string? xamlText = ActiveDesignerDocument.SyncEngine.CurrentText;
+        PreviewerLaunchResult result = await _previewerLaunchService.StartPreviewerAsync(
+            ActiveDesignerDocument.FilePath,
+            xamlText,
+            _workspace,
+            _workspacePath,
+            RunWorkspaceCommandAsync,
+            (level, message) => LogOutput(level, message));
+
+        if (result.Success)
+        {
+            StatusText = "Previewer started";
+            if (_previewerLaunchService.TryGetSession(ActiveDesignerDocument.FilePath, out PreviewerTcpSession? session))
+            {
+                ActiveDesignerDocument.PreviewerSession = session;
+            }
+            return;
+        }
+
+        StatusText = "Previewer start failed";
+        ActiveDesignerDocument.PreviewerSession = null;
+        if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
+        {
+            LogOutput("Error", result.ErrorMessage);
+        }
+    }
+
+    private async System.Threading.Tasks.Task<bool> EnsurePreviewerTrustAsync(string xamlFilePath)
+    {
+        string root = GetPreviewerTrustRoot(xamlFilePath);
+        if (_trustedPreviewerRoots.Contains(root))
+        {
+            return true;
+        }
+
+        PreviewerTrustRequest request = new(
+            "Start Previewer",
+            "The previewer will run project code out of process. Only continue if you trust this workspace.",
+            root);
+
+        PreviewerTrustDecision decision = await PreviewerTrustInteraction.Handle(request);
+        if (decision == PreviewerTrustDecision.TrustWorkspace)
+        {
+            _trustedPreviewerRoots.Add(root);
+            SaveTrustedPreviewerRoots();
+            return true;
+        }
+
+        return decision == PreviewerTrustDecision.AllowOnce;
+    }
+
+    private string GetPreviewerTrustRoot(string xamlFilePath)
+    {
+        if (!string.IsNullOrWhiteSpace(_workspacePath))
+        {
+            return _workspacePath;
+        }
+
+        string? dir = Path.GetDirectoryName(xamlFilePath);
+        return string.IsNullOrWhiteSpace(dir) ? xamlFilePath : dir;
+    }
+
+    private void LoadTrustedPreviewerRoots()
+    {
+        try
+        {
+            string path = GetTrustedPreviewerRootsPath();
+            if (!File.Exists(path))
+            {
+                return;
+            }
+
+            string json = File.ReadAllText(path);
+            List<string>? roots = JsonSerializer.Deserialize<List<string>>(json);
+            if (roots is null)
+            {
+                return;
+            }
+
+            foreach (string root in roots)
+            {
+                if (!string.IsNullOrWhiteSpace(root))
+                {
+                    _trustedPreviewerRoots.Add(root);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Failed to load previewer trust list: {ex.Message}");
+        }
+    }
+
+    private void SaveTrustedPreviewerRoots()
+    {
+        try
+        {
+            string path = GetTrustedPreviewerRootsPath();
+            List<string> roots = _trustedPreviewerRoots.ToList();
+            string json = JsonSerializer.Serialize(roots, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning($"Failed to save previewer trust list: {ex.Message}");
+        }
+    }
+
+    private static string GetTrustedPreviewerRootsPath()
+    {
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string dir = Path.Combine(appData, "XamlVisualEditor");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "previewer-trust.json");
+    }
+
     private void LogDiagnosticsSummary(IReadOnlyList<XamlDiagnostic> diagnostics)
     {
         if (diagnostics.Count == 0)
@@ -3265,6 +3597,29 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         LogOutput("Info", $"XAML diagnostics: {errorCount} error(s), {warningCount} warning(s)");
+    }
+
+    private void OnPreviewerErrorReceived(PreviewerErrorInfo error)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (string.IsNullOrWhiteSpace(error.FilePath))
+            {
+                Output.AddMessage("Error", error.Message);
+                return;
+            }
+
+            int line = error.Line is > 0 ? error.Line.Value : 1;
+            int column = error.Column is > 0 ? error.Column.Value : 1;
+            Output.AddDiagnostic(new XamlDiagnostic
+            {
+                Severity = DiagnosticSeverity.Error,
+                Message = error.Message,
+                Line = line,
+                Column = column,
+                Length = 1
+            }, error.FilePath);
+        }, DispatcherPriority.Background);
     }
 
     private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(string command)
@@ -3284,17 +3639,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         bool hasAnyProjectOutputs;
         bool hasMissingProjectOutputs;
-        HashSet<string> assemblyPaths = CollectWorkspaceAssemblies(
+        WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
             _workspace,
             out hasAnyProjectOutputs,
             out hasMissingProjectOutputs);
 
-        if (assemblyPaths.Count > 0)
+        if (assemblySet.All.Count > 0)
         {
-            ApplyAssemblyResolver(assemblyPaths);
-            _metadataService.LoadAssemblies(assemblyPaths);
+            ApplyAssemblyResolver(assemblySet);
+            _metadataService.LoadAssemblies(assemblySet.All);
             RefreshOpenDocumentsAfterMetadataLoad();
         }
+        LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
     }
 
     private void RefreshOpenDocumentsAfterMetadataLoad()
@@ -3308,12 +3664,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
     }
 
-    private static HashSet<string> CollectWorkspaceAssemblies(
+    private static WorkspaceAssemblySet CollectWorkspaceAssemblies(
         WorkspaceModel workspace,
         out bool hasAnyProjectOutputs,
         out bool hasMissingProjectOutputs)
     {
-        HashSet<string> assemblyPaths = new(StringComparer.OrdinalIgnoreCase);
+        List<string> all = new();
+        List<string> preferred = new();
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
         hasAnyProjectOutputs = false;
         hasMissingProjectOutputs = false;
 
@@ -3321,9 +3679,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             foreach (AssemblyReference reference in project.References)
             {
-                if (System.IO.File.Exists(reference.Path))
+                if (!IsAssemblyPathCandidate(reference.Path))
                 {
-                    assemblyPaths.Add(reference.Path);
+                    continue;
+                }
+
+                if (System.IO.File.Exists(reference.Path) && seen.Add(reference.Path))
+                {
+                    all.Add(reference.Path);
                 }
             }
 
@@ -3335,15 +3698,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
             foreach (string outputPath in outputs)
             {
-                if (System.IO.File.Exists(outputPath))
+                if (!IsAssemblyPathCandidate(outputPath))
                 {
-                    assemblyPaths.Add(outputPath);
+                    continue;
+                }
+
+                if (System.IO.File.Exists(outputPath) && seen.Add(outputPath))
+                {
+                    all.Add(outputPath);
+                    preferred.Add(outputPath);
                     hasAnyProjectOutputs = true;
                 }
             }
         }
 
-        return assemblyPaths;
+        return new WorkspaceAssemblySet(all, preferred);
     }
 
     private static IEnumerable<string> FindProjectOutputs(ProjectModel project)
@@ -3359,16 +3728,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             return Array.Empty<string>();
         }
 
-        string[] roots =
+        List<string> roots = new();
+        if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
         {
-            System.IO.Path.Combine(projectDir, "bin", "Debug"),
-            System.IO.Path.Combine(projectDir, "bin", "Release"),
-            System.IO.Path.Combine(projectDir, "obj", "Debug"),
-            System.IO.Path.Combine(projectDir, "obj", "Release")
-        };
+            string? outputDir = System.IO.Path.GetDirectoryName(project.OutputAssemblyPath);
+            if (!string.IsNullOrWhiteSpace(outputDir))
+            {
+                roots.Add(outputDir);
+            }
+        }
+
+        roots.Add(System.IO.Path.Combine(projectDir, "bin", "Debug"));
+        roots.Add(System.IO.Path.Combine(projectDir, "bin", "Release"));
 
         List<string> outputs = new();
-        foreach (string root in roots)
+        foreach (string root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!System.IO.Directory.Exists(root))
             {
@@ -3394,6 +3768,31 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         return outputs;
+    }
+
+    private static bool IsAssemblyPathCandidate(string? assemblyPath)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyPath))
+        {
+            return false;
+        }
+
+        string extension = System.IO.Path.GetExtension(assemblyPath);
+        if (!extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !IsReferenceAssemblyPath(assemblyPath);
+    }
+
+    private static bool IsReferenceAssemblyPath(string assemblyPath)
+    {
+        string normalized = assemblyPath.Replace(System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.DirectorySeparatorChar);
+        string marker = System.IO.Path.DirectorySeparatorChar.ToString();
+        return normalized.Contains(marker + "ref" + marker, StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains(marker + "refint" + marker, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void LogWorkspaceEnvironment(string workspacePath)
@@ -3450,10 +3849,51 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
     }
 
-    private void ApplyAssemblyResolver(IEnumerable<string> assemblyPaths)
+    private void ApplyAssemblyResolver(WorkspaceAssemblySet assemblySet)
     {
         _assemblyResolver?.Dispose();
-        _assemblyResolver = new WorkspaceAssemblyResolver(assemblyPaths);
+        _assemblyResolver = new WorkspaceAssemblyResolver(
+            assemblySet.All,
+            assemblySet.Preferred,
+            LogOutput);
+    }
+
+    private void LogAssemblySet(
+        WorkspaceAssemblySet assemblySet,
+        bool hasAnyProjectOutputs,
+        bool hasMissingProjectOutputs)
+    {
+        if (assemblySet.All.Count == 0)
+        {
+            LogOutput("Warning", "No assemblies discovered for metadata loading.");
+            return;
+        }
+
+        int preferredCount = assemblySet.Preferred.Count;
+        string outputSummary = hasAnyProjectOutputs
+            ? $"Project outputs: {preferredCount}"
+            : "Project outputs: none";
+        if (hasMissingProjectOutputs)
+        {
+            outputSummary += " (missing outputs detected)";
+        }
+
+        LogOutput("Info", $"Assembly resolution: {assemblySet.All.Count} assemblies. {outputSummary}.");
+
+        const int maxList = 20;
+        List<string> preferredList = assemblySet.Preferred
+            .Take(maxList)
+            .Select(path => $"- {path}")
+            .ToList();
+
+        if (preferredList.Count > 0)
+        {
+            LogOutput("Info", "Preferred output assemblies:\n" + string.Join('\n', preferredList));
+            if (preferredCount > maxList)
+            {
+                LogOutput("Info", $"Preferred output list truncated ({preferredCount - maxList} more)." );
+            }
+        }
     }
 
     public void Dispose()
@@ -3462,6 +3902,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         Collaboration.Dispose();
         InfiniteCanvas.Dispose();
         _assemblyResolver?.Dispose();
+        _previewerLaunchService.Dispose();
 
         foreach (IDisposable subscription in _autoSaveSubscriptions.Values)
         {

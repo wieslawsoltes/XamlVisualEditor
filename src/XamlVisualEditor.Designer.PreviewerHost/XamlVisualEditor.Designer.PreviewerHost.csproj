@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>XamlVisualEditor.Designer.PreviewerHost</RootNamespace>
+    <AssemblyName>XamlVisualEditor.Designer.PreviewerHost</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup />
+</Project>

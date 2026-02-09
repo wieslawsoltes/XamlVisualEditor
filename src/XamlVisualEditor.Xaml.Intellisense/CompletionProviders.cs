@@ -24,7 +24,10 @@ public sealed class ElementCompletionProvider : ICompletionProvider
             return Array.Empty<CompletionItem>();
         }
 
-        IReadOnlyList<TypeMetadata> types = context.Metadata.GetAvailableTypes();
+        string? defaultXmlns = ExtractDefaultXmlNamespace(context.DocumentText ?? context.TextBefore);
+        IReadOnlyList<TypeMetadata> types = string.IsNullOrWhiteSpace(defaultXmlns)
+            ? Array.Empty<TypeMetadata>()
+            : context.Metadata.GetAvailableTypes(defaultXmlns);
         List<CompletionItem> items = new(types.Count);
 
         foreach (TypeMetadata type in types)
@@ -43,6 +46,30 @@ public sealed class ElementCompletionProvider : ICompletionProvider
 
         items.Sort((a, b) => string.Compare(a.DisplayText, b.DisplayText, StringComparison.Ordinal));
         return items;
+    }
+
+    private static string? ExtractDefaultXmlNamespace(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        const string marker = "xmlns=\"";
+        int start = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += marker.Length;
+        int end = text.IndexOf('"', start);
+        if (end <= start)
+        {
+            return null;
+        }
+
+        return text[start..end];
     }
 }
 
@@ -108,6 +135,7 @@ public sealed class AttributeCompletionProvider : ICompletionProvider
         }
 
         AddXamlDirectiveAttributes(items);
+        AddDesignTimeAttributes(items);
 
         items.Sort((a, b) => string.Compare(a.DisplayText, b.DisplayText, StringComparison.Ordinal));
         return items;
@@ -152,6 +180,32 @@ public sealed class AttributeCompletionProvider : ICompletionProvider
         string afterOpen = text.Substring(lastOpen + 1).TrimStart();
         int spaceIndex = afterOpen.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
         return spaceIndex > 0 ? afterOpen.Substring(0, spaceIndex) : null;
+    }
+
+    private static void AddDesignTimeAttributes(List<CompletionItem> items)
+    {
+        string[] designAttributes =
+        {
+            "d:DataContext",
+            "d:DesignWidth",
+            "d:DesignHeight",
+            "Design.DataContext",
+            "Design.Width",
+            "Design.Height",
+            "Design.PreviewWith"
+        };
+
+        foreach (string attribute in designAttributes)
+        {
+            items.Add(new CompletionItem
+            {
+                DisplayText = attribute,
+                InsertText = $"{attribute}=\"\"",
+                Description = attribute,
+                Kind = CompletionItemKind.Property,
+                Priority = 1
+            });
+        }
     }
 }
 
@@ -620,6 +674,16 @@ public sealed class AttributeValueCompletionProvider : ICompletionProvider
         }
     }
 
+    private static string? ExtractDefaultXmlNamespace(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return ExtractQuotedAttribute(text, "xmlns");
+    }
+
     private static string ReadToken(string content, string prefix)
     {
         string trimmed = content.Substring(prefix.Length).Trim();
@@ -661,10 +725,17 @@ public sealed class XmlnsCompletionProvider : ICompletionProvider
     public IReadOnlyList<CompletionItem> GetCompletions(CompletionContext context)
     {
         List<CompletionItem> items = new();
+        string trimmed = context.TextBefore.TrimEnd();
+        bool isDefault = trimmed.EndsWith("xmlns=\"", StringComparison.Ordinal);
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
 
         foreach ((string prefix, string ns) in KnownNamespaces)
         {
             string displayText = string.IsNullOrEmpty(prefix) ? ns : $"{prefix} → {ns}";
+            if (!seen.Add(displayText))
+            {
+                continue;
+            }
             items.Add(new CompletionItem
             {
                 DisplayText = displayText,
@@ -675,6 +746,26 @@ public sealed class XmlnsCompletionProvider : ICompletionProvider
                 Kind = CompletionItemKind.Namespace,
                 Priority = 0
             });
+        }
+
+        if (isDefault && context.Metadata is not null)
+        {
+            foreach (string ns in context.Metadata.GetAvailableNamespaces())
+            {
+                if (!seen.Add(ns))
+                {
+                    continue;
+                }
+
+                items.Add(new CompletionItem
+                {
+                    DisplayText = ns,
+                    InsertText = ns,
+                    Description = ns,
+                    Kind = CompletionItemKind.Namespace,
+                    Priority = 1
+                });
+            }
         }
 
         return items;
@@ -696,7 +787,7 @@ public sealed class MarkupExtensionCompletionProvider : ICompletionProvider
     /// <inheritdoc />
     public IReadOnlyList<CompletionItem> GetCompletions(CompletionContext context)
     {
-        List<CompletionItem> items = new()
+        return new List<CompletionItem>
         {
             new CompletionItem
             {
@@ -748,8 +839,6 @@ public sealed class MarkupExtensionCompletionProvider : ICompletionProvider
                 Priority = 0
             }
         };
-
-        return items;
     }
 }
 

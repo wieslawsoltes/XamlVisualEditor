@@ -93,6 +93,10 @@
                 <MenuItem Header="Reset _Layout" Command="{CompiledBinding ResetLayoutCommand}" />
             </MenuItem>
             <MenuItem Header="_Tools">
+                <MenuItem Header="_Previewer">
+                    <MenuItem Header="_Start" Command="{CompiledBinding StartPreviewerCommand}" InputGesture="Ctrl+P" />
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="_Collaboration" Command="{CompiledBinding ToggleCollaborationCommand}" />
                 <Separator />
                 <MenuItem Header="_Workspace">
@@ -120,6 +124,9 @@
                 </Button>
                 <Button ToolTip.Tip="Save (Ctrl+S)" Command="{CompiledBinding SaveDocumentCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zM15 9H5V5h10v4z" />
+                </Button>
+                <Button ToolTip.Tip="Start Previewer (Ctrl+P)" Command="{CompiledBinding StartPreviewerCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M8 5v14l11-7L8 5z" />
                 </Button>
                 <Separator Margin="4,0" />
                 <Button ToolTip.Tip="Undo (Ctrl+Z)" Command="{CompiledBinding UndoCommand}" Padding="6,4">

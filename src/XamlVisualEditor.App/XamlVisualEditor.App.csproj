@@ -47,5 +47,19 @@
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell\XamlVisualEditor.Shell.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <Target Name="CopyPreviewerHost" AfterTargets="Build">
+    <MSBuild Projects="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
+    <ItemGroup>
+      <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\*.dll" />
+      <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\XamlVisualEditor.Designer.PreviewerHost.runtimeconfig.json" />
+      <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\XamlVisualEditor.Designer.PreviewerHost.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PreviewerHost)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

@@ -124,6 +124,9 @@ public sealed class ProjectModel
 
     /// <summary>Gets the assembly references.</summary>
     public required IReadOnlyList<AssemblyReference> References { get; init; }
+
+    /// <summary>Gets the primary output assembly path for the project, if known.</summary>
+    public string? OutputAssemblyPath { get; init; }
 }
 
 /// <summary>

@@ -817,6 +817,8 @@ public sealed partial class DesignSurfaceView : UserControl
 
         UpdateCanvasSizeFromRoot(docVm, doc.Root);
 
+        UpdateCanvasSizeFromRoot(docVm, doc.Root);
+
         // Create a new AST node for the dropped control
         MutableAstObjectNode newNode = new()
         {
@@ -907,6 +909,8 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        Design.ApplyDesignModeProperties(tree, tree);
+
         canvas.Children.Add(tree);
         _rootControl = tree;
 
@@ -956,8 +960,27 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        bool interactive = !_currentVm.IsEditMode;
+        bool isEditMode = _currentVm.IsEditMode;
+        bool interactive = !isEditMode;
         SetPreviewHitTest(_rootControl, interactive);
+
+        if (_canvas is not null)
+        {
+            _canvas.ContextMenu = isEditMode ? _surfaceContextMenu : null;
+        }
+
+        if (interactive)
+        {
+            _dragState = null;
+            _marqueeState = null;
+            _hoveredItem = null;
+            _isPanning = false;
+            _isSpaceDown = false;
+            _adornerLayer?.ClearAll();
+            _currentVm.Selection.ClearSelection();
+            UpdateSelectedNode(null);
+            UpdatePanCursor();
+        }
     }
 
     private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root)

@@ -35,6 +35,12 @@ public sealed class ControlFactory
     /// </summary>
     public Control? CreateControlTree(MutableAstObjectNode astNode)
     {
+        Control? preview = TryCreateDesignPreview(astNode);
+        if (preview is not null)
+        {
+            return preview;
+        }
+
         Control? control = CreateControl(astNode);
         if (control is null)
         {
@@ -123,6 +129,58 @@ public sealed class ControlFactory
         return null;
     }
 
+    private Control? TryCreateDesignPreview(MutableAstObjectNode astNode)
+    {
+        MutableAstObjectNode? previewNode = FindDesignPreviewNode(astNode);
+        if (previewNode is null)
+        {
+            return null;
+        }
+
+        return CreateControlTree(previewNode);
+    }
+
+    private static MutableAstObjectNode? FindDesignPreviewNode(MutableAstObjectNode astNode)
+    {
+        foreach (MutableAstPropertyNode prop in astNode.Properties)
+        {
+            if (!IsDesignPreviewProperty(prop.PropertyName))
+            {
+                continue;
+            }
+
+            if (prop.Value is MutableAstObjectNode objNode)
+            {
+                return objNode;
+            }
+
+            if (prop.Value is MutableAstTextNode textNode && !string.IsNullOrWhiteSpace(textNode.Text))
+            {
+                return new MutableAstObjectNode
+                {
+                    TypeName = "TextBlock",
+                    XmlNamespace = "https://github.com/avaloniaui",
+                    Properties =
+                    {
+                        new MutableAstPropertyNode
+                        {
+                            PropertyName = "Text",
+                            Value = new MutableAstTextNode { Text = textNode.Text }
+                        }
+                    }
+                };
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsDesignPreviewProperty(string propertyName)
+    {
+        return propertyName.Equals("Design.PreviewWith", StringComparison.OrdinalIgnoreCase)
+            || propertyName.EndsWith(":PreviewWith", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Creates an Avalonia control from an AST object node.
     /// </summary>
@@ -209,6 +267,11 @@ public sealed class ControlFactory
         {
             if (prop.Value is MutableAstTextNode textNode)
             {
+                if (TryApplyDesignProperty(control, prop.PropertyName, textNode.Text))
+                {
+                    continue;
+                }
+
                 TrySetProperty(control, prop.PropertyName, textNode.Text);
             }
         }
@@ -483,6 +546,100 @@ public sealed class ControlFactory
         {
             System.Diagnostics.Trace.TraceWarning($"Design-time property set failed: {ex.Message}");
         }
+    }
+
+    private static bool TryApplyDesignProperty(Control control, string propertyName, string value)
+    {
+        if (!IsDesignPropertyName(propertyName))
+        {
+            return false;
+        }
+
+        if (IsDesignWidth(propertyName) && double.TryParse(value, out double width))
+        {
+            Design.SetWidth(control, width);
+            return true;
+        }
+
+        if (IsDesignHeight(propertyName) && double.TryParse(value, out double height))
+        {
+            Design.SetHeight(control, height);
+            return true;
+        }
+
+        if (IsDesignDataContext(propertyName))
+        {
+            if (!LooksLikeMarkupExtension(value))
+            {
+                Design.SetDataContext(control, value);
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsDesignPropertyName(string propertyName)
+    {
+        return propertyName.StartsWith("d:", StringComparison.OrdinalIgnoreCase)
+            || propertyName.StartsWith("design:", StringComparison.OrdinalIgnoreCase)
+            || propertyName.StartsWith("Design.", StringComparison.OrdinalIgnoreCase)
+            || propertyName.Contains("Design", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDesignWidth(string propertyName)
+    {
+        return IsPropertySuffixMatch(propertyName, "DesignWidth")
+            || string.Equals(propertyName, "Design.Width", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDesignHeight(string propertyName)
+    {
+        return IsPropertySuffixMatch(propertyName, "DesignHeight")
+            || string.Equals(propertyName, "Design.Height", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDesignDataContext(string propertyName)
+    {
+        return propertyName.StartsWith("d:", StringComparison.OrdinalIgnoreCase)
+            && IsPropertySuffixMatch(propertyName, "DataContext")
+            || string.Equals(propertyName, "Design.DataContext", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPropertySuffixMatch(string propertyName, string target)
+    {
+        if (string.Equals(propertyName, target, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        int colonIndex = propertyName.IndexOf(':');
+        if (colonIndex >= 0 && colonIndex < propertyName.Length - 1)
+        {
+            string suffix = propertyName[(colonIndex + 1)..];
+            if (string.Equals(suffix, target, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        int dotIndex = propertyName.LastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < propertyName.Length - 1)
+        {
+            string suffix = propertyName[(dotIndex + 1)..];
+            if (string.Equals(suffix, target, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeMarkupExtension(string value)
+    {
+        string trimmed = value.Trim();
+        return trimmed.StartsWith("{", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal);
     }
 
     private static bool TrySetAttachedProperty(Control control, string propertyName, string value)

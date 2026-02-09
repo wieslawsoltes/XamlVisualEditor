@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <RootNamespace>XamlVisualEditor.Tests.Integration</RootNamespace>
+    <RootNamespace>XamlVisualEditor.Tests.Performance</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -10,16 +10,11 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Serialization\XamlVisualEditor.Xaml.Serialization.csproj" />
-    <ProjectReference Include="..\..\src\XamlVisualEditor.Workspace\XamlVisualEditor.Workspace.csproj" />
-    <ProjectReference Include="..\..\src\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />
-    <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
-    <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
-    <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
   </ItemGroup>
 </Project>

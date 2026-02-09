@@ -1,8 +1,13 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Markup.Xaml;
 using Avalonia.Headless.XUnit;
 using System.Reactive.Linq;
 using Xunit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.App;
+using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
@@ -238,7 +243,7 @@ public sealed class PropertyEditorEditingTests
 /// </summary>
 public sealed class DockingLayoutTests
 {
-    [Fact]
+    [AvaloniaFact]
     public void MainWindowViewModel_ResetLayout_Sets_All_Panels_Visible()
     {
         MainWindowViewModel vm = new();
@@ -255,7 +260,7 @@ public sealed class DockingLayoutTests
         Assert.True(vm.IsOutputVisible);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void MainWindowViewModel_ToggleCommands_Work()
     {
         MainWindowViewModel vm = new();
@@ -294,7 +299,7 @@ public sealed class DragDropWorkflowTests
         Assert.True(Enum.IsDefined(typeof(DropPosition), DropPosition.Inside));
     }
 
-    [Fact]
+    [AvaloniaFact]
     public async System.Threading.Tasks.Task NewDocument_Creates_Document_ViewModel()
     {
         MainWindowViewModel vm = new();
@@ -312,7 +317,7 @@ public sealed class DragDropWorkflowTests
 /// </summary>
 public sealed class MainWindowTests
 {
-    [Fact]
+    [AvaloniaFact]
     public void MainWindowViewModel_Creates_With_Default_State()
     {
         MainWindowViewModel vm = new();
@@ -321,5 +326,62 @@ public sealed class MainWindowTests
         Assert.True(vm.IsPropertiesVisible);
         Assert.True(vm.IsOutputVisible);
         Assert.Empty(vm.Documents);
+    }
+}
+
+public sealed class HeadlessUiTests
+{
+    [AvaloniaFact]
+    public void MainWindow_Creates_With_DataContext()
+    {
+        MainWindowViewModel vm = new();
+        MainWindow window = new(vm);
+
+        Assert.Same(vm, window.DataContext);
+    }
+
+    [AvaloniaFact]
+    public void ControlFactory_HitTest_Returns_Child_When_Inside()
+    {
+        Canvas root = new() { Width = 200, Height = 200 };
+        Border child = new()
+        {
+            Width = 50,
+            Height = 40
+        };
+        Canvas.SetLeft(child, 20);
+        Canvas.SetTop(child, 30);
+        root.Children.Add(child);
+
+        Window window = new()
+        {
+            Width = 200,
+            Height = 200,
+            Content = root
+        };
+
+        window.Measure(new Size(200, 200));
+        window.Arrange(new Rect(0, 0, 200, 200));
+        root.Measure(new Size(200, 200));
+        root.Arrange(new Rect(0, 0, 200, 200));
+
+        Control? hit = ControlFactory.HitTest(root, new Point(25, 35));
+
+        Assert.Same(child, hit);
+    }
+
+    [AvaloniaFact]
+    public void RuntimeXamlLoader_Parses_UserControl()
+    {
+        string xaml = """
+            <UserControl xmlns="https://github.com/avaloniaui">
+                <Border Width="120" Height="80" />
+            </UserControl>
+            """;
+
+        UserControl control = AvaloniaRuntimeXamlLoader.Parse<UserControl>(xaml, typeof(MainWindow).Assembly);
+
+        Assert.NotNull(control);
+        Assert.NotNull(control.Content);
     }
 }

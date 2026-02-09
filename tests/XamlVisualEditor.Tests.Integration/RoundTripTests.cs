@@ -447,6 +447,7 @@ public sealed class MsBuildWorkspaceTests
                     {
                         new() { FilePath = "/path/MainWindow.axaml", RelativePath = "MainWindow.axaml" }
                     },
+                    Files = Array.Empty<ProjectFileModel>(),
                     References = Array.Empty<AssemblyReference>()
                 },
                 new()
@@ -454,6 +455,7 @@ public sealed class MsBuildWorkspaceTests
                     Name = "Project2",
                     ProjectPath = "/path/to/Project2.csproj",
                     XamlFiles = Array.Empty<XamlFileModel>(),
+                    Files = Array.Empty<ProjectFileModel>(),
                     References = new List<AssemblyReference>
                     {
                         new() { Name = "Avalonia", Path = "/lib/Avalonia.dll" }
@@ -532,7 +534,7 @@ public sealed class TypeMetadataResolutionTests
 
         IReadOnlyList<string> namespaces = service.GetAvailableNamespaces();
 
-        Assert.Empty(namespaces);
+        Assert.Contains("https://github.com/avaloniaui", namespaces);
     }
 }
 
@@ -680,6 +682,7 @@ public sealed class CollaborationLifecycleTests
                         new() { FilePath = "/path/MainWindow.axaml", RelativePath = "MainWindow.axaml" },
                         new() { FilePath = "/path/MyView.axaml", RelativePath = "Views/MyView.axaml" }
                     },
+                    Files = Array.Empty<ProjectFileModel>(),
                     References = new List<AssemblyReference>
                     {
                         new() { Name = "Avalonia", Path = "/lib/Avalonia.dll" }
@@ -697,13 +700,9 @@ public sealed class CollaborationLifecycleTests
         SolutionExplorerNodeViewModel project = root.Children[0];
         Assert.Equal("MyProject", project.Name);
         Assert.Equal(SolutionExplorerNodeKind.Project, project.Kind);
-        Assert.Equal(2, project.Children.Count); // XAML folder + References folder
+        Assert.Single(project.Children); // References folder only
 
-        SolutionExplorerNodeViewModel xamlFolder = project.Children[0];
-        Assert.Equal("XAML Files", xamlFolder.Name);
-        Assert.Equal(2, xamlFolder.Children.Count);
-
-        SolutionExplorerNodeViewModel refsFolder = project.Children[1];
+        SolutionExplorerNodeViewModel refsFolder = project.Children[0];
         Assert.Equal("References", refsFolder.Name);
         Assert.Single(refsFolder.Children);
     }

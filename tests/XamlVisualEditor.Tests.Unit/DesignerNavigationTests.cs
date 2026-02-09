@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell.ViewModels;
@@ -80,20 +81,23 @@ public sealed class DesignerNavigationTests
                 AssemblyName = "MyApp"
             };
 
-            DesignerDocumentViewModel doc = new(
-                mainPath,
-                new StubMetadataService(customControl),
-                () => workspace,
-                openFileAsync);
+            await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                DesignerDocumentViewModel doc = new(
+                    mainPath,
+                    new StubMetadataService(customControl),
+                    () => workspace,
+                    openFileAsync);
 
-            await doc.LoadAsync();
+                await doc.LoadAsync();
 
-            MutableAstDocument? document = doc.SyncEngine.CurrentDocument;
-            MutableAstObjectNode? node = FindObjectNode(document?.Root, "CustomControl");
-            Assert.NotNull(node);
+                MutableAstDocument? document = doc.SyncEngine.CurrentDocument;
+                MutableAstObjectNode? node = FindObjectNode(document?.Root, "CustomControl");
+                Assert.NotNull(node);
 
-            doc.SetSelectedNode(node!.Id, SyncSource.DesignSurface);
-            await doc.NavigateToDefinitionAsync();
+                doc.SetSelectedNode(node!.Id, SyncSource.DesignSurface);
+                await doc.NavigateToDefinitionAsync();
+            });
 
             Assert.Equal(controlPath, openedPath);
         }

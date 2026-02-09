@@ -52,6 +52,12 @@
                                               Content="Grid" />
                                 <ToggleButton IsChecked="{CompiledBinding SnapToGrid, Mode=TwoWay}"
                                               Content="Snap Grid" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Theme" VerticalAlignment="Center" />
+                                    <ComboBox ItemsSource="{CompiledBinding ThemeVariants}"
+                                              SelectedItem="{CompiledBinding PreviewThemeVariant, Mode=TwoWay}"
+                                              MinWidth="140" />
+                                </StackPanel>
                                 <Separator />
                                 <ToggleButton IsChecked="{CompiledBinding ShowAlignmentGuides, Mode=TwoWay}"
                                               Content="Align" />
@@ -115,48 +121,50 @@
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           input:DragDrop.AllowDrop="True">
-                    <Border Name="SurfaceBorder"
-                        BorderBrush="#3F3F46"
-                        BorderThickness="1"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Margin="0"
-                        BoxShadow="0 2 8 0 #40000000">
-                    <!-- The design canvas where controls are rendered -->
-                    <Grid Name="ZoomContainer">
-                        <Grid.Width>
-                            <MultiBinding Converter="{x:Static v:ZoomConverters.Scale}">
-                                <Binding Path="CanvasWidth" />
-                                <Binding Path="Zoom" />
-                            </MultiBinding>
-                        </Grid.Width>
-                        <Grid.Height>
-                            <MultiBinding Converter="{x:Static v:ZoomConverters.Scale}">
-                                <Binding Path="CanvasHeight" />
-                                <Binding Path="Zoom" />
-                            </MultiBinding>
-                        </Grid.Height>
-                        <Grid Name="ZoomSurface"
-                            Width="{CompiledBinding CanvasWidth}"
-                            Height="{CompiledBinding CanvasHeight}">
-                            <Grid.RenderTransform>
-                                <ScaleTransform ScaleX="{CompiledBinding Zoom}"
-                                                ScaleY="{CompiledBinding Zoom}" />
-                            </Grid.RenderTransform>
-                            <Grid.RenderTransformOrigin>0,0</Grid.RenderTransformOrigin>
-                            <ad:DesignGridLayer ShowGrid="{CompiledBinding ShowGrid}"
-                                                GridSize="{CompiledBinding GridSnapSize}" />
-                            <Panel Name="DesignCanvas"
-                                   Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                                   ClipToBounds="True"
-                                   input:DragDrop.AllowDrop="True">
-                                <!-- Child controls will be added programmatically -->
-                            </Panel>
-                            <ad:DesignAdornerLayer Name="AdornerLayer"
-                                                   IsVisible="{CompiledBinding IsEditMode}" />
+                    <ThemeVariantScope RequestedThemeVariant="{CompiledBinding PreviewThemeVariant}">
+                        <Border Name="SurfaceBorder"
+                            BorderBrush="#3F3F46"
+                            BorderThickness="1"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Margin="0"
+                            BoxShadow="0 2 8 0 #40000000">
+                        <!-- The design canvas where controls are rendered -->
+                        <Grid Name="ZoomContainer">
+                            <Grid.Width>
+                                <MultiBinding Converter="{x:Static v:ZoomConverters.Scale}">
+                                    <Binding Path="CanvasWidth" />
+                                    <Binding Path="Zoom" />
+                                </MultiBinding>
+                            </Grid.Width>
+                            <Grid.Height>
+                                <MultiBinding Converter="{x:Static v:ZoomConverters.Scale}">
+                                    <Binding Path="CanvasHeight" />
+                                    <Binding Path="Zoom" />
+                                </MultiBinding>
+                            </Grid.Height>
+                            <Grid Name="ZoomSurface"
+                                Width="{CompiledBinding CanvasWidth}"
+                                Height="{CompiledBinding CanvasHeight}">
+                                <Grid.RenderTransform>
+                                    <ScaleTransform ScaleX="{CompiledBinding Zoom}"
+                                                    ScaleY="{CompiledBinding Zoom}" />
+                                </Grid.RenderTransform>
+                                <Grid.RenderTransformOrigin>0,0</Grid.RenderTransformOrigin>
+                                <ad:DesignGridLayer ShowGrid="{CompiledBinding ShowGrid}"
+                                                    GridSize="{CompiledBinding GridSnapSize}" />
+                                <Panel Name="DesignCanvas"
+                                       Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                       ClipToBounds="True"
+                                       input:DragDrop.AllowDrop="True">
+                                    <!-- Child controls will be added programmatically -->
+                                </Panel>
+                                <ad:DesignAdornerLayer Name="AdornerLayer"
+                                                       IsVisible="{CompiledBinding IsEditMode}" />
+                            </Grid>
                         </Grid>
-                    </Grid>
-                </Border>
+                    </Border>
+                </ThemeVariantScope>
             </ScrollViewer>
         </Grid>
     </DockPanel>

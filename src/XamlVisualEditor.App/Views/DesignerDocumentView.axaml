@@ -25,6 +25,10 @@
                              IsChecked="{CompiledBinding ViewMode, Converter={x:Static v:ViewModeConverters.IsCode}}"
                              Padding="12,4"
                              FontSize="12" />
+                <ToggleButton Content="Previewer"
+                              IsChecked="{CompiledBinding UseExternalPreviewer, Mode=TwoWay}"
+                              Padding="12,4"
+                              FontSize="12" />
                 <Separator Margin="6,0" />
                 <RadioButton Content="Split V" GroupName="SplitDirection"
                               IsChecked="{CompiledBinding SplitOrientation, Converter={x:Static v:ViewModeConverters.IsSplitVertical}}"
@@ -76,7 +80,13 @@
                         <Binding Path="SplitOrientation" />
                     </MultiBinding>
                 </Grid.ColumnSpan>
-                <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
+                <Grid>
+                    <Border IsVisible="{CompiledBinding UseExternalPreviewer, Converter={x:Static BoolConverters.Not}}">
+                        <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
+                    </Border>
+                    <v:PreviewerSurfaceControl Session="{CompiledBinding PreviewerSession}"
+                                               IsVisible="{CompiledBinding UseExternalPreviewer}" />
+                </Grid>
             </Border>
 
             <GridSplitter Width="4"

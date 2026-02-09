@@ -9,7 +9,9 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.App\XamlVisualEditor.App.csproj" />
@@ -20,6 +22,7 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Designer.Core\XamlVisualEditor.Designer.Core.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Designer.Rendering\XamlVisualEditor.Designer.Rendering.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.TreeView\XamlVisualEditor.TreeView.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
