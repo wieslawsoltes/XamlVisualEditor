@@ -768,7 +768,54 @@ public sealed class XamlEditorDockFactory : Factory
         }
 
         DetachOwnersRecursive(rootDock, restore);
+        DetachFactoryRecursive(rootDock, restore);
         return restore;
+    }
+
+    private static void DetachFactoryRecursive(IDockable dockable, List<Action> restore)
+    {
+        if (dockable is IDock dock && dock.Factory is not null)
+        {
+            IFactory? factory = dock.Factory;
+            dock.Factory = null;
+            restore.Add(() => dock.Factory = factory);
+        }
+
+        if (dockable is not IDock dockWithChildren || dockWithChildren.VisibleDockables is null)
+        {
+            return;
+        }
+
+        foreach (IDockable child in dockWithChildren.VisibleDockables)
+        {
+            DetachFactoryRecursive(child, restore);
+        }
+
+        if (dockable is IRootDock rootDock)
+        {
+            DetachFactoryList(rootDock.HiddenDockables, restore);
+            DetachFactoryList(rootDock.LeftPinnedDockables, restore);
+            DetachFactoryList(rootDock.RightPinnedDockables, restore);
+            DetachFactoryList(rootDock.TopPinnedDockables, restore);
+            DetachFactoryList(rootDock.BottomPinnedDockables, restore);
+            if (rootDock.PinnedDock is not null)
+            {
+                DetachFactoryRecursive(rootDock.PinnedDock, restore);
+            }
+        }
+    }
+
+    private static void DetachFactoryList(IList<IDockable>? dockables, List<Action> restore)
+    {
+        if (dockables is null)
+        {
+            return;
+        }
+
+        foreach (IDockable dockable in dockables)
+        {
+            DetachFactoryRecursive(dockable, restore);
+        }
     }
 
     private static void DetachOwnersRecursive(IDockable dockable, List<Action> restore)

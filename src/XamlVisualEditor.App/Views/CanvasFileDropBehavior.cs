@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -77,6 +78,8 @@ public sealed class CanvasFileDropBehavior
             return;
         }
 
+        Console.WriteLine($"Dropped files ({paths.Count}): {string.Join(", ", paths)}");
+
         var position = e.GetPosition(control);
         CanvasDropInfo payload = new(position.X, position.Y, paths);
 
@@ -93,9 +96,22 @@ public sealed class CanvasFileDropBehavior
         IDataTransfer data = e.DataTransfer;
         List<string> candidatePaths = new();
 
+        Console.WriteLine($"Drop data: HasFile={data.Contains(DataFormat.File)}, HasText={data.Contains(DataFormat.Text)}");
+
+        IStorageItem[]? storageItems = data.TryGetFiles();
+        if (storageItems is { Length: > 0 })
+        {
+            Console.WriteLine($"Drop data TryGetFiles count: {storageItems.Length}");
+            foreach (IStorageItem storageItem in storageItems)
+            {
+                candidatePaths.Add(storageItem.Path.LocalPath);
+            }
+        }
+
         if (data.Contains(DataFormat.File))
         {
             object? value = data.TryGetValue(DataFormat.File);
+            Console.WriteLine($"Drop data File type: {(value is null ? "<null>" : value.GetType().FullName)}");
             if (value is IEnumerable<string> pathList)
             {
                 candidatePaths.AddRange(pathList);
@@ -111,30 +127,40 @@ public sealed class CanvasFileDropBehavior
                     candidatePaths.Add(storageItem.Path.LocalPath);
                 }
             }
+            else if (value is System.Collections.IEnumerable rawItems)
+            {
+                foreach (object? entry in rawItems)
+                {
+                    if (entry is IStorageItem storageItem)
+                    {
+                        candidatePaths.Add(storageItem.Path.LocalPath);
+                    }
+                    else if (entry is string path)
+                    {
+                        candidatePaths.Add(path);
+                    }
+                }
+            }
         }
 
         if (data.Contains(DataFormat.Text))
         {
             object? textValue = data.TryGetValue(DataFormat.Text);
+            Console.WriteLine($"Drop data Text type: {(textValue is null ? "<null>" : textValue.GetType().FullName)}");
             if (textValue is string text)
             {
-                string[] parts = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (string part in parts)
+                AddTextPaths(text, candidatePaths);
+            }
+            else if (textValue is IEnumerable<string> textPaths)
+            {
+                foreach (string textPath in textPaths)
                 {
-                    string trimmed = part.Trim();
-                    if (trimmed.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri))
-                        {
-                            candidatePaths.Add(uri.LocalPath);
-                            continue;
-                        }
-                    }
-
-                    candidatePaths.Add(trimmed);
+                    AddTextPaths(textPath, candidatePaths);
                 }
             }
         }
+
+        Console.WriteLine($"Drop data candidate paths: {candidatePaths.Count}");
 
         if (candidatePaths.Count == 0)
         {
@@ -146,6 +172,54 @@ public sealed class CanvasFileDropBehavior
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        Console.WriteLine($"Drop data distinct paths: {paths.Count}");
         return paths.Count > 0;
+    }
+
+    private static void AddTextPaths(string text, List<string> candidatePaths)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        bool added = false;
+        if (text.Contains("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (Match match in Regex.Matches(text, "file://[^\\s]+", RegexOptions.IgnoreCase))
+            {
+                if (Uri.TryCreate(match.Value, UriKind.Absolute, out Uri? uri))
+                {
+                    candidatePaths.Add(uri.LocalPath);
+                    added = true;
+                }
+            }
+        }
+
+        if (added)
+        {
+            return;
+        }
+
+        string[] parts = text.Split(new[] { '\n', '\r', '\0', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (string part in parts)
+        {
+            string trimmed = part.Trim();
+            if (trimmed.Length == 0)
+            {
+                continue;
+            }
+
+            if (trimmed.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri))
+                {
+                    candidatePaths.Add(uri.LocalPath);
+                    continue;
+                }
+            }
+
+            candidatePaths.Add(trimmed);
+        }
     }
 }
