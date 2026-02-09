@@ -87,6 +87,7 @@
                 <MenuItem Header="_Logical Tree" Command="{CompiledBinding ToggleLogicalTreeCommand}" />
                 <MenuItem Header="_Output" Command="{CompiledBinding ToggleOutputCommand}" />
                 <MenuItem Header="_References" Command="{CompiledBinding ToggleReferencesCommand}" />
+                <MenuItem Header="_Animation" Command="{CompiledBinding ToggleAnimationEditorCommand}" />
                 <Separator />
                 <MenuItem Header="Document _Canvas" Command="{CompiledBinding OpenCanvasCommand}" />
                 <Separator />

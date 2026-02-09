@@ -51,6 +51,8 @@ public sealed class ViewLocator : IDataTemplate
                     return new ReferencesView { DataContext = tool.ReferencesViewModel };
                 case CollaborationTool tool:
                     return new CollaborationPanelView { DataContext = tool.CollaborationViewModel };
+                case AnimationEditorTool tool:
+                    return new AnimationEditorView { DataContext = tool.AnimationEditor };
             }
         }
 
@@ -68,6 +70,7 @@ public sealed class ViewLocator : IDataTemplate
             CollaborationPanelViewModel => new CollaborationPanelView(),
             VisualTreeNodeViewModel => new VisualTreePanelView(),
             LogicalTreeNodeViewModel => new LogicalTreePanelView(),
+            AnimationEditorViewModel => new AnimationEditorView(),
             _ => new TextBlock { Text = $"No view for {param?.GetType().FullName ?? "null"}" }
         };
     }
@@ -88,6 +91,7 @@ public sealed class ViewLocator : IDataTemplate
             or PropertyEditorViewModel
             or CollaborationPanelViewModel
             or VisualTreeNodeViewModel
-            or LogicalTreeNodeViewModel;
+            or LogicalTreeNodeViewModel
+            or AnimationEditorViewModel;
     }
 }

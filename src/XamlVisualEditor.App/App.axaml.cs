@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.CSharp.Language;
 using XamlVisualEditor.Language;
+using XamlVisualEditor.App.Services;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Workspace;
@@ -60,6 +61,7 @@ public sealed class App : Application
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
+        services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
 
         // Language services
         services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();

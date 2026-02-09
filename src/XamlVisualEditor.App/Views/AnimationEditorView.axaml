@@ -1,0 +1,311 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:v="using:XamlVisualEditor.App.Views"
+             x:Class="XamlVisualEditor.App.Views.AnimationEditorView"
+             x:DataType="vm:AnimationEditorViewModel">
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Spacing="4">
+            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                    Padding="6,4">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <Button Content="Add Timeline" Command="{CompiledBinding AddTimelineCommand}" />
+                    <Button Content="Play" Command="{CompiledBinding PlayPreviewCommand}" />
+                    <Button Content="Stop" Command="{CompiledBinding StopPreviewCommand}" />
+                    <Button Content="Undo" Command="{CompiledBinding UndoCommand}" />
+                    <Button Content="Redo" Command="{CompiledBinding RedoCommand}" />
+                    <TextBlock Text="Timeline" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{CompiledBinding Timelines}"
+                              SelectedItem="{CompiledBinding SelectedTimeline, Mode=TwoWay}"
+                              Width="180">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AnimationTimelineViewModel">
+                                <TextBlock Text="{CompiledBinding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Text="Key" VerticalAlignment="Center" />
+                    <TextBox Width="160"
+                             Text="{CompiledBinding SelectedTimeline.ResourceKey, Mode=TwoWay}"
+                             Watermark="AnimationKey" />
+                    <TextBlock Text="Duration" VerticalAlignment="Center" />
+                    <TextBox Width="80"
+                             Text="{CompiledBinding SelectedTimeline.DurationSeconds, Mode=TwoWay}" />
+                    <TextBlock Text="Zoom" VerticalAlignment="Center" />
+                    <Slider Minimum="0.25" Maximum="3.0"
+                            Value="{CompiledBinding Zoom, Mode=TwoWay}"
+                            Width="120" />
+                    <ComboBox ItemsSource="{CompiledBinding ResourceScopes}"
+                              SelectedItem="{CompiledBinding SelectedScope, Mode=TwoWay}"
+                              Width="200">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AnimationResourceScopeEntry">
+                                <TextBlock Text="{CompiledBinding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Content="Create Resource"
+                            Command="{CompiledBinding CreateResourceCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
+                    Padding="6,4">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="Target" VerticalAlignment="Center" />
+                    <TextBlock Text="{CompiledBinding TargetDisplayName}"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold" />
+                    <Separator />
+                    <TextBlock Text="Track" VerticalAlignment="Center" />
+                    <TextBox Width="160"
+                             Text="{CompiledBinding NewTrackPropertyName, Mode=TwoWay}"
+                             Watermark="Opacity" />
+                    <Button Content="Add Track" Command="{CompiledBinding AddTrackCommand}" />
+                    <Separator />
+                    <Button Content="Add Keyframe" Command="{CompiledBinding AddKeyframeCommand}" />
+                    <Button Content="Copy" Command="{CompiledBinding CopyKeyframesCommand}" />
+                    <Button Content="Paste" Command="{CompiledBinding PasteKeyframesCommand}" />
+                    <Button Content="Delete" Command="{CompiledBinding DeleteSelectionCommand}" />
+                    <TextBlock Text="{CompiledBinding StatusMessage}"
+                               VerticalAlignment="Center"
+                               Opacity="0.7" />
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
+                    Padding="6,4">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="Resources" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{CompiledBinding AvailableResources}"
+                              SelectedItem="{CompiledBinding SelectedResource, Mode=TwoWay}"
+                              Width="220">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AnimationResourceEntryViewModel">
+                                <TextBlock Text="{CompiledBinding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Content="Refresh"
+                            Command="{CompiledBinding RefreshResourcesCommand}" />
+                    <Button Content="Load"
+                            Command="{CompiledBinding LoadResourceCommand}"
+                            CommandParameter="{CompiledBinding SelectedResource}" />
+                        <Button Content="Update"
+                            Command="{CompiledBinding UpdateResourceCommand}" />
+                        <Button Content="Delete"
+                            Command="{CompiledBinding DeleteResourceCommand}" />
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
+                    Padding="6,4">
+                <ContentControl Content="{CompiledBinding SelectedKeyframe}">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate x:DataType="vm:AnimationKeyframeViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="Keyframe" VerticalAlignment="Center" />
+                                <TextBlock Text="Time" VerticalAlignment="Center" />
+                                <TextBox Width="80"
+                                         Text="{CompiledBinding TimeSeconds, Mode=TwoWay}"
+                                         BorderBrush="{Binding DataContext.IsKeyframeTimeValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                <TextBlock Text="Value" VerticalAlignment="Center" />
+                                <TextBox Width="160"
+                                         Text="{CompiledBinding Value, Mode=TwoWay}"
+                                         BorderBrush="{Binding DataContext.IsKeyframeValueValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                <TextBlock Text="Easing" VerticalAlignment="Center" />
+                                <TextBox Width="160"
+                                         Text="{CompiledBinding Easing, Mode=TwoWay}"
+                                         BorderBrush="{Binding DataContext.IsKeyframeEasingValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+                <TextBlock Text="{CompiledBinding KeyframeValidationMessage}"
+                           Foreground="#E24A4A"
+                           Opacity="0.9" />
+            </Border>
+        </StackPanel>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="2" Margin="4">
+                <Grid ColumnDefinitions="220,*" Height="28">
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                            BorderThickness="0,0,1,0" />
+                    <Border Grid.Column="1"
+                            Background="#191919"
+                            BorderBrush="#2A2A2A"
+                            BorderThickness="0,0,0,1">
+                        <Canvas Height="28"
+                            Width="{Binding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <ItemsControl ItemsSource="{CompiledBinding RulerTicks}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TimelineTickViewModel">
+                                        <Canvas>
+                                            <Border Width="1"
+                                                    Height="{CompiledBinding Height}"
+                                                    Background="#4B4B4B"
+                                                    Opacity="{CompiledBinding Opacity}"
+                                                    Canvas.Top="0">
+                                                <Canvas.Left>
+                                                    <Binding Path="PositionPixels" />
+                                                </Canvas.Left>
+                                            </Border>
+                                            <TextBlock Text="{CompiledBinding Label}"
+                                                       FontSize="10"
+                                                       Foreground="#B5B5B5"
+                                                       Canvas.Top="14">
+                                                <Canvas.Left>
+                                                    <Binding Path="PositionPixels" />
+                                                </Canvas.Left>
+                                            </TextBlock>
+                                        </Canvas>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Width="2" Height="28" Background="#E24A4A">
+                                <Canvas.Left>
+                                    <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
+                                        <Binding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                        <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                    </MultiBinding>
+                                </Canvas.Left>
+                            </Border>
+                            <Border Background="#E24A4A" CornerRadius="3" Padding="4,1">
+                                <Canvas.Left>
+                                    <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
+                                        <Binding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                        <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                    </MultiBinding>
+                                </Canvas.Left>
+                                <Canvas.Top>-2</Canvas.Top>
+                                <TextBlock Text="{CompiledBinding CurrentTimeSeconds, StringFormat='{}{0:0.00}s'}"
+                                           FontSize="10"
+                                           Foreground="White" />
+                            </Border>
+                        </Canvas>
+                    </Border>
+                </Grid>
+                <ItemsControl ItemsSource="{CompiledBinding SelectedTimeline.Tracks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AnimationTrackViewModel">
+                            <Grid ColumnDefinitions="220,*" Height="36">
+                                <Border Grid.Column="0"
+                                        Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
+                                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                        BorderThickness="0,0,1,0"
+                                        Padding="6,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Button Content="Select"
+                                                Command="{Binding DataContext.SelectTrackCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
+                                        <TextBox Text="{CompiledBinding PropertyName, Mode=TwoWay}"
+                                                 Width="120" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Column="1"
+                                        Background="#1F1F1F"
+                                        BorderBrush="#2A2A2A"
+                                        BorderThickness="0,0,0,1">
+                                    <Grid>
+                                        <Canvas Height="36"
+                                                Width="{Binding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <ItemsControl ItemsSource="{Binding DataContext.RulerTicks, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Canvas />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:TimelineTickViewModel">
+                                                        <Border Width="1"
+                                                                Height="36"
+                                                                Background="#2F2F2F"
+                                                                Opacity="{CompiledBinding Opacity}">
+                                                            <Canvas.Left>
+                                                                <Binding Path="PositionPixels" />
+                                                            </Canvas.Left>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Canvas>
+
+                                        <Canvas Height="36"
+                                                Width="{Binding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                v:TimelineScrubBehavior.ScrubCommand="{Binding DataContext.SetCurrentTimeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                v:TimelineScrubBehavior.PixelsPerSecond="{Binding DataContext.PixelsPerSecond, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <ItemsControl ItemsSource="{CompiledBinding Keyframes}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Canvas />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:AnimationKeyframeViewModel">
+                                                        <Border Width="10" Height="10"
+                                                                CornerRadius="2"
+                                                            Background="{CompiledBinding IsSelected, Converter={x:Static v:TimelineConverters.SelectionToBrush}}"
+                                                                BorderBrush="#2A2A2A"
+                                                                BorderThickness="1"
+                                                                Canvas.Top="13"
+                                                                v:TimelineKeyframeDragBehavior.IsEnabled="True"
+                                                                v:TimelineKeyframeDragBehavior.PixelsPerSecond="{Binding DataContext.PixelsPerSecond, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.DurationSeconds="{Binding DataContext.SelectedTimeline.DurationSeconds, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.SnapIntervalSeconds="{Binding DataContext.SnapIntervalSeconds, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.SelectCommand="{Binding DataContext.SelectKeyframeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.CommitMoveCommand="{Binding DataContext.CommitMoveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                            <Canvas.Left>
+                                                                <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
+                                                                    <Binding Path="TimeSeconds" />
+                                                                    <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                                </MultiBinding>
+                                                            </Canvas.Left>
+                                                            <ToolTip.Tip>
+                                                                <StackPanel>
+                                                                    <TextBlock Text="{CompiledBinding TimeSeconds, StringFormat='Time {0:0.00}s'}" />
+                                                                    <TextBlock Text="{CompiledBinding Value}" />
+                                                                </StackPanel>
+                                                            </ToolTip.Tip>
+                                                            <Border.ContextMenu>
+                                                                <ContextMenu>
+                                                                    <MenuItem Header="Copy"
+                                                                              Command="{Binding DataContext.CopyKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                    <MenuItem Header="Paste"
+                                                                              Command="{Binding DataContext.PasteKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                    <MenuItem Header="Delete"
+                                                                              Command="{Binding DataContext.DeleteSelectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                </ContextMenu>
+                                                            </Border.ContextMenu>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <Border Width="2" Height="36" Background="#E24A4A">
+                                                <Canvas.Left>
+                                                    <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
+                                                        <Binding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                        <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                    </MultiBinding>
+                                                </Canvas.Left>
+                                            </Border>
+                                        </Canvas>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

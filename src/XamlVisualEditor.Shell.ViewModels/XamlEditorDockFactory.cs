@@ -181,6 +181,29 @@ public sealed class OutputTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the animation editor panel.
+/// </summary>
+public sealed class AnimationEditorTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public AnimationEditorViewModel? AnimationEditor { get; set; }
+
+    public AnimationEditorTool()
+    {
+        Id = "AnimationEditor";
+        Title = "Animation";
+    }
+
+    public AnimationEditorTool(AnimationEditorViewModel animationEditor)
+    {
+        AnimationEditor = animationEditor;
+        Id = "AnimationEditor";
+        Title = "Animation";
+    }
+}
+
+/// <summary>
 /// Dock tool for the collaboration panel.
 /// </summary>
 public sealed class CollaborationTool : Tool
@@ -319,6 +342,7 @@ public sealed class XamlEditorDockFactory : Factory
         OutputTool outputTool = new(_mainVm.Output);
         ReferencesTool referencesTool = new(_mainVm.References);
         CollaborationTool collabTool = new(_mainVm.Collaboration);
+        AnimationEditorTool animationTool = new(_mainVm.AnimationEditor);
 
         // Left tool dock
         ToolDock leftToolDock = new()
@@ -349,7 +373,7 @@ public sealed class XamlEditorDockFactory : Factory
             Title = "Bottom Tools",
             Proportion = 0.25,
             ActiveDockable = outputTool,
-            VisibleDockables = CreateList<IDockable>(outputTool, referencesTool, collabTool),
+            VisibleDockables = CreateList<IDockable>(outputTool, referencesTool, animationTool, collabTool),
             Alignment = Alignment.Bottom
         };
 
@@ -455,6 +479,12 @@ public sealed class XamlEditorDockFactory : Factory
         if (collabTool is not null)
         {
             collabTool.CollaborationViewModel = _mainVm.Collaboration;
+        }
+
+        AnimationEditorTool? animationTool = FindDockable<AnimationEditorTool>(rootDock, "AnimationEditor");
+        if (animationTool is not null)
+        {
+            animationTool.AnimationEditor = _mainVm.AnimationEditor;
         }
     }
 
@@ -669,6 +699,19 @@ public sealed class XamlEditorDockFactory : Factory
         rootDock.DockGroup ??= "Root";
         rootDock.CanDrag = true;
         rootDock.CanDrop = true;
+
+        ToolDock? bottomDock = FindDockable<ToolDock>(rootDock, "BottomToolDock");
+        if (bottomDock is not null)
+        {
+            bottomDock.VisibleDockables ??= new ObservableCollection<IDockable>();
+            bool hasAnimationTool = bottomDock.VisibleDockables
+                .OfType<AnimationEditorTool>()
+                .Any();
+            if (!hasAnimationTool)
+            {
+                bottomDock.VisibleDockables.Add(new AnimationEditorTool());
+            }
+        }
     }
 
     private static List<Action> DetachToolViewModels(IRootDock rootDock)

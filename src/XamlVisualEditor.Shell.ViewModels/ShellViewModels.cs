@@ -64,6 +64,7 @@ public interface IEditorDocumentViewModel : IDisposable
 public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
 {
     private readonly CompositeDisposable _disposables = new();
+    public bool IsDisposed { get; private set; }
     private SyncSource _selectionSource = SyncSource.DesignSurface;
     private readonly ITypeMetadataService? _metadataService;
     private readonly Func<WorkspaceModel?>? _workspaceProvider;
@@ -506,6 +507,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 
     public void Dispose()
     {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        IsDisposed = true;
         _disposables.Dispose();
         PropertyEditor.Dispose();
         CodeEditor.Dispose();
@@ -519,6 +526,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
 {
     private readonly CompositeDisposable _disposables = new();
+    public bool IsDisposed { get; private set; }
     private readonly ILanguageIntellisenseService? _languageService;
     private bool _suppressTextChanged;
 
@@ -612,6 +620,12 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
 
     public void Dispose()
     {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        IsDisposed = true;
         _disposables.Dispose();
     }
 
@@ -1637,6 +1651,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public CollaborationPanelViewModel Collaboration { get; } = new();
 
     /// <summary>
+    /// Gets the animation editor ViewModel.
+    /// </summary>
+    public AnimationEditorViewModel AnimationEditor { get; }
+
+    /// <summary>
     /// Gets the dock factory.
     /// </summary>
     public XamlEditorDockFactory DockFactory { get; }
@@ -1718,6 +1737,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     [Reactive] public bool IsOutputVisible { get; set; } = true;
     [Reactive] public bool IsReferencesVisible { get; set; }
     [Reactive] public bool IsCollaborationVisible { get; set; }
+    [Reactive] public bool IsAnimationEditorVisible { get; set; } = true;
 
     // File Commands
     public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
@@ -1758,6 +1778,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleOutputCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleReferencesCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleCollaborationCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleAnimationEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
 
@@ -1781,7 +1802,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public MainWindowViewModel(
         IWorkspaceService? workspaceService = null,
         ITypeMetadataService? metadataService = null,
-        ILanguageIntellisenseRegistry? languageRegistry = null)
+        ILanguageIntellisenseRegistry? languageRegistry = null,
+        IAnimationPreviewService? animationPreviewService = null)
     {
         _workspaceService = workspaceService;
         _metadataService = metadataService;
@@ -1802,6 +1824,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             };
             await NavigateToLocationAsync(location);
         });
+
+        AnimationEditor = new AnimationEditorViewModel(this, animationPreviewService);
 
         DockFactory = new XamlEditorDockFactory(this);
         IRootDock layout = XamlEditorDockFactory.LoadLayout() ?? DockFactory.CreateDefaultLayout();
@@ -2027,6 +2051,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             IsCollaborationVisible = !IsCollaborationVisible;
             SetDockableVisibility("Collaboration", IsCollaborationVisible);
         });
+        ToggleAnimationEditorCommand = ReactiveCommand.Create(() =>
+        {
+            IsAnimationEditorVisible = !IsAnimationEditorVisible;
+            SetDockableVisibility("AnimationEditor", IsAnimationEditorVisible);
+        });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
         OpenCanvasCommand = ReactiveCommand.Create(ShowCanvasDocument);
 
@@ -2062,6 +2091,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         // Update trees when active document changes
         IDisposable activeDocumentTreesSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
+            .Where(doc => doc is null || !doc.IsDisposed)
             .Subscribe(doc => UpdateTrees(doc));
         _disposables.Add(activeDocumentTreesSubscription);
 
@@ -2072,7 +2102,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         // Refresh trees on sync events from active document (Switch unsubscribes from previous)
         IDisposable activeDocumentSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .Where(d => d is not null)
+            .Where(d => d is not null && !d.IsDisposed)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
             .ObserveOn(RxApp.MainThreadScheduler)
@@ -2080,7 +2110,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _disposables.Add(activeDocumentSyncSubscription);
 
         IDisposable previewerUpdateSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .Where(d => d is not null)
+            .Where(d => d is not null && !d.IsDisposed)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
             .Throttle(TimeSpan.FromMilliseconds(250))
@@ -2109,7 +2139,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IDisposable previewerSessionSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Subscribe(doc =>
             {
-                if (doc is null)
+                if (doc is null || doc.IsDisposed)
                 {
                     return;
                 }
@@ -2186,7 +2216,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         // Sync tree selection when active document selection changes
         IDisposable selectionSyncSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .Select(doc => doc is null
+            .Select(doc => doc is null || doc.IsDisposed
                 ? Observable.Return<Guid?>(null)
                 : doc.WhenAnyValue(d => d.SelectedNodeId))
             .Switch()
@@ -2197,7 +2227,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         // Sync grid selections back to the active document
         IDisposable visualTreeSelectionSubscription = this.WhenAnyValue(x => x.VisualTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
-            .Where(t => t.doc is not null)
+            .Where(t => t.doc is not null && !t.doc.IsDisposed)
             .ObserveOn(RxApp.MainThreadScheduler)
             .Where(_ => !_suppressTreeSelectionSync)
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
@@ -2205,7 +2235,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         IDisposable logicalTreeSelectionSubscription = this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
-            .Where(t => t.doc is not null)
+            .Where(t => t.doc is not null && !t.doc.IsDisposed)
             .ObserveOn(RxApp.MainThreadScheduler)
             .Where(_ => !_suppressTreeSelectionSync)
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
@@ -2228,8 +2258,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IDisposable activeDocumentTypeSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Subscribe(doc =>
             {
-                ActiveDesignerDocument = doc as DesignerDocumentViewModel;
-                ActiveTextDocument = doc as TextDocumentViewModel;
+                ActiveDesignerDocument = doc is DesignerDocumentViewModel designer && !designer.IsDisposed
+                    ? designer
+                    : null;
+                ActiveTextDocument = doc is TextDocumentViewModel text && !text.IsDisposed
+                    ? text
+                    : null;
             });
         _disposables.Add(activeDocumentTypeSubscription);
     }
@@ -2693,6 +2727,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IsLogicalTreeVisible = true;
         IsOutputVisible = true;
         IsCollaborationVisible = false;
+        IsAnimationEditorVisible = true;
 
         IRootDock layout = DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
@@ -2911,10 +2946,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         switch (e.Dockable)
         {
             case DesignerDocument designer:
-                ActiveDocument = designer.DocumentViewModel;
+                if (!designer.DocumentViewModel.IsDisposed)
+                {
+                    ActiveDocument = designer.DocumentViewModel;
+                }
                 break;
             case TextDocument text:
-                ActiveDocument = text.DocumentViewModel;
+                if (!text.DocumentViewModel.IsDisposed)
+                {
+                    ActiveDocument = text.DocumentViewModel;
+                }
                 break;
         }
     }
@@ -2959,6 +3000,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
         if (dockable is null)
         {
+            if (isVisible && string.Equals(id, "AnimationEditor", StringComparison.Ordinal))
+            {
+                ToolDock? bottomDock = XamlEditorDockFactory.FindDockable<ToolDock>(DockLayout, "BottomToolDock");
+                if (bottomDock is not null)
+                {
+                    AnimationEditorTool tool = new(AnimationEditor);
+                    DockFactory.AddDockable(bottomDock, tool);
+                    DockFactory.SetActiveDockable(tool);
+                    DockFactory.SetFocusedDockable(bottomDock, tool);
+                }
+            }
             return;
         }
 
@@ -3900,6 +3952,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     {
         _disposables.Dispose();
         Collaboration.Dispose();
+        AnimationEditor.Dispose();
         InfiniteCanvas.Dispose();
         _assemblyResolver?.Dispose();
         _previewerLaunchService.Dispose();
