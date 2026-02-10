@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Terminal.Avalonia</RootNamespace>
+    <Description>Avalonia terminal control and view integration</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Skia" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+  </ItemGroup>
+</Project>

@@ -47,6 +47,7 @@ using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Core.Debugging;
 using XamlVisualEditor.Core.Logging;
+using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -1885,6 +1886,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly IOutputLogSinkAccessor? _outputLogSinkAccessor;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
+    private readonly XamlVisualEditor.Terminal.ITerminalService? _terminalService;
     private readonly Dictionary<string, ProjectModel> _projectLookup = new(StringComparer.OrdinalIgnoreCase);
     private System.Diagnostics.Process? _runProcess;
     private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
@@ -1894,11 +1896,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private string? _workspacePath;
     private readonly Dictionary<string, IDockable> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _dockTitleSubscriptions = new();
+    private readonly Dictionary<Guid, IDisposable> _terminalTitleSubscriptions = new();
     private bool _isClosingFromDock;
     private readonly ObservableAsPropertyHelper<int> _activeLine;
     private readonly ObservableAsPropertyHelper<int> _activeColumn;
     private bool _isLoadingRecentFiles;
     private InfiniteCanvasDocument? _canvasDocument;
+    private readonly Dictionary<Guid, TerminalTool> _terminalTools = new();
 
     /// <summary>
     /// Gets the open documents.
@@ -1935,6 +1939,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// Gets the workspace projects.
     /// </summary>
     public ObservableCollection<ProjectModel> WorkspaceProjects { get; } = new();
+
+    /// <summary>
+    /// Gets the open terminal sessions.
+    /// </summary>
+    public ObservableCollection<TerminalViewModel> Terminals { get; } = new();
 
     /// <summary>
     /// Gets the output ViewModel.
@@ -2224,6 +2233,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> StopRunCommand { get; }
     public ReactiveCommand<ProjectModel, Unit> SetStartupProjectCommand { get; }
 
+    // Terminal Commands
+    public ReactiveCommand<Unit, Unit> NewTerminalCommand { get; }
+
     /// <summary>
     /// Command to close a specific document (used by tab close button).
     /// </summary>
@@ -2237,6 +2249,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IDebuggerService? debuggerService = null,
         IDebugToolInstaller? debugToolInstaller = null,
         IOutputLogSinkAccessor? outputLogSinkAccessor = null,
+        XamlVisualEditor.Terminal.ITerminalService? terminalService = null,
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null)
     {
@@ -2246,6 +2259,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _debuggerService = debuggerService ?? new NullDebuggerService();
         _debugToolInstaller = debugToolInstaller;
         _outputLogSinkAccessor = outputLogSinkAccessor;
+        _terminalService = terminalService;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MainWindowViewModel>.Instance;
         _loggerFactory = loggerFactory;
 
@@ -2571,6 +2585,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         StartRunCommand = ReactiveCommand.CreateFromTask(StartRunAsync, hasWorkspace);
         StopRunCommand = ReactiveCommand.CreateFromTask(StopRunAsync, this.WhenAnyValue(x => x.IsRunActive));
         SetStartupProjectCommand = ReactiveCommand.Create<ProjectModel>(SetActiveProject);
+
+        NewTerminalCommand = ReactiveCommand.Create(CreateTerminalSession);
 
         // Close document command (used by tab close buttons)
         CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
@@ -3270,6 +3286,58 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         StatusText = "Layout reset";
     }
 
+    private void CreateTerminalSession()
+    {
+        if (_terminalService is null)
+        {
+            StatusText = "Terminal service unavailable.";
+            return;
+        }
+
+        TerminalSessionOptions options = new()
+        {
+            Columns = 120,
+            Rows = 40,
+            ScrollbackLimit = 50000,
+            WorkingDirectory = string.IsNullOrWhiteSpace(_workspacePath)
+                ? Environment.CurrentDirectory
+                : System.IO.Path.GetDirectoryName(_workspacePath),
+            Environment = new Dictionary<string, string>
+            {
+                ["TERM"] = "xterm-256color",
+                ["COLORTERM"] = "truecolor"
+            }
+        };
+
+        string? logPath = Environment.GetEnvironmentVariable("XVE_TERMINAL_LOG");
+        if (!string.IsNullOrWhiteSpace(logPath))
+        {
+            options.EnableSequenceLog = true;
+            options.SequenceLogPath = logPath;
+        }
+
+        ITerminalSession session = _terminalService.CreateSession(options);
+        TerminalViewModel terminalVm = new(session);
+        terminalVm.Start();
+        Terminals.Add(terminalVm);
+
+        if (DockLayout is null)
+        {
+            StatusText = "Terminal started";
+            return;
+        }
+
+        TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
+        if (tool is not null)
+        {
+            _terminalTools[terminalVm.Id] = tool;
+            IDisposable titleSubscription = terminalVm.WhenAnyValue(x => x.Title)
+                .Subscribe(title => tool.Title = title);
+            _terminalTitleSubscriptions[terminalVm.Id] = titleSubscription;
+        }
+
+        StatusText = "Terminal started";
+    }
     private void OnDebugOutputReceived(DebugOutputEvent output)
     {
         string level = output.Category switch
@@ -4181,6 +4249,24 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             finally
             {
                 _isClosingFromDock = false;
+            }
+            return;
+        }
+
+        if (e.Dockable is TerminalTool terminalTool && terminalTool.TerminalViewModel is TerminalViewModel terminalVm)
+        {
+            if (_terminalTitleSubscriptions.Remove(terminalVm.Id, out IDisposable? subscription))
+            {
+                subscription.Dispose();
+            }
+
+            terminalVm.Dispose();
+            Terminals.Remove(terminalVm);
+            _terminalTools.Remove(terminalVm.Id);
+            terminalTool.TerminalViewModel = null;
+            if (terminalTool.Owner is IDock dock && dock.VisibleDockables is not null && dock.VisibleDockables.Contains(terminalTool))
+            {
+                dock.VisibleDockables.Remove(terminalTool);
             }
         }
     }
@@ -5231,6 +5317,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         InfiniteCanvas.Dispose();
         _assemblyResolver?.Dispose();
         _previewerLaunchService.Dispose();
+
+        foreach (TerminalViewModel terminal in Terminals)
+        {
+            terminal.Dispose();
+        }
+        Terminals.Clear();
+
+        foreach (IDisposable subscription in _terminalTitleSubscriptions.Values)
+        {
+            subscription.Dispose();
+        }
+        _terminalTitleSubscriptions.Clear();
 
         foreach (IDisposable subscription in _autoSaveSubscriptions.Values)
         {

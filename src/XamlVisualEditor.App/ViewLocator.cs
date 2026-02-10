@@ -9,6 +9,7 @@ using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.Terminal.Avalonia.Views;
 using XamlVisualEditor.TreeView;
 
 namespace XamlVisualEditor.App;
@@ -47,6 +48,8 @@ public sealed class ViewLocator : IDataTemplate
                     return new LogicalTreeToolView { DataContext = tool };
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
+                case TerminalTool tool:
+                    return new TerminalView { DataContext = tool.TerminalViewModel };
                 case DebugSettingsTool tool:
                     return new DebugSettingsView { DataContext = tool.DebugSettingsViewModel };
                 case BreakpointsTool tool:
@@ -86,6 +89,7 @@ public sealed class ViewLocator : IDataTemplate
             VisualTreeNodeViewModel => new VisualTreePanelView(),
             LogicalTreeNodeViewModel => new LogicalTreePanelView(),
             AnimationEditorViewModel => new AnimationEditorView(),
+            TerminalViewModel => new TerminalView(),
             _ => new TextBlock { Text = $"No view for {param?.GetType().FullName ?? "null"}" }
         };
     }
@@ -112,6 +116,7 @@ public sealed class ViewLocator : IDataTemplate
             or CollaborationPanelViewModel
             or VisualTreeNodeViewModel
             or LogicalTreeNodeViewModel
-            or AnimationEditorViewModel;
+            or AnimationEditorViewModel
+            or TerminalViewModel;
     }
 }

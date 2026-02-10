@@ -19,6 +19,7 @@ using XamlVisualEditor.Xaml.Intellisense;
 using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
+using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.App;
 
@@ -84,6 +85,8 @@ public sealed class App : Application
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
         services.AddSingleton<IDebuggerService, DapDebuggerService>();
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
+        services.AddSingleton<IPtyProvider>(_ => PtyProviderFactory.CreateDefault());
+        services.AddSingleton<ITerminalService, TerminalService>();
 
         // Language services
         services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();

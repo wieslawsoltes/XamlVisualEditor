@@ -69,8 +69,10 @@ public sealed class DebuggingViewModelTests
     {
         public DebugSessionState State => DebugSessionState.Running;
 
+#pragma warning disable 0067
         public event Action<DebugSessionState>? StateChanged;
         public event Action<DebugEvent>? EventReceived;
+#pragma warning restore 0067
 
         public Task<IReadOnlyList<BreakpointInfo>> SetBreakpointsAsync(
             string filePath,

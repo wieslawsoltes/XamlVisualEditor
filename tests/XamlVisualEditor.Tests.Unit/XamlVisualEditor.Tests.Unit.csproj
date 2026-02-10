@@ -27,5 +27,6 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Workspace\XamlVisualEditor.Workspace.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
   </ItemGroup>
 </Project>

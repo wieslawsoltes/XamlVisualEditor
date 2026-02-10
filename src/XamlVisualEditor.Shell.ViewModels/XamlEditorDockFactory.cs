@@ -182,6 +182,29 @@ public sealed class OutputTool : Tool
 }
 
 /// <summary>
+/// Dock tool for terminal sessions.
+/// </summary>
+public sealed class TerminalTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public TerminalViewModel? TerminalViewModel { get; set; }
+
+    public TerminalTool()
+    {
+        Id = "Terminal";
+        Title = "Terminal";
+    }
+
+    public TerminalTool(TerminalViewModel terminalViewModel)
+    {
+        TerminalViewModel = terminalViewModel;
+        Id = "Terminal-" + terminalViewModel.Id.ToString("N");
+        Title = terminalViewModel.Title;
+    }
+}
+
+/// <summary>
 /// Dock tool for the debug settings panel.
 /// </summary>
 public sealed class DebugSettingsTool : Tool
@@ -651,6 +674,8 @@ public sealed class XamlEditorDockFactory : Factory
         {
             animationTool.AnimationEditor = _mainVm.AnimationEditor;
         }
+
+        PruneTerminalTools(rootDock);
     }
 
     /// <summary>
@@ -732,6 +757,24 @@ public sealed class XamlEditorDockFactory : Factory
         return null;
     }
 
+    public TerminalTool? AddTerminalTool(IRootDock rootDock, TerminalViewModel terminalViewModel)
+    {
+        ToolDock? toolDock = FindDockable<ToolDock>(rootDock, "BottomToolDock");
+        if (toolDock is not null)
+        {
+            TerminalTool tool = new(terminalViewModel)
+            {
+                Title = terminalViewModel.Title
+            };
+            AddDockable(toolDock, tool);
+            SetActiveDockable(tool);
+            SetFocusedDockable(toolDock, tool);
+            return tool;
+        }
+
+        return null;
+    }
+
     public static T? FindDockable<T>(IDockable dockable, string id) where T : class, IDockable
     {
         if (dockable is T typed && dockable.Id == id)
@@ -752,6 +795,29 @@ public sealed class XamlEditorDockFactory : Factory
         }
 
         return null;
+    }
+
+    public static IReadOnlyList<T> FindDockables<T>(IDockable dockable) where T : class, IDockable
+    {
+        List<T> results = new();
+        CollectDockables(dockable, results);
+        return results;
+    }
+
+    private static void CollectDockables<T>(IDockable dockable, List<T> results) where T : class, IDockable
+    {
+        if (dockable is T typed)
+        {
+            results.Add(typed);
+        }
+
+        if (dockable is IDock dock && dock.VisibleDockables is not null)
+        {
+            foreach (IDockable child in dock.VisibleDockables)
+            {
+                CollectDockables(child, results);
+            }
+        }
     }
 
     /// <summary>
@@ -1010,7 +1076,28 @@ public sealed class XamlEditorDockFactory : Factory
             (tool, vm) => tool.CollaborationViewModel = vm,
             restore);
 
+        foreach (TerminalTool terminalTool in FindDockables<TerminalTool>(rootDock))
+        {
+            DetachToolViewModel(
+                terminalTool,
+                tool => tool.TerminalViewModel,
+                (tool, vm) => tool.TerminalViewModel = vm,
+                restore);
+        }
+
         return restore;
+    }
+
+    private static void PruneTerminalTools(IRootDock rootDock)
+    {
+        IReadOnlyList<TerminalTool> terminalTools = FindDockables<TerminalTool>(rootDock);
+        foreach (TerminalTool tool in terminalTools)
+        {
+            if (tool.TerminalViewModel is null && tool.Owner is IDock dock && dock.VisibleDockables is not null)
+            {
+                dock.VisibleDockables.Remove(tool);
+            }
+        }
     }
 
     private static void DetachToolViewModel<TTool, TViewModel>(

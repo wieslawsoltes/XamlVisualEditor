@@ -53,6 +53,8 @@
     <ProjectReference Include="..\XamlVisualEditor.Debugging.Dap\XamlVisualEditor.Debugging.Dap.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell\XamlVisualEditor.Shell.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Terminal.Avalonia\XamlVisualEditor.Terminal.Avalonia.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

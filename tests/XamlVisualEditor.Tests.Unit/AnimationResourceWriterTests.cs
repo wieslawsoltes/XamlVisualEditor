@@ -14,12 +14,12 @@ public sealed class AnimationResourceWriterTests
     public void AddsAnimationResourceToDocumentResources()
     {
         const string source = """
-<UserControl xmlns=\"https://github.com/avaloniaui\"
-             xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"
-             x:Class=\"Samples.MainView\">
-  <Grid />
-</UserControl>
-""";
+    <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Samples.MainView">
+      <Grid />
+    </UserControl>
+    """;
 
         XamlParsingService parser = new();
         ParseResult result = parser.Parse(source);
@@ -54,12 +54,12 @@ public sealed class AnimationResourceWriterTests
     public void AddsAnimationResourceToSelectedElementResources()
     {
         const string source = """
-<UserControl xmlns=\"https://github.com/avaloniaui\"
-             xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"
-             x:Class=\"Samples.MainView\">
-  <Border />
-</UserControl>
-""";
+    <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Samples.MainView">
+      <Border />
+    </UserControl>
+    """;
 
         XamlParsingService parser = new();
         ParseResult result = parser.Parse(source);

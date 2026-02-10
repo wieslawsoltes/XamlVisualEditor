@@ -28,5 +28,10 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Terminal.Avalonia\XamlVisualEditor.Terminal.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

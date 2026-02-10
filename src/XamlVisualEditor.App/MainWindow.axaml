@@ -115,6 +115,10 @@
                     <MenuItem Header="_Start" Command="{CompiledBinding StartPreviewerCommand}" InputGesture="Ctrl+P" />
                 </MenuItem>
                 <Separator />
+                <MenuItem Header="_Terminal">
+                    <MenuItem Header="_New Terminal" Command="{CompiledBinding NewTerminalCommand}" InputGesture="Ctrl+Shift+T" />
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="_Collaboration" Command="{CompiledBinding ToggleCollaborationCommand}" />
                 <Separator />
                 <MenuItem Header="_Workspace">
@@ -145,6 +149,9 @@
                 </Button>
                 <Button ToolTip.Tip="Start Previewer (Ctrl+P)" Command="{CompiledBinding StartPreviewerCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M8 5v14l11-7L8 5z" />
+                </Button>
+                <Button ToolTip.Tip="New Terminal (Ctrl+Shift+T)" Command="{CompiledBinding NewTerminalCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm2 3 4 3-4 3v-2H4v-2h2V8zm6 6h6v2h-6v-2z" />
                 </Button>
                 <Separator Margin="4,0" />
                 <Button ToolTip.Tip="Undo (Ctrl+Z)" Command="{CompiledBinding UndoCommand}" Padding="6,4">

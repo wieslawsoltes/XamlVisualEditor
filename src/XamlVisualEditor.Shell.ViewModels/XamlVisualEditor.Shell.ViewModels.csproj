@@ -31,5 +31,6 @@
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Serialization\XamlVisualEditor.Xaml.Serialization.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Workspace\XamlVisualEditor.Workspace.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
   </ItemGroup>
 </Project>

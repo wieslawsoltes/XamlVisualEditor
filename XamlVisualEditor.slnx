@@ -23,6 +23,8 @@
     <Project Path="src/XamlVisualEditor.Collaboration.UI/XamlVisualEditor.Collaboration.UI.csproj" />
     <Project Path="src/XamlVisualEditor.Shell/XamlVisualEditor.Shell.csproj" />
     <Project Path="src/XamlVisualEditor.Shell.ViewModels/XamlVisualEditor.Shell.ViewModels.csproj" />
+    <Project Path="src/XamlVisualEditor.Terminal/XamlVisualEditor.Terminal.csproj" />
+    <Project Path="src/XamlVisualEditor.Terminal.Avalonia/XamlVisualEditor.Terminal.Avalonia.csproj" />
     <Project Path="src/XamlVisualEditor.App/XamlVisualEditor.App.csproj" />
   </Folder>
   <Folder Name="/tests/">
