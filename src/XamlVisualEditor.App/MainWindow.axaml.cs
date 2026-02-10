@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using System.Reactive;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Acp;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
 
@@ -18,6 +21,9 @@ public sealed partial class MainWindow : Window
     private IDisposable? _renameSymbolHandler;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
+    private IDisposable? _acpPermissionHandler;
+    private IDisposable? _acpClipboardHandler;
+    private IDisposable? _acpOpenUrlHandler;
 
     public MainWindow()
         : this(null)
@@ -45,6 +51,9 @@ public sealed partial class MainWindow : Window
             _renameSymbolHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
+            _acpPermissionHandler?.Dispose();
+            _acpClipboardHandler?.Dispose();
+            _acpOpenUrlHandler?.Dispose();
         };
 
         if (viewModel is not null)
@@ -65,6 +74,9 @@ public sealed partial class MainWindow : Window
         _renameSymbolHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
+        _acpPermissionHandler?.Dispose();
+        _acpClipboardHandler?.Dispose();
+        _acpOpenUrlHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
@@ -154,6 +166,48 @@ public sealed partial class MainWindow : Window
 
             bool result = await dialog.ShowDialog<bool>(this);
             interaction.SetOutput(result);
+        });
+
+        _acpPermissionHandler = vm.AcpPermissionInteraction.RegisterHandler(async interaction =>
+        {
+            AcpPermissionDialogViewModel dialogVm = new(interaction.Input);
+            AcpPermissionDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            AcpPermissionOutcome result = await dialog.ShowDialog<AcpPermissionOutcome>(this);
+            interaction.SetOutput(result);
+        });
+
+        _acpClipboardHandler = vm.Acp.CopyToClipboardInteraction.RegisterHandler(async interaction =>
+        {
+            IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is not null)
+            {
+                await clipboard.SetTextAsync(interaction.Input);
+            }
+
+            interaction.SetOutput(Unit.Default);
+        });
+
+        _acpOpenUrlHandler = vm.Acp.OpenUrlInteraction.RegisterHandler(interaction =>
+        {
+            try
+            {
+                ProcessStartInfo startInfo = new()
+                {
+                    FileName = interaction.Input,
+                    UseShellExecute = true
+                };
+                Process.Start(startInfo);
+            }
+            catch
+            {
+            }
+
+            interaction.SetOutput(Unit.Default);
+            return System.Threading.Tasks.Task.CompletedTask;
         });
     }
 }

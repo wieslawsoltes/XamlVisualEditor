@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.AcpPermissionDialog"
+        x:DataType="vm:AcpPermissionDialogViewModel"
+        Width="560" Height="360"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="16" Spacing="10">
+    <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+    <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+    <Border Background="#22000000" Padding="8" CornerRadius="4">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{CompiledBinding SessionId, StringFormat=Session: {0}}" />
+        <TextBlock Text="{CompiledBinding ToolKind, StringFormat=Kind: {0}}" />
+        <TextBlock Text="{CompiledBinding ToolTitle, StringFormat=Title: {0}}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding ToolCallId, StringFormat=ToolCall: {0}}" />
+      </StackPanel>
+    </Border>
+    <StackPanel Spacing="6">
+      <ItemsControl ItemsSource="{CompiledBinding Options}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:AcpPermissionOptionViewModel">
+            <Button Content="{CompiledBinding Name}" Command="{CompiledBinding SelectCommand}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

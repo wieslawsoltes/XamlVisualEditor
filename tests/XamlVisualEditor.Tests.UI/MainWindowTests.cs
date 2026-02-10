@@ -91,7 +91,7 @@ public sealed class DesignerSurfaceTests
 /// </summary>
 public sealed class CodeEditorTests
 {
-    [Fact]
+    [AvaloniaFact]
     public void CodeEditorViewModel_SetTextSilently()
     {
         XamlParsingService parser = new();
@@ -107,7 +107,7 @@ public sealed class CodeEditorTests
         Assert.Equal(xaml, vm.Document.Text);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void CodeEditorViewModel_Options_Defaults()
     {
         XamlParsingService parser = new();

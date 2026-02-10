@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Animation\XamlVisualEditor.Animation.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
@@ -28,5 +29,6 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Workspace\XamlVisualEditor.Workspace.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.App\XamlVisualEditor.App.csproj" />
   </ItemGroup>
 </Project>

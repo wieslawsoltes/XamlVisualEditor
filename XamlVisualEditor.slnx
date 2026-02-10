@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/XamlVisualEditor.Acp/XamlVisualEditor.Acp.csproj" />
+    <Project Path="src/XamlVisualEditor.Acp.MockAgent/XamlVisualEditor.Acp.MockAgent.csproj" />
     <Project Path="src/XamlVisualEditor.Core/XamlVisualEditor.Core.csproj" />
     <Project Path="src/XamlVisualEditor.Animation/XamlVisualEditor.Animation.csproj" />
     <Project Path="src/XamlVisualEditor.Xaml.Parsing/XamlVisualEditor.Xaml.Parsing.csproj" />

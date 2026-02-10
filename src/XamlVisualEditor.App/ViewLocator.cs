@@ -48,6 +48,8 @@ public sealed class ViewLocator : IDataTemplate
                     return new LogicalTreeToolView { DataContext = tool };
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
+                case AcpTool tool:
+                    return new AcpToolView { DataContext = tool.AcpToolViewModel };
                 case TerminalTool tool:
                     return new TerminalView { DataContext = tool.TerminalViewModel };
                 case DebugSettingsTool tool:
@@ -74,6 +76,7 @@ public sealed class ViewLocator : IDataTemplate
             DesignerDocumentViewModel => new DesignerDocumentView(),
             ToolboxViewModel => new ToolboxView(),
             OutputViewModel => new OutputView(),
+            AcpToolViewModel => new AcpToolView(),
             DebugSettingsViewModel => new DebugSettingsView(),
             BreakpointsViewModel => new BreakpointsView(),
             CallStackViewModel => new CallStackView(),
@@ -102,6 +105,7 @@ public sealed class ViewLocator : IDataTemplate
             or DesignerDocumentViewModel
             or ToolboxViewModel
             or OutputViewModel
+            or AcpToolViewModel
             or DebugSettingsViewModel
             or BreakpointsViewModel
             or CallStackViewModel

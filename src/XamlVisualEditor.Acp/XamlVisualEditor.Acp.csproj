@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Acp</RootNamespace>
+    <Description>Agent Client Protocol (ACP) client, JSON-RPC, and stdio transport</Description>
+  </PropertyGroup>
+</Project>

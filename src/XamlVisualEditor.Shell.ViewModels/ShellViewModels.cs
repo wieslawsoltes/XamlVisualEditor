@@ -31,6 +31,7 @@ using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Collaboration;
 using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Acp;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.Adorners;
 using XamlVisualEditor.Designer.Core;
@@ -1813,6 +1814,63 @@ public sealed class DebugToolConsentDialogViewModel : ReactiveObject
 }
 
 /// <summary>
+/// ViewModel for ACP permission prompt dialog.
+/// </summary>
+public sealed class AcpPermissionDialogViewModel : ReactiveObject
+{
+    public string Title { get; } = "Permission Required";
+    public string Message { get; }
+    public string SessionId { get; }
+    public string? ToolTitle { get; }
+    public string? ToolKind { get; }
+    public string? ToolCallId { get; }
+
+    public ObservableCollection<AcpPermissionOptionViewModel> Options { get; } = new();
+
+    public Interaction<AcpPermissionOutcome, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public AcpPermissionDialogViewModel(AcpPermissionRequest request)
+    {
+        SessionId = request.SessionId;
+        ToolTitle = request.ToolTitle;
+        ToolKind = request.ToolKind;
+        ToolCallId = request.ToolCallId;
+
+        string toolLabel = !string.IsNullOrWhiteSpace(ToolTitle) ? ToolTitle : "an operation";
+        string kindLabel = !string.IsNullOrWhiteSpace(ToolKind) ? ToolKind : "tool";
+        Message = $"The agent requests permission to run {kindLabel}: {toolLabel}.";
+
+        foreach (AcpPermissionOption option in request.Options)
+        {
+            ReactiveCommand<Unit, Unit> selectCommand = ReactiveCommand.CreateFromTask(async () =>
+                await CloseInteraction.Handle(AcpPermissionOutcome.Selected(option.OptionId)));
+            Options.Add(new AcpPermissionOptionViewModel(option, selectCommand));
+        }
+
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(AcpPermissionOutcome.Cancelled()));
+    }
+}
+
+public sealed class AcpPermissionOptionViewModel : ReactiveObject
+{
+    public string OptionId { get; }
+    public string Name { get; }
+    public string Kind { get; }
+    public ReactiveCommand<Unit, Unit> SelectCommand { get; }
+
+    public AcpPermissionOptionViewModel(AcpPermissionOption option, ReactiveCommand<Unit, Unit> selectCommand)
+    {
+        OptionId = option.OptionId;
+        Name = option.Name;
+        Kind = option.Kind;
+        SelectCommand = selectCommand;
+    }
+}
+
+/// <summary>
 /// A message in the output panel.
 /// </summary>
 public sealed record OutputMessage(
@@ -1887,6 +1945,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly XamlVisualEditor.Terminal.ITerminalService? _terminalService;
+    private readonly IAcpService? _acpService;
     private readonly Dictionary<string, ProjectModel> _projectLookup = new(StringComparer.OrdinalIgnoreCase);
     private System.Diagnostics.Process? _runProcess;
     private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
@@ -1949,6 +2008,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// Gets the output ViewModel.
     /// </summary>
     public OutputViewModel Output { get; } = new();
+
+    /// <summary>
+    /// Gets the ACP tool ViewModel.
+    /// </summary>
+    public AcpToolViewModel Acp { get; }
 
     /// <summary>
     /// Gets the debugger ViewModel.
@@ -2120,6 +2184,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public Interaction<DebugToolConsentRequest, bool> DebugToolConsentInteraction { get; } = new();
 
+    /// <summary>
+    /// Interaction for ACP permission prompts.
+    /// </summary>
+    public Interaction<AcpPermissionRequest, AcpPermissionOutcome> AcpPermissionInteraction { get; } = new();
+
     // Panel visibility
     [Reactive] public bool IsToolboxVisible { get; set; } = true;
     [Reactive] public bool IsPropertiesVisible { get; set; } = true;
@@ -2250,6 +2319,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IDebugToolInstaller? debugToolInstaller = null,
         IOutputLogSinkAccessor? outputLogSinkAccessor = null,
         XamlVisualEditor.Terminal.ITerminalService? terminalService = null,
+        IAcpService? acpService = null,
+        IAcpProfileStore? acpProfileStore = null,
+        ISecretStore? secretStore = null,
+        IAcpOAuthDeviceFlowService? oauthDeviceFlowService = null,
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null)
     {
@@ -2260,6 +2333,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _debugToolInstaller = debugToolInstaller;
         _outputLogSinkAccessor = outputLogSinkAccessor;
         _terminalService = terminalService;
+        _acpService = acpService;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MainWindowViewModel>.Instance;
         _loggerFactory = loggerFactory;
 
@@ -2290,6 +2364,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             () => AutoDownloadTools,
             value => AutoDownloadTools = value,
             ConfirmDebugToolConsentAsync);
+
+        Acp = new AcpToolViewModel(acpService, acpProfileStore, secretStore, oauthDeviceFlowService, () => _workspacePath);
+        _acpService?.SetPermissionHandler(HandleAcpPermissionAsync);
 
         if (_outputLogSinkAccessor is not null)
         {
@@ -4860,6 +4937,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         return DebugToolConsentInteraction.Handle(request).ToTask();
     }
 
+    private System.Threading.Tasks.Task<AcpPermissionOutcome> HandleAcpPermissionAsync(
+        AcpPermissionRequest request,
+        System.Threading.CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromResult(AcpPermissionOutcome.Cancelled());
+        }
+
+        return AcpPermissionInteraction.Handle(request).ToTask();
+    }
+
     private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
     {
         if (ActiveDesignerDocument is null || _workspace is null)
@@ -5311,6 +5400,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         _disposables.Dispose();
+        Acp.Dispose();
+        _acpService?.SetPermissionHandler(null);
         Collaboration.Dispose();
         AnimationEditor.Dispose();
         Debugger.Dispose();

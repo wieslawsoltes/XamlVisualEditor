@@ -10,6 +10,8 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Acp.MockAgent\XamlVisualEditor.Acp.MockAgent.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />

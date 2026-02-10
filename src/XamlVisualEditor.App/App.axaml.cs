@@ -10,6 +10,7 @@ using XamlVisualEditor.Core.Logging;
 using XamlVisualEditor.Debugging.Dap;
 using XamlVisualEditor.CSharp.Language;
 using XamlVisualEditor.Language;
+using XamlVisualEditor.Acp;
 using XamlVisualEditor.App.Services;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
@@ -87,6 +88,12 @@ public sealed class App : Application
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
         services.AddSingleton<IPtyProvider>(_ => PtyProviderFactory.CreateDefault());
         services.AddSingleton<ITerminalService, TerminalService>();
+        services.AddSingleton<IAcpAgentHostFactory, AcpAgentHostFactory>();
+        services.AddSingleton<IAcpSettings, AcpSettings>();
+        services.AddSingleton<IAcpService, AcpService>();
+        services.AddSingleton<IAcpProfileStore, AcpProfileStore>();
+        services.AddSingleton<ISecretStore, OsSecretStore>();
+        services.AddSingleton<IAcpOAuthDeviceFlowService, AcpOAuthDeviceFlowService>();
 
         // Language services
         services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();

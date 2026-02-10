@@ -44,9 +44,10 @@ public sealed class TerminalGoldenRenderTests
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
 
             string hash = await RenderHashAsync(control);
+            bool update = Environment.GetEnvironmentVariable("TERMINAL_GOLDEN_UPDATE") == "1";
             if (!File.Exists(goldenFile))
             {
-                if (Environment.GetEnvironmentVariable("TERMINAL_GOLDEN_UPDATE") == "1")
+                if (update)
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(goldenFile) ?? ".");
                     File.WriteAllText(goldenFile, hash);
@@ -59,8 +60,15 @@ public sealed class TerminalGoldenRenderTests
             string expected = File.ReadAllText(goldenFile).Trim();
             if (string.Equals(expected, "__PLACEHOLDER__", StringComparison.Ordinal))
             {
+                if (update)
+                {
+                    File.WriteAllText(goldenFile, hash);
+                    return;
+                }
+
                 Assert.Fail($"Golden hash placeholder at {goldenFile}. Set TERMINAL_GOLDEN_UPDATE=1 to generate.");
             }
+
             Assert.Equal(expected, hash);
         }
         finally

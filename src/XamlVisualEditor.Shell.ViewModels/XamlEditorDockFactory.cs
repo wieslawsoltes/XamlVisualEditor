@@ -182,6 +182,29 @@ public sealed class OutputTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the ACP panel.
+/// </summary>
+public sealed class AcpTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public AcpToolViewModel? AcpToolViewModel { get; set; }
+
+    public AcpTool()
+    {
+        Id = "Acp";
+        Title = "ACP";
+    }
+
+    public AcpTool(AcpToolViewModel acpToolViewModel)
+    {
+        AcpToolViewModel = acpToolViewModel;
+        Id = "Acp";
+        Title = "ACP";
+    }
+}
+
+/// <summary>
 /// Dock tool for terminal sessions.
 /// </summary>
 public sealed class TerminalTool : Tool
@@ -477,13 +500,14 @@ public sealed class XamlEditorDockFactory : Factory
         SolutionExplorerTool solutionExplorerTool = new(_mainVm.SolutionExplorer);
         ToolboxTool toolboxTool = new(_mainVm.Toolbox);
 
-        // Right tools: Properties, Visual Tree, Logical Tree
+        // Right tools: Properties, Visual Tree, Logical Tree, ACP
         PropertyEditorTool propertyTool = new(_mainVm);
         VisualTreeTool visualTreeTool = new(_mainVm);
         LogicalTreeTool logicalTreeTool = new(_mainVm);
 
         // Bottom tools: Output, Collaboration
         OutputTool outputTool = new(_mainVm.Output);
+        AcpTool acpTool = new(_mainVm.Acp);
         DebugSettingsTool debugSettingsTool = new(_mainVm.DebugSettings);
         BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
         CallStackTool callStackTool = new(_mainVm.CallStack);
@@ -511,7 +535,7 @@ public sealed class XamlEditorDockFactory : Factory
             Title = "Right Tools",
             Proportion = 0.25,
             ActiveDockable = propertyTool,
-            VisibleDockables = CreateList<IDockable>(propertyTool, visualTreeTool, logicalTreeTool),
+            VisibleDockables = CreateList<IDockable>(propertyTool, visualTreeTool, logicalTreeTool, acpTool),
             Alignment = Alignment.Right
         };
 
@@ -625,6 +649,12 @@ public sealed class XamlEditorDockFactory : Factory
         if (outputTool is not null)
         {
             outputTool.OutputViewModel = _mainVm.Output;
+        }
+
+        AcpTool? acpTool = FindDockable<AcpTool>(rootDock, "Acp");
+        if (acpTool is not null)
+        {
+            acpTool.AcpToolViewModel = _mainVm.Acp;
         }
 
         DebugSettingsTool? debugSettingsTool = FindDockable<DebugSettingsTool>(rootDock, "DebugSettings");
@@ -984,6 +1014,14 @@ public sealed class XamlEditorDockFactory : Factory
                 bottomDock.VisibleDockables.Add(new WatchesTool());
             }
 
+            bool hasAcpTool = bottomDock.VisibleDockables
+                .OfType<AcpTool>()
+                .Any();
+            if (!hasAcpTool)
+            {
+                bottomDock.VisibleDockables.Add(new AcpTool());
+            }
+
             bool hasAnimationTool = bottomDock.VisibleDockables
                 .OfType<AnimationEditorTool>()
                 .Any();
@@ -1032,6 +1070,12 @@ public sealed class XamlEditorDockFactory : Factory
             FindDockable<OutputTool>(rootDock, "Output"),
             tool => tool.OutputViewModel,
             (tool, vm) => tool.OutputViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<AcpTool>(rootDock, "Acp"),
+            tool => tool.AcpToolViewModel,
+            (tool, vm) => tool.AcpToolViewModel = vm,
             restore);
 
         DetachToolViewModel(
