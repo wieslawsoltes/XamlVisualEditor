@@ -602,7 +602,11 @@ public sealed class TerminalControl : Control
                         GlyphInfo glyph = glyphs.Get(cell.Rune);
                         float x = MathF.Round(col * cellWidth);
                         float y = MathF.Round(row * cellHeight + baseline);
+                        float cellSpan = Math.Max(1, (int)cell.Width) * cellWidth;
+                        canvas.Save();
+                        canvas.ClipRect(new SKRect(x, y - baseline, x + cellSpan, y - baseline + cellHeight));
                         canvas.DrawText(cell.Rune.ToString(), x, y, glyph.Font, textPaint);
+                        canvas.Restore();
                     }
                 }
 
@@ -653,7 +657,10 @@ public sealed class TerminalControl : Control
             int targetCol = Math.Max(0, col - 1);
             float x = MathF.Round(targetCol * cellWidth);
             float y = MathF.Round(row * cellHeight + baseline);
+            canvas.Save();
+            canvas.ClipRect(new SKRect(x, y - baseline, x + cellWidth, y - baseline + cellHeight));
             canvas.DrawText(cell.Rune.ToString(), x, y, glyph.Font, textPaint);
+            canvas.Restore();
         }
 
         private static void DrawCursor(

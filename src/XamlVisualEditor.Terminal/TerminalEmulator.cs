@@ -14,6 +14,8 @@ public sealed class TerminalEmulator
     private TerminalBuffer _altBuffer;
     private readonly TerminalState _state = new();
     private readonly HashSet<int> _tabStops = new();
+    private PrivateModeSnapshot _savedPrivateModes;
+    private bool _hasSavedPrivateModes;
     private int _cellWidthPx;
     private int _cellHeightPx;
     private int _pixelWidthPx;
@@ -291,6 +293,19 @@ public sealed class TerminalEmulator
                 _state.CursorRow = _state.SavedCursorRow;
                 _state.CursorColumn = _state.SavedCursorColumn;
                 break;
+            case 'M':
+                ReverseIndex();
+                break;
+            case 'D':
+                LineFeed();
+                break;
+            case 'E':
+                LineFeed();
+                CarriageReturn();
+                break;
+            case 'Z':
+                ResponseRequested?.Invoke("\x1B[?1;2c");
+                break;
             case 'H':
                 _tabStops.Add(_state.CursorColumn);
                 break;
@@ -309,11 +324,41 @@ public sealed class TerminalEmulator
         }
     }
 
+    private void ReverseIndex()
+    {
+        if (_state.CursorRow == _state.ScrollTop)
+        {
+            ActiveBuffer.ScrollDown(_state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+        }
+        else
+        {
+            _state.CursorRow = Math.Max(_state.CursorRow - 1, 0);
+        }
+
+        _state.WrapPending = false;
+    }
+
     public void HandleCharsetSelect(bool g1, char designator)
     {
         TerminalCharset charset = designator switch
         {
             '0' => TerminalCharset.DecSpecialGraphics,
+            'A' => TerminalCharset.Uk,
+            '4' => TerminalCharset.Dutch,
+            'C' => TerminalCharset.Finnish,
+            '5' => TerminalCharset.Finnish,
+            'R' => TerminalCharset.French,
+            'Q' => TerminalCharset.FrenchCanadian,
+            'K' => TerminalCharset.German,
+            'Y' => TerminalCharset.Italian,
+            'E' => TerminalCharset.NorwegianDanish,
+            '6' => TerminalCharset.NorwegianDanish,
+            'Z' => TerminalCharset.Spanish,
+            'H' => TerminalCharset.Swedish,
+            '7' => TerminalCharset.Swedish,
+            '=' => TerminalCharset.Swiss,
+            '<' => TerminalCharset.DecSupplemental,
+            '|' => TerminalCharset.DecSupplemental,
             'B' => TerminalCharset.Ascii,
             _ => TerminalCharset.Ascii
         };
@@ -325,6 +370,43 @@ public sealed class TerminalEmulator
         else
         {
             _state.CharsetG0 = charset;
+        }
+    }
+
+    public void HandleEscapePercent(char code)
+    {
+        switch (code)
+        {
+            case 'G':
+                _state.Utf8Mode = true;
+                break;
+            case '@':
+                _state.Utf8Mode = false;
+                break;
+            default:
+                UnhandledSequence?.Invoke($"ESC %{code}");
+                break;
+        }
+    }
+
+    public void HandleEscapeHash(char code)
+    {
+        if (code != '8')
+        {
+            UnhandledSequence?.Invoke($"ESC #{code}");
+            return;
+        }
+
+        TerminalBuffer buffer = ActiveBuffer;
+        TerminalAttributes attrs = _state.Attributes;
+        for (int row = 0; row < buffer.Rows; row++)
+        {
+            TerminalLine line = buffer.GetLine(row);
+            for (int col = 0; col < buffer.Columns; col++)
+            {
+                line.Cells[col] = new TerminalCell(new Rune('E'), 1, attrs);
+            }
+            line.IsWrapped = false;
         }
     }
 
@@ -399,15 +481,29 @@ public sealed class TerminalEmulator
                 ApplySgr(parameters);
                 break;
             case 's':
-                _state.SavedCursorRow = _state.CursorRow;
-                _state.SavedCursorColumn = _state.CursorColumn;
+                if (privatePrefix == '?')
+                {
+                    SavePrivateModes();
+                }
+                else
+                {
+                    _state.SavedCursorRow = _state.CursorRow;
+                    _state.SavedCursorColumn = _state.CursorColumn;
+                }
                 break;
             case 'u':
                 _state.CursorRow = _state.SavedCursorRow;
                 _state.CursorColumn = _state.SavedCursorColumn;
                 break;
             case 'r':
-                SetScrollRegion(parameters);
+                if (privatePrefix == '?')
+                {
+                    RestorePrivateModes();
+                }
+                else
+                {
+                    SetScrollRegion(parameters);
+                }
                 break;
             case 'n':
                 HandleDeviceStatusReport(p1);
@@ -685,18 +781,91 @@ public sealed class TerminalEmulator
         _state.BracketedPaste = false;
         _state.ApplicationKeypad = false;
         _state.ApplicationCursorKeys = false;
+        _state.Utf8Mode = true;
         _state.CursorBlink = true;
         _state.CursorShape = TerminalCursorShape.Block;
         _state.CharsetG0 = TerminalCharset.Ascii;
         _state.CharsetG1 = TerminalCharset.Ascii;
         _state.UseG1Charset = false;
+        _state.WrapPending = false;
+        _hasSavedPrivateModes = false;
+        _savedPrivateModes = default;
         _mainBuffer.Clear(TerminalAttributes.Default);
         _altBuffer.Clear(TerminalAttributes.Default);
     }
 
+    private static readonly int[] NrcUk =
+    {
+        0x00A3, 0x0040, 0x005B, 0x005C, 0x005D, 0x005E, 0x005F, 0x0060, 0x007B, 0x007C, 0x007D, 0x007E
+    };
+
+    private static readonly int[] NrcDutch =
+    {
+        0x00A3, 0x00BE, 0x0133, 0x00BD, 0x007C, 0x005E, 0x005F, 0x0060, 0x00A8, 0x0192, 0x00BC, 0x00B4
+    };
+
+    private static readonly int[] NrcFinnish =
+    {
+        0x0023, 0x0040, 0x00C4, 0x00D6, 0x00C5, 0x00DC, 0x005F, 0x00E9, 0x00E4, 0x00F6, 0x00E5, 0x00FC
+    };
+
+    private static readonly int[] NrcFrench =
+    {
+        0x00A3, 0x00E0, 0x00B0, 0x00E7, 0x00A7, 0x005E, 0x005F, 0x0060, 0x00E9, 0x00F9, 0x00E8, 0x00A8
+    };
+
+    private static readonly int[] NrcFrenchCanadian =
+    {
+        0x0023, 0x00E0, 0x00E2, 0x00E7, 0x00EA, 0x00EE, 0x005F, 0x00F4, 0x00E9, 0x00F9, 0x00E8, 0x00FB
+    };
+
+    private static readonly int[] NrcGerman =
+    {
+        0x0023, 0x00A7, 0x00C4, 0x00D6, 0x00DC, 0x005E, 0x005F, 0x0060, 0x00E4, 0x00F6, 0x00FC, 0x00DF
+    };
+
+    private static readonly int[] NrcItalian =
+    {
+        0x00A3, 0x00A7, 0x00B0, 0x00E7, 0x00E9, 0x005E, 0x005F, 0x00F9, 0x00E0, 0x00F2, 0x00E8, 0x00EC
+    };
+
+    private static readonly int[] NrcNorwegianDanish =
+    {
+        0x0023, 0x00C4, 0x00C6, 0x00D8, 0x00C5, 0x00DC, 0x005F, 0x00E4, 0x00E6, 0x00F8, 0x00E5, 0x00FC
+    };
+
+    private static readonly int[] NrcSpanish =
+    {
+        0x00A3, 0x00A7, 0x00A1, 0x00D1, 0x00BF, 0x005E, 0x005F, 0x0060, 0x00B0, 0x00F1, 0x00E7, 0x007E
+    };
+
+    private static readonly int[] NrcSwedish =
+    {
+        0x0023, 0x00C9, 0x00C4, 0x00D6, 0x00C5, 0x00DC, 0x005F, 0x00E9, 0x00E4, 0x00F6, 0x00E5, 0x00FC
+    };
+
+    private static readonly int[] NrcSwiss =
+    {
+        0x00F9, 0x00E0, 0x00E9, 0x00E7, 0x00EA, 0x00EE, 0x00E8, 0x00F4, 0x00E4, 0x00F6, 0x00FC, 0x00FB
+    };
+
     private Rune ApplyCharset(Rune rune)
     {
         TerminalCharset active = _state.UseG1Charset ? _state.CharsetG1 : _state.CharsetG0;
+        if (active == TerminalCharset.DecSupplemental)
+        {
+            if (rune.Value >= 0x21 && rune.Value <= 0x7E)
+            {
+                return new Rune(rune.Value + 0x80);
+            }
+            return rune;
+        }
+
+        if (TryApplyNrcCharset(active, rune, out Rune mapped))
+        {
+            return mapped;
+        }
+
         if (active != TerminalCharset.DecSpecialGraphics || rune.Value < 0x60 || rune.Value > 0x7E)
         {
             return rune;
@@ -737,6 +906,56 @@ public sealed class TerminalEmulator
             0x7E => new Rune('·'),
             _ => rune
         };
+    }
+
+    private static bool TryApplyNrcCharset(TerminalCharset charset, Rune rune, out Rune mapped)
+    {
+        mapped = rune;
+        int index = rune.Value switch
+        {
+            0x23 => 0,
+            0x40 => 1,
+            0x5B => 2,
+            0x5C => 3,
+            0x5D => 4,
+            0x5E => 5,
+            0x5F => 6,
+            0x60 => 7,
+            0x7B => 8,
+            0x7C => 9,
+            0x7D => 10,
+            0x7E => 11,
+            _ => -1
+        };
+
+        if (index < 0)
+        {
+            return false;
+        }
+
+        int mappedValue = charset switch
+        {
+            TerminalCharset.Uk => NrcUk[index],
+            TerminalCharset.Dutch => NrcDutch[index],
+            TerminalCharset.Finnish => NrcFinnish[index],
+            TerminalCharset.French => NrcFrench[index],
+            TerminalCharset.FrenchCanadian => NrcFrenchCanadian[index],
+            TerminalCharset.German => NrcGerman[index],
+            TerminalCharset.Italian => NrcItalian[index],
+            TerminalCharset.NorwegianDanish => NrcNorwegianDanish[index],
+            TerminalCharset.Spanish => NrcSpanish[index],
+            TerminalCharset.Swedish => NrcSwedish[index],
+            TerminalCharset.Swiss => NrcSwiss[index],
+            _ => -1
+        };
+
+        if (mappedValue < 0)
+        {
+            return false;
+        }
+
+        mapped = new Rune(mappedValue);
+        return true;
     }
 
     private void MoveCursor(int rowDelta, int colDelta)
@@ -1110,6 +1329,9 @@ public sealed class TerminalEmulator
                 case 7:
                     _state.AutoWrap = enabled;
                     break;
+                case 2004:
+                    _state.BracketedPaste = enabled;
+                    break;
                 case 1:
                     _state.ApplicationCursorKeys = enabled;
                     break;
@@ -1128,6 +1350,54 @@ public sealed class TerminalEmulator
                     break;
             }
         }
+    }
+
+    private void SavePrivateModes()
+    {
+        _savedPrivateModes = new PrivateModeSnapshot
+        {
+            AltBufferActive = _state.AltBufferActive,
+            MouseMode = _state.MouseMode,
+            MouseSgr = _state.MouseSgr,
+            MouseProtocol = _state.MouseProtocol,
+            MouseX10 = _state.MouseX10,
+            OriginMode = _state.OriginMode,
+            AutoWrap = _state.AutoWrap,
+            ApplicationCursorKeys = _state.ApplicationCursorKeys,
+            BracketedPaste = _state.BracketedPaste
+        };
+        _hasSavedPrivateModes = true;
+    }
+
+    private void RestorePrivateModes()
+    {
+        if (!_hasSavedPrivateModes)
+        {
+            return;
+        }
+
+        _state.AltBufferActive = _savedPrivateModes.AltBufferActive;
+        _state.MouseMode = _savedPrivateModes.MouseMode;
+        _state.MouseSgr = _savedPrivateModes.MouseSgr;
+        _state.MouseProtocol = _savedPrivateModes.MouseProtocol;
+        _state.MouseX10 = _savedPrivateModes.MouseX10;
+        _state.OriginMode = _savedPrivateModes.OriginMode;
+        _state.AutoWrap = _savedPrivateModes.AutoWrap;
+        _state.ApplicationCursorKeys = _savedPrivateModes.ApplicationCursorKeys;
+        _state.BracketedPaste = _savedPrivateModes.BracketedPaste;
+    }
+
+    private struct PrivateModeSnapshot
+    {
+        public bool AltBufferActive { get; init; }
+        public TerminalMouseMode MouseMode { get; init; }
+        public bool MouseSgr { get; init; }
+        public TerminalMouseProtocol MouseProtocol { get; init; }
+        public bool MouseX10 { get; init; }
+        public bool OriginMode { get; init; }
+        public bool AutoWrap { get; init; }
+        public bool ApplicationCursorKeys { get; init; }
+        public bool BracketedPaste { get; init; }
     }
 
     private sealed class TerminalHyperlinkStore

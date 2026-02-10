@@ -13,6 +13,9 @@ internal sealed class TerminalParser
     private bool _oscEscaped;
     private readonly Utf8Decoder _utf8 = new();
     private bool _charsetIsG1;
+    private bool _hashSequence;
+    private bool _percentSequence;
+    private bool _ignoreEscaped;
 
     public void Process(ReadOnlySpan<byte> data, TerminalEmulator emulator)
     {
@@ -33,6 +36,36 @@ internal sealed class TerminalParser
                     if (b < 0x20)
                     {
                         emulator.HandleControl(b);
+                        continue;
+                    }
+
+                    if (!emulator.State.Utf8Mode)
+                    {
+                        if (b >= 0x80 && b <= 0x9F && HandleC1(b, emulator))
+                        {
+                            continue;
+                        }
+
+                        emulator.WriteRune(new Rune(b));
+                        break;
+                    }
+
+                    if (_utf8.HasPending)
+                    {
+                        if (b >= 0x80 && b <= 0xBF)
+                        {
+                            if (_utf8.TryDecode(b, out Rune pendingRune))
+                            {
+                                emulator.WriteRune(pendingRune);
+                            }
+                            break;
+                        }
+
+                        _utf8.Reset();
+                    }
+
+                    if (b >= 0x80 && b <= 0x9F && HandleC1(b, emulator))
+                    {
                         continue;
                     }
 
@@ -66,12 +99,45 @@ internal sealed class TerminalParser
                         continue;
                     }
 
+                    if (b == (byte)'#')
+                    {
+                        _hashSequence = true;
+                        _mode = ParserMode.EscapeHash;
+                        continue;
+                    }
+
+                    if (b == (byte)'%')
+                    {
+                        _percentSequence = true;
+                        _mode = ParserMode.EscapePercent;
+                        continue;
+                    }
+
                     emulator.HandleEscape((char)b);
                     _mode = ParserMode.Ground;
                     break;
 
                 case ParserMode.Charset:
                     emulator.HandleCharsetSelect(_charsetIsG1, (char)b);
+                    _mode = ParserMode.Ground;
+                    break;
+
+                case ParserMode.EscapeHash:
+                    if (_hashSequence)
+                    {
+                        emulator.HandleEscapeHash((char)b);
+                    }
+                    _hashSequence = false;
+                    _mode = ParserMode.Ground;
+                    break;
+
+                case ParserMode.EscapePercent:
+                    if (_percentSequence)
+                    {
+                        emulator.HandleEscapePercent((char)b);
+                        _utf8.Reset();
+                    }
+                    _percentSequence = false;
                     _mode = ParserMode.Ground;
                     break;
 
@@ -117,6 +183,14 @@ internal sealed class TerminalParser
                     break;
 
                 case ParserMode.Osc:
+                    if (b == 0x9C)
+                    {
+                        emulator.HandleOsc(Encoding.UTF8.GetString(_oscBytes.ToArray()));
+                        _oscBytes.Clear();
+                        _mode = ParserMode.Ground;
+                        break;
+                    }
+
                     if (_oscEscaped)
                     {
                         if (b == (byte)'\\')
@@ -148,7 +222,70 @@ internal sealed class TerminalParser
 
                     _oscBytes.Add(b);
                     break;
+                case ParserMode.Ignore:
+                    if (_ignoreEscaped)
+                    {
+                        if (b == (byte)'\\')
+                        {
+                            _mode = ParserMode.Ground;
+                        }
+                        _ignoreEscaped = false;
+                        break;
+                    }
+
+                    if (b == 0x1B)
+                    {
+                        _ignoreEscaped = true;
+                        break;
+                    }
+
+                    if (b == 0x9C)
+                    {
+                        _mode = ParserMode.Ground;
+                    }
+                    break;
             }
+        }
+    }
+
+    private bool HandleC1(byte b, TerminalEmulator emulator)
+    {
+        switch (b)
+        {
+            case 0x84:
+                emulator.HandleControl(0x0A);
+                return true;
+            case 0x85:
+                emulator.HandleControl(0x0A);
+                emulator.HandleControl(0x0D);
+                return true;
+            case 0x88:
+                emulator.HandleEscape('H');
+                return true;
+            case 0x8D:
+                emulator.HandleEscape('M');
+                return true;
+            case 0x90:
+            case 0x98:
+            case 0x9E:
+            case 0x9F:
+                _ignoreEscaped = false;
+                _mode = ParserMode.Ignore;
+                return true;
+            case 0x9B:
+                _mode = ParserMode.Csi;
+                _params.Clear();
+                _privatePrefix = '\0';
+                return true;
+            case 0x9C:
+                return true;
+            case 0x9D:
+                _mode = ParserMode.Osc;
+                _oscBytes.Clear();
+                _oscEscaped = false;
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -158,7 +295,10 @@ internal sealed class TerminalParser
         Escape,
         Csi,
         Osc,
-        Charset
+        Charset,
+        EscapeHash,
+        EscapePercent,
+        Ignore
     }
 
     private sealed class Utf8Decoder
@@ -166,6 +306,8 @@ internal sealed class TerminalParser
         private int _needed;
         private int _seen;
         private int _codePoint;
+
+        public bool HasPending => _needed != 0;
 
         public void Reset()
         {

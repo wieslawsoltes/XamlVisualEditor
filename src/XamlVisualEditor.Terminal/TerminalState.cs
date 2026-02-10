@@ -24,6 +24,7 @@ public sealed class TerminalState
     public bool BracketedPaste { get; set; }
     public bool ApplicationKeypad { get; set; }
     public bool ApplicationCursorKeys { get; set; }
+    public bool Utf8Mode { get; set; } = true;
     public TerminalCharset CharsetG0 { get; set; } = TerminalCharset.Ascii;
     public TerminalCharset CharsetG1 { get; set; } = TerminalCharset.Ascii;
     public bool UseG1Charset { get; set; }
@@ -56,5 +57,17 @@ public enum TerminalCursorShape
 public enum TerminalCharset
 {
     Ascii,
-    DecSpecialGraphics
+    DecSpecialGraphics,
+    Uk,
+    DecSupplemental,
+    Dutch,
+    Finnish,
+    French,
+    FrenchCanadian,
+    German,
+    Italian,
+    NorwegianDanish,
+    Spanish,
+    Swedish,
+    Swiss
 }
