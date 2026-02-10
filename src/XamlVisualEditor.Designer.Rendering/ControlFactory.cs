@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Microsoft.Extensions.Logging;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
@@ -16,6 +17,7 @@ namespace XamlVisualEditor.Designer.Rendering;
 public sealed class ControlFactory
 {
     private readonly ITypeMetadataService? _metadata;
+    private readonly ILogger<ControlFactory> _logger;
 
     /// <summary>
     /// Gets or sets whether design mode is active. When true, certain runtime behaviors are suppressed.
@@ -25,9 +27,12 @@ public sealed class ControlFactory
     /// <summary>
     /// Creates a new control factory with optional type metadata.
     /// </summary>
-    public ControlFactory(ITypeMetadataService? metadata = null)
+    public ControlFactory(
+        ITypeMetadataService? metadata = null,
+        ILogger<ControlFactory>? logger = null)
     {
         _metadata = metadata;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ControlFactory>.Instance;
     }
 
     /// <summary>
@@ -381,7 +386,7 @@ public sealed class ControlFactory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to instantiate '{qualifiedName}': {ex.Message}");
+            _logger.LogWarning("Failed to instantiate '{Name}': {Message}", qualifiedName, ex.Message);
             return null;
         }
     }
@@ -404,7 +409,7 @@ public sealed class ControlFactory
         };
     }
 
-    private static void TrySetProperty(Control control, string propertyName, string value)
+    private void TrySetProperty(Control control, string propertyName, string value)
     {
         try
         {
@@ -544,7 +549,7 @@ public sealed class ControlFactory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Design-time property set failed: {ex.Message}");
+            _logger.LogWarning("Design-time property set failed: {Message}", ex.Message);
         }
     }
 
@@ -642,7 +647,7 @@ public sealed class ControlFactory
         return trimmed.StartsWith("{", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal);
     }
 
-    private static bool TrySetAttachedProperty(Control control, string propertyName, string value)
+    private bool TrySetAttachedProperty(Control control, string propertyName, string value)
     {
         try
         {
@@ -679,13 +684,13 @@ public sealed class ControlFactory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Attached property set failed for '{propertyName}': {ex.Message}");
+            _logger.LogWarning("Attached property set failed for '{Property}': {Message}", propertyName, ex.Message);
         }
 
         return false;
     }
 
-    private static void TryClearProperty(Control control, string propertyName)
+    private void TryClearProperty(Control control, string propertyName)
     {
         try
         {
@@ -713,7 +718,7 @@ public sealed class ControlFactory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Clear property '{propertyName}' failed: {ex.Message}");
+            _logger.LogWarning("Clear property '{Property}' failed: {Message}", propertyName, ex.Message);
         }
     }
 
@@ -747,7 +752,7 @@ public sealed class ControlFactory
         };
     }
 
-    private static IBrush? ParseBrush(string value)
+    private IBrush? ParseBrush(string value)
     {
         try
         {
@@ -775,7 +780,7 @@ public sealed class ControlFactory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to parse brush value '{value}': {ex.Message}");
+            _logger.LogWarning("Failed to parse brush value '{Value}': {Message}", value, ex.Message);
             return null;
         }
     }

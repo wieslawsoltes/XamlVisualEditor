@@ -21,5 +21,6 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Debugging.Dap\XamlVisualEditor.Debugging.Dap.csproj" />
   </ItemGroup>
 </Project>

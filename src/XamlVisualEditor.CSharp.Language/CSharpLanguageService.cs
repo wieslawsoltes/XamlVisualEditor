@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -17,7 +17,13 @@ namespace XamlVisualEditor.CSharp.Language;
 /// </summary>
 public sealed class CSharpLanguageService : ILanguageIntellisenseService, IDisposable
 {
-    private readonly CSharpWorkspaceManager _workspaceManager = new();
+    private readonly CSharpWorkspaceManager _workspaceManager;
+
+    public CSharpLanguageService(ILoggerFactory? loggerFactory = null)
+    {
+        _workspaceManager = new CSharpWorkspaceManager(
+            loggerFactory?.CreateLogger<CSharpWorkspaceManager>());
+    }
 
     public string LanguageId => "csharp";
 

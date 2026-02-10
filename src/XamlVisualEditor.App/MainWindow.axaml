@@ -89,9 +89,26 @@
                 <MenuItem Header="_References" Command="{CompiledBinding ToggleReferencesCommand}" />
                 <MenuItem Header="_Animation" Command="{CompiledBinding ToggleAnimationEditorCommand}" />
                 <Separator />
+                <MenuItem Header="_Breakpoints" Command="{CompiledBinding ToggleBreakpointsCommand}" />
+                <MenuItem Header="_Call Stack" Command="{CompiledBinding ToggleCallStackCommand}" />
+                <MenuItem Header="_Locals" Command="{CompiledBinding ToggleLocalsCommand}" />
+                <MenuItem Header="_Watches" Command="{CompiledBinding ToggleWatchesCommand}" />
+                <Separator />
                 <MenuItem Header="Document _Canvas" Command="{CompiledBinding OpenCanvasCommand}" />
                 <Separator />
                 <MenuItem Header="Reset _Layout" Command="{CompiledBinding ResetLayoutCommand}" />
+            </MenuItem>
+            <MenuItem Header="_Debug">
+                <MenuItem Header="_Start" Command="{CompiledBinding StartDebugCommand}" InputGesture="F5" />
+                <MenuItem Header="_Stop" Command="{CompiledBinding StopDebugCommand}" InputGesture="Shift+F5" />
+                <Separator />
+                <MenuItem Header="_Continue" Command="{CompiledBinding ContinueDebugCommand}" InputGesture="F5" />
+                <MenuItem Header="Step _Over" Command="{CompiledBinding StepOverCommand}" InputGesture="F10" />
+                <MenuItem Header="Step _Into" Command="{CompiledBinding StepInCommand}" InputGesture="F11" />
+                <MenuItem Header="Step _Out" Command="{CompiledBinding StepOutCommand}" InputGesture="Shift+F11" />
+                <MenuItem Header="_Pause" Command="{CompiledBinding PauseDebugCommand}" InputGesture="Ctrl+." />
+                <Separator />
+                <MenuItem Header="Toggle _Breakpoint" Command="{CompiledBinding ToggleBreakpointCommand}" InputGesture="F9" />
             </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Previewer">

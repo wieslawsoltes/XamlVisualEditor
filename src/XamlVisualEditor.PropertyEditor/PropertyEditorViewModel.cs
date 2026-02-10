@@ -10,6 +10,7 @@ using Avalonia.Collections;
 using Avalonia.Controls.Templates;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Core;
@@ -229,6 +230,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
 
     private readonly AstNodeMap _nodeMap;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly ILogger<PropertyEditorViewModel> _logger;
     private readonly CompositeDisposable _propertySubscriptions = new();
     private readonly CompositeDisposable _disposables = new();
     private const string LocalValuesGroupName = "Local Values";
@@ -244,10 +246,14 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _groupedCollectionView, value);
     }
 
-    public PropertyEditorViewModel(AstNodeMap nodeMap, ITypeMetadataService? metadataService = null)
+    public PropertyEditorViewModel(
+        AstNodeMap nodeMap,
+        ITypeMetadataService? metadataService = null,
+        ILogger<PropertyEditorViewModel>? logger = null)
     {
         _nodeMap = nodeMap;
         _metadataService = metadataService;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PropertyEditorViewModel>.Instance;
         ShowGroupedView = true;
 
         // Filter properties on search text change
@@ -473,7 +479,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Property editor grouping failed: {ex.Message}");
+            _logger.LogWarning("Property editor grouping failed: {Message}", ex.Message);
         }
     }
 

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              x:Class="XamlVisualEditor.App.Views.OutputView"
              x:DataType="vm:OutputViewModel">
@@ -14,27 +15,36 @@
             <TextBlock Text="{CompiledBinding WarningCount, StringFormat='Warnings: {0}'}"
                        Foreground="Orange" VerticalAlignment="Center" Margin="4,0" />
             <Separator />
+            <Button Content="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
+            <Button Content="Copy All" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
             <Button Content="Clear" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
         </StackPanel>
 
         <!-- Message list -->
-        <ListBox ItemsSource="{CompiledBinding Messages}"
-             SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}">
-            <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:OutputMessage">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{CompiledBinding Level}"
-                                   FontWeight="SemiBold"
-                                   Width="60" />
-                        <TextBlock Text="{CompiledBinding Text}" TextWrapping="Wrap" />
-                        <TextBlock Text="{CompiledBinding Line, StringFormat='Ln {0}'}"
-                                   Opacity="0.5" />
-                        <TextBlock Text="{CompiledBinding Column, StringFormat='Col {0}'}"
-                                   Opacity="0.5" />
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+        <dg:DataGrid ItemsSource="{CompiledBinding Messages}"
+                     SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}"
+                     AutoGenerateColumns="False"
+                     GridLinesVisibility="None"
+                     IsReadOnly="True">
+            <dg:DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" />
+                    <MenuItem Header="Copy All" Command="{CompiledBinding CopyAllCommand}" />
+                </ContextMenu>
+            </dg:DataGrid.ContextMenu>
+            <dg:DataGrid.Columns>
+                <dg:DataGridTextColumn Header="Level" Binding="{CompiledBinding Level}" Width="80" />
+                <dg:DataGridTemplateColumn Header="Message" Width="2*">
+                    <dg:DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:OutputMessage">
+                            <TextBlock Text="{CompiledBinding Text}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </dg:DataGridTemplateColumn.CellTemplate>
+                </dg:DataGridTemplateColumn>
+                <dg:DataGridTextColumn Header="Line" Binding="{CompiledBinding Line}" Width="80" />
+                <dg:DataGridTextColumn Header="Column" Binding="{CompiledBinding Column}" Width="80" />
+            </dg:DataGrid.Columns>
+        </dg:DataGrid>
     </DockPanel>
 
 </UserControl>

@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Serilog;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.App.Views;
@@ -78,7 +79,7 @@ public sealed class CanvasFileDropBehavior
             return;
         }
 
-        Console.WriteLine($"Dropped files ({paths.Count}): {string.Join(", ", paths)}");
+        Log.Logger.Information("Dropped files ({Count}): {Paths}", paths.Count, string.Join(", ", paths));
 
         var position = e.GetPosition(control);
         CanvasDropInfo payload = new(position.X, position.Y, paths);
@@ -96,12 +97,14 @@ public sealed class CanvasFileDropBehavior
         IDataTransfer data = e.DataTransfer;
         List<string> candidatePaths = new();
 
-        Console.WriteLine($"Drop data: HasFile={data.Contains(DataFormat.File)}, HasText={data.Contains(DataFormat.Text)}");
+        Log.Logger.Information("Drop data: HasFile={HasFile}, HasText={HasText}",
+            data.Contains(DataFormat.File),
+            data.Contains(DataFormat.Text));
 
         IStorageItem[]? storageItems = data.TryGetFiles();
         if (storageItems is { Length: > 0 })
         {
-            Console.WriteLine($"Drop data TryGetFiles count: {storageItems.Length}");
+            Log.Logger.Information("Drop data TryGetFiles count: {Count}", storageItems.Length);
             foreach (IStorageItem storageItem in storageItems)
             {
                 candidatePaths.Add(storageItem.Path.LocalPath);
@@ -111,7 +114,8 @@ public sealed class CanvasFileDropBehavior
         if (data.Contains(DataFormat.File))
         {
             object? value = data.TryGetValue(DataFormat.File);
-            Console.WriteLine($"Drop data File type: {(value is null ? "<null>" : value.GetType().FullName)}");
+            Log.Logger.Information("Drop data File type: {Type}",
+                value is null ? "<null>" : value.GetType().FullName);
             if (value is IEnumerable<string> pathList)
             {
                 candidatePaths.AddRange(pathList);
@@ -146,7 +150,8 @@ public sealed class CanvasFileDropBehavior
         if (data.Contains(DataFormat.Text))
         {
             object? textValue = data.TryGetValue(DataFormat.Text);
-            Console.WriteLine($"Drop data Text type: {(textValue is null ? "<null>" : textValue.GetType().FullName)}");
+            Log.Logger.Information("Drop data Text type: {Type}",
+                textValue is null ? "<null>" : textValue.GetType().FullName);
             if (textValue is string text)
             {
                 AddTextPaths(text, candidatePaths);
@@ -160,7 +165,7 @@ public sealed class CanvasFileDropBehavior
             }
         }
 
-        Console.WriteLine($"Drop data candidate paths: {candidatePaths.Count}");
+        Log.Logger.Information("Drop data candidate paths: {Count}", candidatePaths.Count);
 
         if (candidatePaths.Count == 0)
         {
@@ -172,7 +177,7 @@ public sealed class CanvasFileDropBehavior
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        Console.WriteLine($"Drop data distinct paths: {paths.Count}");
+        Log.Logger.Information("Drop data distinct paths: {Count}", paths.Count);
         return paths.Count > 0;
     }
 

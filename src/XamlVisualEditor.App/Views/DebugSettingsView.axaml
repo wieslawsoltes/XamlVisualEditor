@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.DebugSettingsView"
+             x:DataType="vm:DebugSettingsViewModel">
+  <DockPanel Margin="8">
+    <StackPanel Spacing="8">
+      <TextBlock Text="Debug Settings" FontWeight="SemiBold" FontSize="14" />
+
+      <StackPanel Spacing="4">
+        <TextBlock Text="Debugger adapter path" />
+        <TextBox Text="{CompiledBinding AdapterPath, Mode=TwoWay}" />
+      </StackPanel>
+
+      <CheckBox Content="Auto-download netcoredbg"
+                IsChecked="{CompiledBinding AutoDownloadTools, Mode=TwoWay}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="Download netcoredbg"
+                Command="{CompiledBinding DownloadNetcoredbgCommand}"
+                IsEnabled="{CompiledBinding IsBusy, Converter={x:Static BoolConverters.Not}}" />
+        <TextBlock Text="{CompiledBinding StatusText}" VerticalAlignment="Center" />
+      </StackPanel>
+    </StackPanel>
+  </DockPanel>
+</UserControl>

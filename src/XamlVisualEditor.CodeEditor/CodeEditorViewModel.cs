@@ -4,6 +4,7 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using AvaloniaEdit.Document;
+using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Core;
@@ -24,6 +25,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     private readonly SyncEngine _syncEngine;
     private readonly CompletionProviderRegistry _completionRegistry;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly ILogger<CodeEditorViewModel> _logger;
     private bool _suppressTextChanged;
     private int _ignoreCaretUpdates;
 
@@ -93,6 +95,18 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     public int SelectionLength { get; set; }
 
     /// <summary>
+    /// Gets or sets the current execution line number (1-based).
+    /// </summary>
+    [Reactive]
+    public int? ExecutionLine { get; set; }
+
+    /// <summary>
+    /// Gets the version used to refresh breakpoint line highlights.
+    /// </summary>
+    [Reactive]
+    public int BreakpointHighlightVersion { get; private set; }
+
+    /// <summary>
     /// Gets the diagnostics for the current document.
     /// </summary>
     public ObservableCollection<XamlDiagnostic> Diagnostics { get; } = new();
@@ -101,6 +115,16 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// Gets the diagnostic colorizer for rendering error squiggles.
     /// </summary>
     public DiagnosticColorizer DiagnosticColorizer { get; } = new();
+
+    /// <summary>
+    /// Gets the execution line colorizer for debug line highlighting.
+    /// </summary>
+    public ExecutionLineColorizer ExecutionLineColorizer { get; } = new();
+
+    /// <summary>
+    /// Gets the breakpoint line colorizer for gutter line highlighting.
+    /// </summary>
+    public BreakpointLineColorizer BreakpointLineColorizer { get; } = new();
 
     /// <summary>
     /// Gets the completion items for the popup.
@@ -151,11 +175,13 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     public CodeEditorViewModel(
         SyncEngine syncEngine,
         CompletionProviderRegistry completionRegistry,
-        ITypeMetadataService? metadataService = null)
+        ITypeMetadataService? metadataService = null,
+        ILogger<CodeEditorViewModel>? logger = null)
     {
         _syncEngine = syncEngine;
         _completionRegistry = completionRegistry;
         _metadataService = metadataService;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CodeEditorViewModel>.Instance;
 
         TriggerCompletionCommand = ReactiveCommand.Create(TriggerCompletion);
         UndoCommand = ReactiveCommand.Create(() => Document.UndoStack.Undo());
@@ -187,6 +213,11 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(offset => UpdateCaretPosition(offset));
         _disposables.Add(caretSubscription);
+    }
+
+    public void BumpBreakpointHighlightVersion()
+    {
+        BreakpointHighlightVersion++;
     }
 
     /// <summary>
@@ -345,7 +376,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Caret position calculation error: {ex.Message}");
+            _logger.LogWarning("Caret position calculation error: {Message}", ex.Message);
         }
     }
 

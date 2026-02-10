@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -22,6 +24,7 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Core.Events;
 using Dock.Model.ReactiveUI.Controls;
+using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.CodeEditor;
@@ -42,6 +45,8 @@ using XamlVisualEditor.Workspace;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Shell;
+using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Core.Logging;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -69,6 +74,9 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     private readonly ITypeMetadataService? _metadataService;
     private readonly Func<WorkspaceModel?>? _workspaceProvider;
     private readonly Func<string, System.Threading.Tasks.Task>? _openFileAsync;
+    private BreakpointsViewModel? _breakpointsSource;
+    private readonly ILogger<DesignerDocumentViewModel> _logger;
+    private readonly ILoggerFactory? _loggerFactory;
     private readonly Dictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
         = new(StringComparer.OrdinalIgnoreCase);
 
@@ -91,6 +99,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// Gets the current caret column (1-based).
     /// </summary>
     public int CurrentColumn => CodeEditor.CurrentColumn;
+
+    /// <summary>
+    /// Gets or sets the shared breakpoints view model.
+    /// </summary>
+    [Reactive]
+    public BreakpointsViewModel? Breakpoints { get; set; }
 
     /// <summary>
     /// Gets or sets whether the document is modified.
@@ -198,12 +212,16 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         string filePath,
         ITypeMetadataService? metadataService = null,
         Func<WorkspaceModel?>? workspaceProvider = null,
-        Func<string, System.Threading.Tasks.Task>? openFileAsync = null)
+        Func<string, System.Threading.Tasks.Task>? openFileAsync = null,
+        ILogger<DesignerDocumentViewModel>? logger = null,
+        ILoggerFactory? loggerFactory = null)
     {
         FilePath = filePath;
         _metadataService = metadataService;
         _workspaceProvider = workspaceProvider;
         _openFileAsync = openFileAsync;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DesignerDocumentViewModel>.Instance;
+        _loggerFactory = loggerFactory;
 
         // Create services
         XamlParsingService parsingService = new();
@@ -215,9 +233,18 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         // Create sub-ViewModels
         DesignSurface = new DesignSurfaceViewModel();
         CompletionProviderRegistry completionRegistry = CompletionProviderRegistry.CreateDefault();
-        CodeEditor = new CodeEditorViewModel(SyncEngine, completionRegistry, metadataService);
-        PropertyEditor = new PropertyEditorViewModel(NodeMap, metadataService);
-        ControlFactory = new ControlFactory(metadataService);
+        CodeEditor = new CodeEditorViewModel(
+            SyncEngine,
+            completionRegistry,
+            metadataService,
+            _loggerFactory?.CreateLogger<CodeEditorViewModel>());
+        PropertyEditor = new PropertyEditorViewModel(
+            NodeMap,
+            metadataService,
+            _loggerFactory?.CreateLogger<PropertyEditorViewModel>());
+        ControlFactory = new ControlFactory(
+            metadataService,
+            _loggerFactory?.CreateLogger<ControlFactory>());
 
         // Wire property editor changes back to the sync engine
         PropertyEditor.PropertyValueApplied += _ =>
@@ -291,8 +318,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Trace.TraceWarning(
-                            $"Property editor update failed: {ex.Message}");
+                        _logger.LogWarning("Property editor update failed: {Message}", ex.Message);
                     }
                 }, DispatcherPriority.Background);
             });
@@ -374,6 +400,50 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(_ => StartPreviewerCommand?.Execute(null));
         _disposables.Add(previewerToggleSubscription);
+
+        IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(HandleBreakpointsChanged);
+        _disposables.Add(breakpointSourceSubscription);
+    }
+
+    private void HandleBreakpointsChanged(BreakpointsViewModel? breakpoints)
+    {
+        if (_breakpointsSource is not null)
+        {
+            _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
+        }
+
+        _breakpointsSource = breakpoints;
+        if (_breakpointsSource is not null)
+        {
+            _breakpointsSource.BreakpointsChanged += OnBreakpointsChanged;
+        }
+
+        UpdateBreakpointHighlights();
+    }
+
+    private void OnBreakpointsChanged()
+    {
+        UpdateBreakpointHighlights();
+    }
+
+    private void UpdateBreakpointHighlights()
+    {
+        if (_breakpointsSource is null)
+        {
+            CodeEditor.BreakpointLineColorizer.UpdateLines(Array.Empty<int>());
+            CodeEditor.BumpBreakpointHighlightVersion();
+            return;
+        }
+
+        IEnumerable<int> lines = _breakpointsSource.Items
+            .Where(entry => string.Equals(entry.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => entry.Line)
+            .Distinct();
+
+        CodeEditor.BreakpointLineColorizer.UpdateLines(lines);
+        CodeEditor.BumpBreakpointHighlightVersion();
     }
 
     /// <summary>
@@ -513,6 +583,10 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         }
 
         IsDisposed = true;
+        if (_breakpointsSource is not null)
+        {
+            _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
+        }
         _disposables.Dispose();
         PropertyEditor.Dispose();
         CodeEditor.Dispose();
@@ -529,6 +603,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
     public bool IsDisposed { get; private set; }
     private readonly ILanguageIntellisenseService? _languageService;
     private bool _suppressTextChanged;
+    private BreakpointsViewModel? _breakpointsSource;
 
     public string FilePath { get; }
 
@@ -563,6 +638,22 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
 
     public XamlVisualEditor.CodeEditor.LanguageDiagnosticColorizer DiagnosticColorizer { get; } = new();
 
+    public XamlVisualEditor.CodeEditor.ExecutionLineColorizer ExecutionLineColorizer { get; } = new();
+
+    public XamlVisualEditor.CodeEditor.BreakpointLineColorizer BreakpointLineColorizer { get; } = new();
+
+    [Reactive]
+    public int? ExecutionLine { get; set; }
+
+    [Reactive]
+    public int BreakpointHighlightVersion { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the shared breakpoints view model.
+    /// </summary>
+    [Reactive]
+    public BreakpointsViewModel? Breakpoints { get; set; }
+
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
 
     public TextDocumentViewModel(string filePath, ILanguageIntellisenseRegistry? languageRegistry = null)
@@ -588,6 +679,50 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         _disposables.Add(diagnosticsSubscription);
 
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
+
+        IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(HandleBreakpointsChanged);
+        _disposables.Add(breakpointSourceSubscription);
+    }
+
+    private void HandleBreakpointsChanged(BreakpointsViewModel? breakpoints)
+    {
+        if (_breakpointsSource is not null)
+        {
+            _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
+        }
+
+        _breakpointsSource = breakpoints;
+        if (_breakpointsSource is not null)
+        {
+            _breakpointsSource.BreakpointsChanged += OnBreakpointsChanged;
+        }
+
+        UpdateBreakpointHighlights();
+    }
+
+    private void OnBreakpointsChanged()
+    {
+        UpdateBreakpointHighlights();
+    }
+
+    private void UpdateBreakpointHighlights()
+    {
+        if (_breakpointsSource is null)
+        {
+            BreakpointLineColorizer.UpdateLines(Array.Empty<int>());
+            BreakpointHighlightVersion++;
+            return;
+        }
+
+        IEnumerable<int> lines = _breakpointsSource.Items
+            .Where(entry => string.Equals(entry.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => entry.Line)
+            .Distinct();
+
+        BreakpointLineColorizer.UpdateLines(lines);
+        BreakpointHighlightVersion++;
     }
 
     public async System.Threading.Tasks.Task LoadAsync()
@@ -626,6 +761,10 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         }
 
         IsDisposed = true;
+        if (_breakpointsSource is not null)
+        {
+            _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
+        }
         _disposables.Dispose();
     }
 
@@ -1007,7 +1146,7 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
 /// <summary>
 /// ViewModel for the output/diagnostics panel.
 /// </summary>
-public sealed class OutputViewModel : ReactiveObject
+public sealed class OutputViewModel : ReactiveObject, IOutputLogSink
 {
     /// <summary>
     /// Gets the output messages.
@@ -1038,10 +1177,25 @@ public sealed class OutputViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> ClearCommand { get; }
 
     /// <summary>
+    /// Command to copy the selected message.
+    /// </summary>
+    public ReactiveCommand<Unit, Unit> CopySelectedCommand { get; }
+
+    /// <summary>
+    /// Command to copy all messages.
+    /// </summary>
+    public ReactiveCommand<Unit, Unit> CopyAllCommand { get; }
+
+    /// <summary>
     /// Gets or sets the selected output message.
     /// </summary>
     [Reactive]
     public OutputMessage? SelectedMessage { get; set; }
+
+    /// <summary>
+    /// Interaction to copy output text to the clipboard.
+    /// </summary>
+    public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
 
     public OutputViewModel()
     {
@@ -1052,6 +1206,97 @@ public sealed class OutputViewModel : ReactiveObject
             WarningCount = 0;
             SelectedMessage = null;
         });
+
+        IObservable<bool> hasSelection = this.WhenAnyValue(x => x.SelectedMessage)
+            .Select(msg => msg is not null);
+        CopySelectedCommand = ReactiveCommand.CreateFromTask(CopySelectedAsync, hasSelection);
+
+        IObservable<bool> hasMessages = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
+                h => Messages.CollectionChanged += h,
+                h => Messages.CollectionChanged -= h)
+            .Select(_ => Messages.Count > 0)
+            .StartWith(Messages.Count > 0);
+        CopyAllCommand = ReactiveCommand.CreateFromTask(CopyAllAsync, hasMessages);
+    }
+
+    private async System.Threading.Tasks.Task CopySelectedAsync()
+    {
+        if (SelectedMessage is null)
+        {
+            return;
+        }
+
+        string text = FormatMessage(SelectedMessage);
+        await CopyToClipboardInteraction.Handle(text);
+    }
+
+    private async System.Threading.Tasks.Task CopyAllAsync()
+    {
+        if (Messages.Count == 0)
+        {
+            return;
+        }
+
+        StringBuilder builder = new();
+        foreach (OutputMessage message in Messages)
+        {
+            builder.AppendLine(FormatMessage(message));
+        }
+
+        await CopyToClipboardInteraction.Handle(builder.ToString());
+    }
+
+    public void Write(LogEntry entry)
+    {
+        string level = entry.Level switch
+        {
+            LogLevel.Trace => "Trace",
+            LogLevel.Debug => "Debug",
+            LogLevel.Information => "Info",
+            LogLevel.Warning => "Warning",
+            LogLevel.Error => "Error",
+            LogLevel.Critical => "Critical",
+            _ => "Info"
+        };
+
+        string message = entry.Exception is null
+            ? entry.Message
+            : entry.Message + Environment.NewLine + entry.Exception;
+
+        AddOutputMessage(new OutputMessage(
+            level,
+            message,
+            entry.Line,
+            entry.Column,
+            false,
+            entry.FilePath));
+    }
+
+    private static string FormatMessage(OutputMessage message)
+    {
+        StringBuilder builder = new();
+        builder.Append('[').Append(message.Level).Append("] ").Append(message.Text);
+
+        List<string> details = new();
+        if (!string.IsNullOrWhiteSpace(message.FilePath))
+        {
+            details.Add(message.FilePath);
+        }
+        if (message.Line > 0)
+        {
+            details.Add($"Ln {message.Line}");
+        }
+        if (message.Column > 0)
+        {
+            details.Add($"Col {message.Column}");
+        }
+
+        if (details.Count > 0)
+        {
+            builder.Append(" (").Append(string.Join(", ", details)).Append(')');
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -1059,7 +1304,7 @@ public sealed class OutputViewModel : ReactiveObject
     /// </summary>
     public void AddMessage(string level, string text)
     {
-        Messages.Add(new OutputMessage(level, text, 0, 0, false));
+        AddOutputMessage(new OutputMessage(level, text, 0, 0, false));
     }
 
     /// <summary>
@@ -1067,73 +1312,20 @@ public sealed class OutputViewModel : ReactiveObject
     /// </summary>
     public void AddDiagnostic(XamlDiagnostic diagnostic, string? filePath = null)
     {
-        Messages.Add(new OutputMessage(
-            diagnostic.Severity switch
-            {
-                DiagnosticSeverity.Error => "Error",
-                DiagnosticSeverity.Warning => "Warning",
-                _ => "Info"
-            },
-            diagnostic.Message,
-            diagnostic.Line,
-            diagnostic.Column,
-            true,
-            filePath));
-
-        if (diagnostic.Severity == DiagnosticSeverity.Error)
-        {
-            ErrorCount++;
-        }
-        else if (diagnostic.Severity == DiagnosticSeverity.Warning)
-        {
-            WarningCount++;
-        }
-    }
-
-    /// <summary>
-    /// Replaces existing diagnostics with the provided list.
-    /// </summary>
-    public void ReplaceDiagnostics(IReadOnlyList<XamlDiagnostic> diagnostics, string? filePath = null)
-    {
-        for (int i = Messages.Count - 1; i >= 0; i--)
-        {
-            if (Messages[i].IsDiagnostic)
-            {
-                Messages.RemoveAt(i);
-            }
-        }
-
-        ErrorCount = 0;
-        WarningCount = 0;
-
-        foreach (XamlDiagnostic diagnostic in diagnostics)
-        {
-            AddDiagnostic(diagnostic, filePath);
-        }
-    }
-
-    public void ReplaceLanguageDiagnostics(IReadOnlyList<LanguageDiagnostic> diagnostics)
-    {
-        for (int i = Messages.Count - 1; i >= 0; i--)
-        {
-            if (Messages[i].IsDiagnostic)
-            {
-                Messages.RemoveAt(i);
-            }
-        }
-
-        ErrorCount = 0;
-        WarningCount = 0;
-
-        foreach (LanguageDiagnostic diagnostic in diagnostics)
+        void Add()
         {
             Messages.Add(new OutputMessage(
-                diagnostic.Severity.ToString(),
+                diagnostic.Severity switch
+                {
+                    DiagnosticSeverity.Error => "Error",
+                    DiagnosticSeverity.Warning => "Warning",
+                    _ => "Info"
+                },
                 diagnostic.Message,
-                diagnostic.Range.Start.Line,
-                diagnostic.Range.Start.Column,
+                diagnostic.Line,
+                diagnostic.Column,
                 true,
-                diagnostic.FilePath));
+                filePath));
 
             if (diagnostic.Severity == DiagnosticSeverity.Error)
             {
@@ -1144,6 +1336,106 @@ public sealed class OutputViewModel : ReactiveObject
                 WarningCount++;
             }
         }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Add();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(Add, DispatcherPriority.Background);
+        }
+    }
+
+    /// <summary>
+    /// Replaces existing diagnostics with the provided list.
+    /// </summary>
+    public void ReplaceDiagnostics(IReadOnlyList<XamlDiagnostic> diagnostics, string? filePath = null)
+    {
+        void Replace()
+        {
+            for (int i = Messages.Count - 1; i >= 0; i--)
+            {
+                if (Messages[i].IsDiagnostic)
+                {
+                    Messages.RemoveAt(i);
+                }
+            }
+
+            ErrorCount = 0;
+            WarningCount = 0;
+
+            foreach (XamlDiagnostic diagnostic in diagnostics)
+            {
+                AddDiagnostic(diagnostic, filePath);
+            }
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Replace();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(Replace, DispatcherPriority.Background);
+        }
+    }
+
+    public void ReplaceLanguageDiagnostics(IReadOnlyList<LanguageDiagnostic> diagnostics)
+    {
+        void Replace()
+        {
+            for (int i = Messages.Count - 1; i >= 0; i--)
+            {
+                if (Messages[i].IsDiagnostic)
+                {
+                    Messages.RemoveAt(i);
+                }
+            }
+
+            ErrorCount = 0;
+            WarningCount = 0;
+
+            foreach (LanguageDiagnostic diagnostic in diagnostics)
+            {
+                Messages.Add(new OutputMessage(
+                    diagnostic.Severity.ToString(),
+                    diagnostic.Message,
+                    diagnostic.Range.Start.Line,
+                    diagnostic.Range.Start.Column,
+                    true,
+                    diagnostic.FilePath));
+
+                if (diagnostic.Severity == DiagnosticSeverity.Error)
+                {
+                    ErrorCount++;
+                }
+                else if (diagnostic.Severity == DiagnosticSeverity.Warning)
+                {
+                    WarningCount++;
+                }
+            }
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Replace();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(Replace, DispatcherPriority.Background);
+        }
+    }
+
+    private void AddOutputMessage(OutputMessage message)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Messages.Add(message);
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() => Messages.Add(message), DispatcherPriority.Background);
     }
 }
 
@@ -1488,6 +1780,38 @@ public sealed class PreviewerTrustDialogViewModel : ReactiveObject
 }
 
 /// <summary>
+/// ViewModel for debug tool download consent dialog.
+/// </summary>
+public sealed class DebugToolConsentDialogViewModel : ReactiveObject
+{
+    public string Title { get; } = "Download Debug Tool";
+    public string Message { get; }
+    public string ToolId { get; }
+    public string Version { get; }
+    public string DownloadUrl { get; }
+    public string InstallPath { get; }
+
+    public Interaction<bool, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> AllowCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public DebugToolConsentDialogViewModel(DebugToolConsentRequest request)
+    {
+        Message = request.Message;
+        ToolId = request.ToolId;
+        Version = request.Version;
+        DownloadUrl = request.DownloadUrl;
+        InstallPath = request.InstallPath;
+
+        AllowCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(true));
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(false));
+    }
+}
+
+/// <summary>
 /// A message in the output panel.
 /// </summary>
 public sealed record OutputMessage(
@@ -1556,6 +1880,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly ITypeMetadataService? _metadataService;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
+    private readonly IDebuggerService _debuggerService;
+    private readonly IDebugToolInstaller? _debugToolInstaller;
+    private readonly IOutputLogSinkAccessor? _outputLogSinkAccessor;
+    private readonly ILogger<MainWindowViewModel> _logger;
+    private readonly ILoggerFactory? _loggerFactory;
+    private readonly Dictionary<string, ProjectModel> _projectLookup = new(StringComparer.OrdinalIgnoreCase);
+    private System.Diagnostics.Process? _runProcess;
     private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _autoSaveSubscriptions = new();
     private WorkspaceAssemblyResolver? _assemblyResolver;
@@ -1601,9 +1932,55 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public SolutionExplorerViewModel SolutionExplorer { get; } = new();
 
     /// <summary>
+    /// Gets the workspace projects.
+    /// </summary>
+    public ObservableCollection<ProjectModel> WorkspaceProjects { get; } = new();
+
+    /// <summary>
     /// Gets the output ViewModel.
     /// </summary>
     public OutputViewModel Output { get; } = new();
+
+    /// <summary>
+    /// Gets the debugger ViewModel.
+    /// </summary>
+    public DebuggerViewModel Debugger { get; }
+
+    /// <summary>
+    /// Gets the debug settings ViewModel.
+    /// </summary>
+    public DebugSettingsViewModel DebugSettings { get; }
+
+    /// <summary>
+    /// Gets the breakpoints ViewModel.
+    /// </summary>
+    public BreakpointsViewModel Breakpoints => Debugger.Breakpoints;
+
+    /// <summary>
+    /// Gets the call stack ViewModel.
+    /// </summary>
+    public CallStackViewModel CallStack => Debugger.CallStack;
+
+    /// <summary>
+    /// Gets the locals ViewModel.
+    /// </summary>
+    public LocalsViewModel Locals => Debugger.Locals;
+
+    /// <summary>
+    /// Gets the watches ViewModel.
+    /// </summary>
+    public WatchesViewModel Watches => Debugger.Watches;
+
+    /// <summary>
+    /// Gets the active startup project.
+    /// </summary>
+    [Reactive]
+    public ProjectModel? ActiveProject { get; private set; }
+
+    [Reactive]
+    public string? ActiveProjectPath { get; private set; }
+
+    public string ActiveProjectName => ActiveProject?.Name ?? "(none)";
 
     /// <summary>
     /// Gets the references ViewModel.
@@ -1729,6 +2106,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public Interaction<ThemeVariantOption, Unit> ThemeVariantInteraction { get; } = new();
 
+    /// <summary>
+    /// Interaction for debug tool download consent.
+    /// </summary>
+    public Interaction<DebugToolConsentRequest, bool> DebugToolConsentInteraction { get; } = new();
+
     // Panel visibility
     [Reactive] public bool IsToolboxVisible { get; set; } = true;
     [Reactive] public bool IsPropertiesVisible { get; set; } = true;
@@ -1738,6 +2120,37 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     [Reactive] public bool IsReferencesVisible { get; set; }
     [Reactive] public bool IsCollaborationVisible { get; set; }
     [Reactive] public bool IsAnimationEditorVisible { get; set; } = true;
+    [Reactive] public bool IsBreakpointsVisible { get; set; } = true;
+    [Reactive] public bool IsCallStackVisible { get; set; } = true;
+    [Reactive] public bool IsLocalsVisible { get; set; } = true;
+    [Reactive] public bool IsWatchesVisible { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the debugger adapter path.
+    /// </summary>
+    [Reactive]
+    public string DebuggerAdapterPath { get; set; } = "tools/netcoredbg/netcoredbg/netcoredbg";
+
+    /// <summary>
+    /// Gets or sets whether debug tools can be auto-downloaded.
+    /// </summary>
+    [Reactive]
+    public bool AutoDownloadTools { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the program arguments for run/debug.
+    /// </summary>
+    [Reactive]
+    public string ProgramArguments { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets whether debugging should stop at entry.
+    /// </summary>
+    [Reactive]
+    public bool DebugStopAtEntry { get; set; }
+
+    [Reactive]
+    public bool IsRunActive { get; private set; }
 
     // File Commands
     public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
@@ -1779,6 +2192,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleReferencesCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleCollaborationCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAnimationEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleBreakpointsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleCallStackCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleLocalsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleWatchesCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
 
@@ -1794,6 +2211,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     // Previewer Commands
     public ReactiveCommand<Unit, Unit> StartPreviewerCommand { get; }
 
+    // Debug Commands
+    public ReactiveCommand<Unit, Unit> StartDebugCommand { get; }
+    public ReactiveCommand<Unit, Unit> StopDebugCommand { get; }
+    public ReactiveCommand<Unit, Unit> ContinueDebugCommand { get; }
+    public ReactiveCommand<Unit, Unit> StepOverCommand { get; }
+    public ReactiveCommand<Unit, Unit> StepInCommand { get; }
+    public ReactiveCommand<Unit, Unit> StepOutCommand { get; }
+    public ReactiveCommand<Unit, Unit> PauseDebugCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleBreakpointCommand { get; }
+    public ReactiveCommand<Unit, Unit> StartRunCommand { get; }
+    public ReactiveCommand<Unit, Unit> StopRunCommand { get; }
+    public ReactiveCommand<ProjectModel, Unit> SetStartupProjectCommand { get; }
+
     /// <summary>
     /// Command to close a specific document (used by tab close button).
     /// </summary>
@@ -1803,15 +2233,27 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IWorkspaceService? workspaceService = null,
         ITypeMetadataService? metadataService = null,
         ILanguageIntellisenseRegistry? languageRegistry = null,
-        IAnimationPreviewService? animationPreviewService = null)
+        IAnimationPreviewService? animationPreviewService = null,
+        IDebuggerService? debuggerService = null,
+        IDebugToolInstaller? debugToolInstaller = null,
+        IOutputLogSinkAccessor? outputLogSinkAccessor = null,
+        ILogger<MainWindowViewModel>? logger = null,
+        ILoggerFactory? loggerFactory = null)
     {
         _workspaceService = workspaceService;
         _metadataService = metadataService;
         _languageRegistry = languageRegistry;
+        _debuggerService = debuggerService ?? new NullDebuggerService();
+        _debugToolInstaller = debugToolInstaller;
+        _outputLogSinkAccessor = outputLogSinkAccessor;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MainWindowViewModel>.Instance;
+        _loggerFactory = loggerFactory;
 
         LoadTrustedPreviewerRoots();
 
-        InfiniteCanvas = new InfiniteCanvasViewModel(_languageRegistry);
+        InfiniteCanvas = new InfiniteCanvasViewModel(
+            _languageRegistry,
+            _loggerFactory?.CreateLogger<InfiniteCanvasViewModel>());
 
         References = new ReferencesViewModel(async item =>
         {
@@ -1826,9 +2268,24 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         });
 
         AnimationEditor = new AnimationEditorViewModel(this, animationPreviewService);
+        Debugger = new DebuggerViewModel(_debuggerService);
+        DebugSettings = new DebugSettingsViewModel(
+            _debugToolInstaller,
+            () => DebuggerAdapterPath,
+            path => DebuggerAdapterPath = path,
+            () => AutoDownloadTools,
+            value => AutoDownloadTools = value,
+            ConfirmDebugToolConsentAsync);
 
-        DockFactory = new XamlEditorDockFactory(this);
-        IRootDock layout = XamlEditorDockFactory.LoadLayout() ?? DockFactory.CreateDefaultLayout();
+        if (_outputLogSinkAccessor is not null)
+        {
+            _outputLogSinkAccessor.Sink = Output;
+        }
+
+        DockFactory = new XamlEditorDockFactory(
+            this,
+            _loggerFactory?.CreateLogger<XamlEditorDockFactory>());
+        IRootDock layout = DockFactory.LoadLayout() ?? DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
         DockFactory.EnsureOwnerReferences(layout);
@@ -2056,6 +2513,26 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             IsAnimationEditorVisible = !IsAnimationEditorVisible;
             SetDockableVisibility("AnimationEditor", IsAnimationEditorVisible);
         });
+        ToggleBreakpointsCommand = ReactiveCommand.Create(() =>
+        {
+            IsBreakpointsVisible = !IsBreakpointsVisible;
+            SetDockableVisibility("Breakpoints", IsBreakpointsVisible);
+        });
+        ToggleCallStackCommand = ReactiveCommand.Create(() =>
+        {
+            IsCallStackVisible = !IsCallStackVisible;
+            SetDockableVisibility("CallStack", IsCallStackVisible);
+        });
+        ToggleLocalsCommand = ReactiveCommand.Create(() =>
+        {
+            IsLocalsVisible = !IsLocalsVisible;
+            SetDockableVisibility("Locals", IsLocalsVisible);
+        });
+        ToggleWatchesCommand = ReactiveCommand.Create(() =>
+        {
+            IsWatchesVisible = !IsWatchesVisible;
+            SetDockableVisibility("Watches", IsWatchesVisible);
+        });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
         OpenCanvasCommand = ReactiveCommand.Create(ShowCanvasDocument);
 
@@ -2082,6 +2559,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         StartPreviewerCommand = ReactiveCommand.CreateFromTask(
             StartPreviewerForActiveDocumentAsync,
             hasDesignerDoc.CombineLatest(hasWorkspace, (hasDoc, hasWs) => hasDoc && hasWs));
+
+        StartDebugCommand = ReactiveCommand.CreateFromTask(StartDebuggingAsync, hasWorkspace);
+        StopDebugCommand = ReactiveCommand.CreateFromTask(StopDebuggingAsync);
+        ContinueDebugCommand = ReactiveCommand.CreateFromTask(() => Debugger.ContinueAsync());
+        StepOverCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepOverAsync());
+        StepInCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepInAsync());
+        StepOutCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepOutAsync());
+        PauseDebugCommand = ReactiveCommand.CreateFromTask(() => Debugger.PauseAsync());
+        ToggleBreakpointCommand = ReactiveCommand.Create(ToggleBreakpointAtCaret);
+        StartRunCommand = ReactiveCommand.CreateFromTask(StartRunAsync, hasWorkspace);
+        StopRunCommand = ReactiveCommand.CreateFromTask(StopRunAsync, this.WhenAnyValue(x => x.IsRunActive));
+        SetStartupProjectCommand = ReactiveCommand.Create<ProjectModel>(SetActiveProject);
 
         // Close document command (used by tab close buttons)
         CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
@@ -2153,6 +2642,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _previewerLaunchService.PreviewerErrorReceived += OnPreviewerErrorReceived;
         _disposables.Add(Disposable.Create(() =>
             _previewerLaunchService.PreviewerErrorReceived -= OnPreviewerErrorReceived));
+
+        Debugger.DebugOutputReceived += OnDebugOutputReceived;
+        Debugger.DebugStopped += OnDebugStopped;
+        Debugger.DebugContinued += OnDebugContinued;
+        _disposables.Add(Disposable.Create(() =>
+        {
+            Debugger.DebugOutputReceived -= OnDebugOutputReceived;
+            Debugger.DebugStopped -= OnDebugStopped;
+            Debugger.DebugContinued -= OnDebugContinued;
+        }));
+
+        IDisposable executionFrameSubscription = Debugger.CallStack.WhenAnyValue(x => x.SelectedFrame)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(UpdateExecutionLocationFromFrame);
+        _disposables.Add(executionFrameSubscription);
 
         IDisposable activeDocumentDiagnosticsSubscription = this.WhenAnyValue(x => x.ActiveDesignerDocument)
             .Select(doc => doc is null
@@ -2254,6 +2758,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _disposables.Add(collaborationStatusSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFromSolutionExplorerAsync(path); };
+        SolutionExplorer.StartupProjectSelected += path => SetActiveProjectByPath(path);
 
         IDisposable activeDocumentTypeSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Subscribe(doc =>
@@ -2324,8 +2829,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         await System.IO.File.WriteAllTextAsync(tempPath, defaultXaml);
 
-        DesignerDocumentViewModel doc = new(tempPath, _metadataService, () => _workspace, OpenFileAsync);
+        DesignerDocumentViewModel doc = new(
+            tempPath,
+            _metadataService,
+            () => _workspace,
+            OpenFileAsync,
+            _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
+            _loggerFactory);
         doc.StartPreviewerCommand = StartPreviewerCommand;
+        doc.Breakpoints = Breakpoints;
         Documents.Add(doc);
         ActiveDocument = doc;
         AddDocumentToDock(doc);
@@ -2338,7 +2850,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to load new document: {ex.Message}");
+            _logger.LogWarning("Failed to load new document: {Message}", ex.Message);
             StatusText = $"Failed to create document: {ex.Message}";
         }
     }
@@ -2355,7 +2867,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Open document failed: {ex.Message}");
+            _logger.LogWarning("Open document failed: {Message}", ex.Message);
             StatusText = $"Open document failed: {ex.Message}";
         }
     }
@@ -2491,7 +3003,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IReadOnlyList<LanguageLocation> locations =
             await ActiveTextDocument.FindReferencesAsync(ActiveTextDocument.CaretOffset);
 
-        Output.AddMessage("Refs", $"Found {locations.Count} reference(s)");
+        LogOutput("Info", $"Refs: Found {locations.Count} reference(s)");
         References.ReplaceItems(locations.Select(location =>
             new ReferenceLocationViewModel(
                 location.FilePath,
@@ -2500,9 +3012,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         foreach (LanguageLocation location in locations)
         {
-            Output.AddMessage(
-                "Refs",
-                $"{location.FilePath} ({location.Range.Start.Line},{location.Range.Start.Column})");
+            LogOutput(
+                "Info",
+                $"Refs: {location.FilePath} ({location.Range.Start.Line},{location.Range.Start.Column})");
         }
 
         IsReferencesVisible = true;
@@ -2728,6 +3240,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IsOutputVisible = true;
         IsCollaborationVisible = false;
         IsAnimationEditorVisible = true;
+        IsBreakpointsVisible = true;
+        IsCallStackVisible = true;
+        IsLocalsVisible = true;
+        IsWatchesVisible = true;
 
         IRootDock layout = DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
@@ -2748,10 +3264,689 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to delete layout file: {ex.Message}");
+            _logger.LogWarning("Failed to delete layout file: {Message}", ex.Message);
         }
 
         StatusText = "Layout reset";
+    }
+
+    private void OnDebugOutputReceived(DebugOutputEvent output)
+    {
+        string level = output.Category switch
+        {
+            DebugOutputCategory.StdErr => "Error",
+            DebugOutputCategory.StdOut => "Info",
+            DebugOutputCategory.Telemetry => "Info",
+            _ => "Debug"
+        };
+
+        string text = output.Text.TrimEnd();
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        LogOutput(level, text);
+    }
+
+    private void OnDebugStopped(DebugStoppedEvent stopped)
+    {
+        StatusText = stopped.Description is null
+            ? $"Paused ({stopped.Reason})"
+            : $"Paused ({stopped.Reason}): {stopped.Description}";
+
+        UpdateExecutionLocationFromFrame(Debugger.CallStack.SelectedFrame);
+    }
+
+    private void OnDebugContinued(DebugContinuedEvent continued)
+    {
+        StatusText = "Running";
+        ClearExecutionLocation();
+    }
+
+    private void UpdateExecutionLocationFromFrame(StackFrameViewModel? frame)
+    {
+        if (frame is null || frame.Line is null || string.IsNullOrWhiteSpace(frame.FilePath))
+        {
+            return;
+        }
+
+        SetExecutionLocation(frame.FilePath, frame.Line.Value);
+    }
+
+    private void SetExecutionLocation(string filePath, int line)
+    {
+        foreach (IEditorDocumentViewModel doc in Documents)
+        {
+            if (doc is DesignerDocumentViewModel designer)
+            {
+                designer.CodeEditor.ExecutionLine = string.Equals(designer.FilePath, filePath, StringComparison.OrdinalIgnoreCase)
+                    ? line
+                    : null;
+            }
+            else if (doc is TextDocumentViewModel text)
+            {
+                text.ExecutionLine = string.Equals(text.FilePath, filePath, StringComparison.OrdinalIgnoreCase)
+                    ? line
+                    : null;
+            }
+        }
+    }
+
+    private void ClearExecutionLocation()
+    {
+        foreach (IEditorDocumentViewModel doc in Documents)
+        {
+            if (doc is DesignerDocumentViewModel designer)
+            {
+                designer.CodeEditor.ExecutionLine = null;
+            }
+            else if (doc is TextDocumentViewModel text)
+            {
+                text.ExecutionLine = null;
+            }
+        }
+    }
+
+    private void ToggleBreakpointAtCaret()
+    {
+        if (ActiveDocument is null)
+        {
+            return;
+        }
+
+        string filePath = ActiveDocument.FilePath;
+        int line = ActiveDocument.CurrentLine;
+        if (line <= 0)
+        {
+            return;
+        }
+
+        Breakpoints.ToggleBreakpoint(filePath, line, ActiveDocument.CurrentColumn);
+    }
+
+    private async System.Threading.Tasks.Task StartDebuggingAsync()
+    {
+        if (_workspace is null)
+        {
+            StatusText = "Debugging requires a loaded workspace.";
+            return;
+        }
+
+        ProjectModel? project = ResolveActiveProject();
+        if (project is null)
+        {
+            StatusText = "No project selected for debugging.";
+            return;
+        }
+
+        SetActiveProject(project);
+        LogOutput("Info", $"Debug start requested: {project.Name} ({project.ProjectPath})");
+        await EnsureProjectBuiltAsync(project, suppressWarnings: false);
+
+        string? assemblyPath = ResolveTargetAssemblyPath(project);
+        if (string.IsNullOrWhiteSpace(assemblyPath))
+        {
+            StatusText = "Unable to resolve the output assembly for debugging.";
+            return;
+        }
+
+        if (IsUnsupportedDebugTarget(assemblyPath))
+        {
+            StatusText = "Debug start failed: selected output is not runnable.";
+            LogOutput("Error", $"Debug start failed: '{assemblyPath}' targets netstandard or .NET Framework. Select an executable startup project or a net6+ target.");
+            return;
+        }
+
+        string? workingDir = System.IO.Path.GetDirectoryName(assemblyPath);
+        string? adapterPath = await ResolveDebuggerAdapterPathAsync();
+        if (string.IsNullOrWhiteSpace(adapterPath))
+        {
+            StatusText = "Debug start failed: netcoredbg not found.";
+            LogOutput("Error", AutoDownloadTools
+                ? "Debug start failed: netcoredbg not found. Download was not completed."
+                : "Debug start failed: netcoredbg not found. Set DebuggerAdapterPath or enable auto-download.");
+            return;
+        }
+
+        DebugLaunchOptions options = new()
+        {
+            AdapterPath = adapterPath,
+            ProgramPath = assemblyPath,
+            Arguments = string.IsNullOrWhiteSpace(ProgramArguments) ? null : ProgramArguments,
+            WorkingDirectory = workingDir,
+            StopAtEntry = DebugStopAtEntry
+        };
+
+        LogOutput("Info", $"Debug adapter: {options.AdapterPath}");
+        LogOutput("Info", $"Debug program: {options.ProgramPath}");
+        if (!string.IsNullOrWhiteSpace(options.WorkingDirectory))
+        {
+            LogOutput("Info", $"Debug working dir: {options.WorkingDirectory}");
+        }
+        if (!string.IsNullOrWhiteSpace(options.Arguments))
+        {
+            LogOutput("Info", $"Debug arguments: {options.Arguments}");
+        }
+
+        try
+        {
+            await Debugger.StartAsync(options);
+            StatusText = $"Debugging {System.IO.Path.GetFileName(assemblyPath)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Debug start failed: {ex.Message}";
+            LogOutput("Error", $"Debug start failed: {ex.Message}");
+        }
+    }
+
+    private static string? ResolveDebuggerAdapterPath(string adapterPath)
+    {
+        if (string.IsNullOrWhiteSpace(adapterPath))
+        {
+            return null;
+        }
+
+        if (System.IO.Path.IsPathRooted(adapterPath))
+        {
+            return System.IO.File.Exists(adapterPath) ? adapterPath : null;
+        }
+
+        string baseDir = AppContext.BaseDirectory;
+        string localPath = System.IO.Path.Combine(baseDir, adapterPath);
+        if (System.IO.File.Exists(localPath))
+        {
+            return localPath;
+        }
+
+        try
+        {
+            string cwd = System.IO.Directory.GetCurrentDirectory();
+            string cwdPath = System.IO.Path.Combine(cwd, adapterPath);
+            if (System.IO.File.Exists(cwdPath))
+            {
+                return cwdPath;
+            }
+        }
+        catch
+        {
+        }
+
+        string? pathVar = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathVar))
+        {
+            return null;
+        }
+
+        foreach (string dir in pathVar.Split(System.IO.Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                string candidate = System.IO.Path.Combine(dir, adapterPath);
+                if (System.IO.File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private async System.Threading.Tasks.Task<string?> ResolveDebuggerAdapterPathAsync()
+    {
+        string? adapterPath = ResolveDebuggerAdapterPath(DebuggerAdapterPath);
+        if (!string.IsNullOrWhiteSpace(adapterPath))
+        {
+            return adapterPath;
+        }
+
+        if (!AutoDownloadTools || _debugToolInstaller is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            LogOutput("Info", "netcoredbg not found. Attempting to download...");
+            string? downloaded = await _debugToolInstaller.EnsureNetcoredbgAsync(ConfirmDebugToolConsentAsync);
+            if (!string.IsNullOrWhiteSpace(downloaded))
+            {
+                DebuggerAdapterPath = downloaded;
+                return downloaded;
+            }
+
+            LogOutput("Info", "netcoredbg download cancelled.");
+        }
+        catch (Exception ex)
+        {
+            LogOutput("Error", $"netcoredbg download failed: {ex.Message}");
+            StatusText = $"netcoredbg download failed: {ex.Message}";
+        }
+
+        return null;
+    }
+
+    private ProjectModel? ResolveActiveProject()
+    {
+        if (SolutionExplorer.SelectedNode?.Kind == SolutionExplorerNodeKind.Project &&
+            !string.IsNullOrWhiteSpace(SolutionExplorer.SelectedNode.FullPath))
+        {
+            SetActiveProjectByPath(SolutionExplorer.SelectedNode.FullPath);
+        }
+
+        if (ActiveProject is not null)
+        {
+            return ActiveProject;
+        }
+
+        if (_workspace is null)
+        {
+            return null;
+        }
+
+        if (ActiveDocument is not null)
+        {
+            ProjectModel? docProject = FindProjectForFile(_workspace, ActiveDocument.FilePath);
+            if (docProject is not null)
+            {
+                return docProject;
+            }
+        }
+
+        if (WorkspaceProjects.Count > 0)
+        {
+            return WorkspaceProjects[0];
+        }
+
+        return _workspace.Projects.FirstOrDefault();
+    }
+
+    private void SetActiveProject(ProjectModel? project)
+    {
+        if (project is null)
+        {
+            ActiveProject = null;
+            ActiveProjectPath = null;
+            this.RaisePropertyChanged(nameof(ActiveProjectName));
+            SolutionExplorer.SetStartupProjectPath(null);
+            return;
+        }
+
+        ActiveProject = project;
+        ActiveProjectPath = project.ProjectPath;
+        this.RaisePropertyChanged(nameof(ActiveProjectName));
+        StatusText = $"Startup project: {project.Name}";
+        LogOutput("Info", $"Startup project set: {project.Name} ({project.ProjectPath})");
+        SolutionExplorer.SetStartupProjectPath(project.ProjectPath);
+    }
+
+    private void SetActiveProjectByPath(string projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            return;
+        }
+
+        ActiveProjectPath = projectPath;
+        SolutionExplorer.SetStartupProjectPath(projectPath);
+
+        if (_projectLookup.TryGetValue(projectPath, out ProjectModel? project))
+        {
+            SetActiveProject(project);
+            return;
+        }
+
+        if (_workspace is not null)
+        {
+            ProjectModel? match = null;
+            foreach (ProjectModel candidate in _workspace.Projects)
+            {
+                if (!string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                match = match is null
+                    ? candidate
+                    : ChoosePreferredProject(match, candidate);
+            }
+
+            if (match is not null)
+            {
+                SetActiveProject(match);
+            }
+        }
+    }
+
+    private async System.Threading.Tasks.Task EnsureProjectBuiltAsync(ProjectModel project, bool suppressWarnings)
+    {
+        string? output = ResolveTargetAssemblyPath(project);
+        if (!string.IsNullOrWhiteSpace(output) && System.IO.File.Exists(output))
+        {
+            return;
+        }
+
+        if (!suppressWarnings)
+        {
+            LogOutput("Info", $"Building {project.Name}...");
+        }
+
+        await RunDotNetCommandAsync(project.ProjectPath, "build");
+    }
+
+    private async System.Threading.Tasks.Task StopDebuggingAsync()
+    {
+        try
+        {
+            await Debugger.StopAsync();
+            StatusText = "Debugging stopped";
+            ClearExecutionLocation();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Debug stop failed: {ex.Message}";
+        }
+    }
+
+    private async System.Threading.Tasks.Task StartRunAsync()
+    {
+        if (_workspace is null)
+        {
+            StatusText = "Running requires a loaded workspace.";
+            return;
+        }
+
+        ProjectModel? project = ResolveActiveProject();
+        if (project is null)
+        {
+            StatusText = "No project selected to run.";
+            return;
+        }
+
+        if (_runProcess is not null && !_runProcess.HasExited)
+        {
+            StatusText = "A program is already running.";
+            return;
+        }
+
+        SetActiveProject(project);
+        LogOutput("Info", $"Run requested: {project.Name} ({project.ProjectPath})");
+        await EnsureProjectBuiltAsync(project, suppressWarnings: false);
+
+        string? workingDirectory = System.IO.Path.GetDirectoryName(project.ProjectPath);
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            StatusText = "Unable to resolve working directory for run.";
+            return;
+        }
+
+        string args = BuildRunArguments(project.ProjectPath, ProgramArguments);
+        System.Diagnostics.ProcessStartInfo startInfo = new()
+        {
+            FileName = "dotnet",
+            Arguments = args,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        System.Diagnostics.Process process = new() { StartInfo = startInfo, EnableRaisingEvents = true };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+            {
+                LogOutput("Info", e.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+            {
+                LogOutput("Error", e.Data);
+            }
+        };
+        process.Exited += (_, _) =>
+        {
+            IsRunActive = false;
+            StatusText = "Program exited";
+        };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            _runProcess = process;
+            IsRunActive = true;
+            StatusText = $"Running {project.Name}";
+            LogOutput("Info", $"Run command: dotnet {args}");
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Run failed: {ex.Message}";
+            LogOutput("Error", ex.Message);
+        }
+    }
+
+    private System.Threading.Tasks.Task StopRunAsync()
+    {
+        if (_runProcess is null)
+        {
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        try
+        {
+            if (!_runProcess.HasExited)
+            {
+                _runProcess.Kill(entireProcessTree: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogOutput("Error", $"Stop run failed: {ex.Message}");
+        }
+        finally
+        {
+            _runProcess.Dispose();
+            _runProcess = null;
+            IsRunActive = false;
+            StatusText = "Program stopped";
+        }
+
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
+
+    private static string BuildRunArguments(string projectPath, string? programArguments)
+    {
+        if (string.IsNullOrWhiteSpace(programArguments))
+        {
+            return $"run --project \"{projectPath}\"";
+        }
+
+        return $"run --project \"{projectPath}\" -- {programArguments}";
+    }
+
+    private static ProjectModel? FindProjectForFile(WorkspaceModel workspace, string filePath)
+    {
+        foreach (ProjectModel project in workspace.Projects)
+        {
+            foreach (XamlFileModel file in project.XamlFiles)
+            {
+                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return project;
+                }
+            }
+
+            foreach (ProjectFileModel file in project.Files)
+            {
+                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return project;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveTargetAssemblyPath(ProjectModel project)
+    {
+        string? preferred = FindPreferredOutputAssemblyPath(project);
+        if (!string.IsNullOrWhiteSpace(preferred))
+        {
+            return preferred;
+        }
+
+        if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
+        {
+            return project.OutputAssemblyPath;
+        }
+
+        string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
+        if (string.IsNullOrWhiteSpace(projectDir))
+        {
+            return null;
+        }
+
+        string[] searchRoots =
+        {
+            System.IO.Path.Combine(projectDir, "bin", "Debug"),
+            System.IO.Path.Combine(projectDir, "bin", "Release")
+        };
+
+        string targetName = project.Name + ".dll";
+        foreach (string root in searchRoots)
+        {
+            if (!System.IO.Directory.Exists(root))
+            {
+                continue;
+            }
+
+            try
+            {
+                string? match = System.IO.Directory.EnumerateFiles(root, targetName, System.IO.SearchOption.AllDirectories)
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(match))
+                {
+                    return match;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindPreferredOutputAssemblyPath(ProjectModel project)
+    {
+        string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
+        if (string.IsNullOrWhiteSpace(projectDir))
+        {
+            return null;
+        }
+
+        string targetName = project.Name + ".dll";
+        string debugRoot = System.IO.Path.Combine(projectDir, "bin", "Debug");
+        if (System.IO.Directory.Exists(debugRoot))
+        {
+            foreach (string tfm in PreferredFrameworks)
+            {
+                string candidate = System.IO.Path.Combine(debugRoot, tfm, targetName);
+                if (System.IO.File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsUnsupportedDebugTarget(string assemblyPath)
+    {
+        string normalized = assemblyPath.Replace('\\', '/').ToLowerInvariant();
+        return normalized.Contains("/netstandard") || normalized.Contains("/net4");
+    }
+
+    private static readonly string[] PreferredFrameworks =
+    {
+        "net10.0",
+        "net9.0",
+        "net8.0",
+        "net7.0",
+        "net6.0",
+        "net5.0",
+        "netcoreapp3.1",
+        "netcoreapp3.0"
+    };
+
+    private ProjectModel ChoosePreferredProject(ProjectModel existing, ProjectModel candidate)
+    {
+        string? existingAssembly = ResolveTargetAssemblyPath(existing);
+        string? candidateAssembly = ResolveTargetAssemblyPath(candidate);
+
+        bool existingSupported = !string.IsNullOrWhiteSpace(existingAssembly) &&
+            !IsUnsupportedDebugTarget(existingAssembly);
+        bool candidateSupported = !string.IsNullOrWhiteSpace(candidateAssembly) &&
+            !IsUnsupportedDebugTarget(candidateAssembly);
+
+        if (candidateSupported && !existingSupported)
+        {
+            return candidate;
+        }
+
+        if (existingSupported && !candidateSupported)
+        {
+            return existing;
+        }
+
+        int existingRank = GetFrameworkRank(existingAssembly);
+        int candidateRank = GetFrameworkRank(candidateAssembly);
+
+        return candidateRank < existingRank ? candidate : existing;
+    }
+
+    private static int GetFrameworkRank(string? assemblyPath)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyPath))
+        {
+            return int.MaxValue;
+        }
+
+        string normalized = assemblyPath.Replace('\\', '/').ToLowerInvariant();
+        for (int i = 0; i < PreferredFrameworks.Length; i++)
+        {
+            if (normalized.Contains("/" + PreferredFrameworks[i]))
+            {
+                return i;
+            }
+        }
+
+        return int.MaxValue;
+    }
+
+    private sealed class NullDebuggerService : IDebuggerService
+    {
+        public Task<IDebugSession> LaunchAsync(DebugLaunchOptions options, System.Threading.CancellationToken ct = default)
+        {
+            throw new InvalidOperationException("No debugger service is configured.");
+        }
+
+        public Task<IDebugSession> AttachAsync(DebugAttachOptions options, System.Threading.CancellationToken ct = default)
+        {
+            throw new InvalidOperationException("No debugger service is configured.");
+        }
     }
 
     private void EnsureCanvasDocument()
@@ -3128,8 +4323,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IEditorDocumentViewModel doc;
         if (IsXamlFile(filePath))
         {
-            DesignerDocumentViewModel designer = new(filePath, _metadataService, () => _workspace, OpenFileAsync);
+            DesignerDocumentViewModel designer = new(
+                filePath,
+                _metadataService,
+                () => _workspace,
+                OpenFileAsync,
+                _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
+                _loggerFactory);
             designer.StartPreviewerCommand = StartPreviewerCommand;
+            designer.Breakpoints = Breakpoints;
             Documents.Add(designer);
             ActiveDocument = designer;
             AddDocumentToDock(designer);
@@ -3141,6 +4343,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         else
         {
             TextDocumentViewModel textDoc = new(filePath, _languageRegistry);
+            textDoc.Breakpoints = Breakpoints;
             Documents.Add(textDoc);
             ActiveDocument = textDoc;
             AddDocumentToDock(textDoc);
@@ -3208,7 +4411,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to load recent files: {ex.Message}");
+            _logger.LogWarning("Failed to load recent files: {Message}", ex.Message);
         }
         finally
         {
@@ -3232,7 +4435,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to save recent files: {ex.Message}");
+            _logger.LogWarning("Failed to save recent files: {Message}", ex.Message);
         }
     }
 
@@ -3304,8 +4507,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Workspace load failed: {ex.Message}");
-            Console.WriteLine($"Workspace load failed: {ex.Message}");
+            _logger.LogWarning("Workspace load failed: {Message}", ex.Message);
             LogOutput("Error", $"Workspace load failed: {ex.Message}");
             LogWorkspaceEnvironment(workspacePath);
             StatusText = $"Workspace load failed: {ex.Message}";
@@ -3316,6 +4518,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _workspace = workspace;
         _workspacePath = workspacePath;
         HasWorkspace = true;
+        RefreshWorkspaceProjects(workspace);
 
         string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
         SolutionExplorer.LoadWorkspace(workspace, name);
@@ -3356,6 +4559,51 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         StatusText = $"Loaded workspace {name}";
         LogOutput("Info", $"Loaded workspace: {name}");
+    }
+
+    private void RefreshWorkspaceProjects(WorkspaceModel workspace)
+    {
+        WorkspaceProjects.Clear();
+        _projectLookup.Clear();
+
+        foreach (ProjectModel project in workspace.Projects)
+        {
+            WorkspaceProjects.Add(project);
+            if (!string.IsNullOrWhiteSpace(project.ProjectPath))
+            {
+                if (_projectLookup.TryGetValue(project.ProjectPath, out ProjectModel? existing))
+                {
+                    _projectLookup[project.ProjectPath] = ChoosePreferredProject(existing, project);
+                }
+                else
+                {
+                    _projectLookup[project.ProjectPath] = project;
+                }
+            }
+        }
+
+        ProjectModel? selected = null;
+        if (!string.IsNullOrWhiteSpace(ActiveProjectPath) &&
+            _projectLookup.TryGetValue(ActiveProjectPath, out ProjectModel? existingByPath))
+        {
+            selected = existingByPath;
+        }
+        else if (ActiveProject is not null &&
+            !string.IsNullOrWhiteSpace(ActiveProject.ProjectPath) &&
+            _projectLookup.TryGetValue(ActiveProject.ProjectPath, out ProjectModel? existing))
+        {
+            selected = existing;
+        }
+        else if (ActiveDocument is not null)
+        {
+            selected = FindProjectForFile(workspace, ActiveDocument.FilePath);
+        }
+        else if (WorkspaceProjects.Count > 0)
+        {
+            selected = WorkspaceProjects[0];
+        }
+
+        SetActiveProject(selected);
     }
 
     private async System.Threading.Tasks.Task TryLoadWorkspaceForXamlAsync(string xamlFilePath)
@@ -3401,7 +4649,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             || filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? FindWorkspacePathForFile(string filePath)
+    private string? FindWorkspacePathForFile(string filePath)
     {
         string? currentDir = System.IO.Path.GetDirectoryName(filePath);
         while (!string.IsNullOrEmpty(currentDir))
@@ -3428,7 +4676,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         return null;
     }
 
-    private static string? GetFirstFile(string directory, string pattern)
+    private string? GetFirstFile(string directory, string pattern)
     {
         try
         {
@@ -3439,7 +4687,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to enumerate '{directory}': {ex.Message}");
+            _logger.LogWarning("Failed to enumerate '{Directory}': {Message}", directory, ex.Message);
         }
 
         return null;
@@ -3473,7 +4721,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to run dotnet {command}: {ex.Message}");
+            _logger.LogWarning("Failed to run dotnet {Command}: {Message}", command, ex.Message);
             StatusText = $"dotnet {command} failed";
             LogOutput("Error", $"dotnet {command} failed: {ex.Message}");
             return;
@@ -3485,7 +4733,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         if (process.ExitCode != 0)
         {
-            System.Diagnostics.Trace.TraceWarning($"dotnet {command} failed: {stdErr}");
+            _logger.LogWarning("dotnet {Command} failed: {Error}", command, stdErr);
             StatusText = $"dotnet {command} failed";
             if (!string.IsNullOrWhiteSpace(stdErr))
             {
@@ -3494,15 +4742,36 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         else if (!string.IsNullOrWhiteSpace(stdOut))
         {
-            System.Diagnostics.Trace.TraceInformation(stdOut);
+            _logger.LogInformation("{Output}", stdOut);
             LogOutput("Info", stdOut.Trim());
         }
     }
 
     private void LogOutput(string level, string message)
     {
-        Output.AddMessage(level, message);
-        Console.WriteLine(message);
+        switch (level)
+        {
+            case "Error":
+                _logger.LogError(message);
+                break;
+            case "Warning":
+                _logger.LogWarning(message);
+                break;
+            case "Debug":
+                _logger.LogDebug(message);
+                break;
+            case "Trace":
+                _logger.LogTrace(message);
+                break;
+            default:
+                _logger.LogInformation(message);
+                break;
+        }
+    }
+
+    private System.Threading.Tasks.Task<bool> ConfirmDebugToolConsentAsync(DebugToolConsentRequest request)
+    {
+        return DebugToolConsentInteraction.Handle(request).ToTask();
     }
 
     private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
@@ -3607,7 +4876,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to load previewer trust list: {ex.Message}");
+            _logger.LogWarning("Failed to load previewer trust list: {Message}", ex.Message);
         }
     }
 
@@ -3622,7 +4891,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to save previewer trust list: {ex.Message}");
+            _logger.LogWarning("Failed to save previewer trust list: {Message}", ex.Message);
         }
     }
 
@@ -3657,7 +4926,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         {
             if (string.IsNullOrWhiteSpace(error.FilePath))
             {
-                Output.AddMessage("Error", error.Message);
+                LogOutput("Error", error.Message);
                 return;
             }
 
@@ -3716,7 +4985,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
     }
 
-    private static WorkspaceAssemblySet CollectWorkspaceAssemblies(
+    private WorkspaceAssemblySet CollectWorkspaceAssemblies(
         WorkspaceModel workspace,
         out bool hasAnyProjectOutputs,
         out bool hasMissingProjectOutputs)
@@ -3767,7 +5036,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         return new WorkspaceAssemblySet(all, preferred);
     }
 
-    private static IEnumerable<string> FindProjectOutputs(ProjectModel project)
+    private IEnumerable<string> FindProjectOutputs(ProjectModel project)
     {
         if (string.IsNullOrWhiteSpace(project.ProjectPath))
         {
@@ -3815,7 +5084,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.TraceWarning($"Failed to enumerate outputs from '{root}': {ex.Message}");
+                _logger.LogWarning("Failed to enumerate outputs from '{Root}': {Message}", root, ex.Message);
             }
         }
 
@@ -3847,24 +5116,24 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             || normalized.Contains(marker + "refint" + marker, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void LogWorkspaceEnvironment(string workspacePath)
+    private void LogWorkspaceEnvironment(string workspacePath)
     {
         try
         {
-            Console.WriteLine($"Workspace path: {workspacePath}");
-            Console.WriteLine($"Working directory: {System.IO.Directory.GetCurrentDirectory()}");
-            Console.WriteLine($"DOTNET_ROOT: {Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? string.Empty}");
-            Console.WriteLine($"PATH: {Environment.GetEnvironmentVariable("PATH") ?? string.Empty}");
+            _logger.LogInformation("Workspace path: {Path}", workspacePath);
+            _logger.LogInformation("Working directory: {WorkingDirectory}", System.IO.Directory.GetCurrentDirectory());
+            _logger.LogInformation("DOTNET_ROOT: {DotnetRoot}", Environment.GetEnvironmentVariable("DOTNET_ROOT") ?? string.Empty);
+            _logger.LogInformation("PATH: {Path}", Environment.GetEnvironmentVariable("PATH") ?? string.Empty);
 
             string info = GetDotNetInfo();
             if (!string.IsNullOrWhiteSpace(info))
             {
-                Console.WriteLine("dotnet --info:\n" + info);
+                _logger.LogInformation("dotnet --info:\n{Info}", info);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to log workspace environment: {ex.Message}");
+            _logger.LogWarning("Failed to log workspace environment: {Message}", ex.Message);
         }
     }
 
@@ -3950,9 +5219,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     public void Dispose()
     {
+        if (_outputLogSinkAccessor is not null)
+        {
+            _outputLogSinkAccessor.Sink = null;
+        }
+
         _disposables.Dispose();
         Collaboration.Dispose();
         AnimationEditor.Dispose();
+        Debugger.Dispose();
         InfiniteCanvas.Dispose();
         _assemblyResolver?.Dispose();
         _previewerLaunchService.Dispose();
@@ -3968,7 +5243,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         if (DockLayout is not null)
         {
-            XamlEditorDockFactory.SaveLayout(DockLayout);
+            DockFactory.SaveLayout(DockLayout);
         }
 
         foreach (IEditorDocumentViewModel doc in Documents)
@@ -4009,6 +5284,10 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
     /// <summary>Gets or sets whether this node is selected.</summary>
     [Reactive]
     public bool IsSelected { get; set; }
+
+    /// <summary>Gets or sets whether this project is the startup project.</summary>
+    [Reactive]
+    public bool IsStartupProject { get; set; }
 
     /// <summary>Raised when a file node is double-clicked (opened).</summary>
     public event Action<string>? FileOpened;
@@ -4203,8 +5482,6 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
 {
     private const string FilterPropertyPath = "Item.Name";
 
-    /// <summary>Gets or sets the root node of the solution tree.</summary>
-    [Reactive]
     public SolutionExplorerNodeViewModel? Root { get; set; }
 
     public ObservableCollection<SolutionExplorerNodeViewModel> RootItems { get; } = new();
@@ -4233,6 +5510,11 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
 
     /// <summary>Raised when a XAML file is opened from the tree.</summary>
     public event Action<string>? FileOpenRequested;
+
+    /// <summary>Raised when a project is marked as startup.</summary>
+    public event Action<string>? StartupProjectSelected;
+
+    public ReactiveCommand<Unit, Unit> SetStartupProjectCommand { get; }
 
     public SolutionExplorerViewModel()
     {
@@ -4265,6 +5547,53 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
+
+        SetStartupProjectCommand = ReactiveCommand.Create(() =>
+        {
+            if (SelectedNode?.Kind == SolutionExplorerNodeKind.Project &&
+                !string.IsNullOrWhiteSpace(SelectedNode.FullPath))
+            {
+                StartupProjectSelected?.Invoke(SelectedNode.FullPath);
+            }
+        });
+    }
+
+    public void SetStartupProjectPath(string? projectPath)
+    {
+        if (Root is null)
+        {
+            return;
+        }
+
+        foreach (SolutionExplorerNodeViewModel node in EnumerateNodes(Root))
+        {
+            if (node.Kind == SolutionExplorerNodeKind.Project &&
+                !string.IsNullOrWhiteSpace(node.FullPath) &&
+                !string.IsNullOrWhiteSpace(projectPath) &&
+                string.Equals(node.FullPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            {
+                node.IsStartupProject = true;
+            }
+            else
+            {
+                node.IsStartupProject = false;
+            }
+        }
+    }
+
+    private static IEnumerable<SolutionExplorerNodeViewModel> EnumerateNodes(SolutionExplorerNodeViewModel root)
+    {
+        Queue<SolutionExplorerNodeViewModel> queue = new();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            SolutionExplorerNodeViewModel node = queue.Dequeue();
+            yield return node;
+            foreach (SolutionExplorerNodeViewModel child in node.Children)
+            {
+                queue.Enqueue(child);
+            }
+        }
     }
 
     /// <summary>
@@ -4278,29 +5607,6 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
         SetRoot(Root);
     }
 
-    private void CollapseAll(SolutionExplorerNodeViewModel? root)
-    {
-        if (root is null)
-        {
-            return;
-        }
-
-        root.IsExpanded = true;
-        foreach (SolutionExplorerNodeViewModel child in root.Children)
-        {
-            CollapseNode(child);
-        }
-    }
-
-    private void CollapseNode(SolutionExplorerNodeViewModel node)
-    {
-        node.IsExpanded = false;
-        foreach (SolutionExplorerNodeViewModel child in node.Children)
-        {
-            CollapseNode(child);
-        }
-    }
-
     private void SetRoot(SolutionExplorerNodeViewModel? root)
     {
         RootItems.Clear();
@@ -4311,6 +5617,15 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
 
         Model.Refresh();
         ApplyFilterAndSearch(FilterText);
+    }
+
+    private static void CollapseAll(SolutionExplorerNodeViewModel node)
+    {
+        foreach (SolutionExplorerNodeViewModel child in node.Children)
+        {
+            child.IsExpanded = false;
+            CollapseAll(child);
+        }
     }
 
     private void WireFileOpen(SolutionExplorerNodeViewModel node)

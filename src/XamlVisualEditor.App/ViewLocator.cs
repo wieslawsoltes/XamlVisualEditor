@@ -47,6 +47,16 @@ public sealed class ViewLocator : IDataTemplate
                     return new LogicalTreeToolView { DataContext = tool };
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
+                case DebugSettingsTool tool:
+                    return new DebugSettingsView { DataContext = tool.DebugSettingsViewModel };
+                case BreakpointsTool tool:
+                    return new BreakpointsView { DataContext = tool.BreakpointsViewModel };
+                case CallStackTool tool:
+                    return new CallStackView { DataContext = tool.CallStackViewModel };
+                case LocalsTool tool:
+                    return new LocalsView { DataContext = tool.LocalsViewModel };
+                case WatchesTool tool:
+                    return new WatchesView { DataContext = tool.WatchesViewModel };
                 case ReferencesTool tool:
                     return new ReferencesView { DataContext = tool.ReferencesViewModel };
                 case CollaborationTool tool:
@@ -61,6 +71,11 @@ public sealed class ViewLocator : IDataTemplate
             DesignerDocumentViewModel => new DesignerDocumentView(),
             ToolboxViewModel => new ToolboxView(),
             OutputViewModel => new OutputView(),
+            DebugSettingsViewModel => new DebugSettingsView(),
+            BreakpointsViewModel => new BreakpointsView(),
+            CallStackViewModel => new CallStackView(),
+            LocalsViewModel => new LocalsView(),
+            WatchesViewModel => new WatchesView(),
             ReferencesViewModel => new ReferencesView(),
             CodeEditorViewModel => new XamlCodeEditorView(),
             TextDocumentViewModel => new TextFileView(),
@@ -83,6 +98,11 @@ public sealed class ViewLocator : IDataTemplate
             or DesignerDocumentViewModel
             or ToolboxViewModel
             or OutputViewModel
+            or DebugSettingsViewModel
+            or BreakpointsViewModel
+            or CallStackViewModel
+            or LocalsViewModel
+            or WatchesViewModel
             or ReferencesViewModel
             or CodeEditorViewModel
             or TextDocumentViewModel

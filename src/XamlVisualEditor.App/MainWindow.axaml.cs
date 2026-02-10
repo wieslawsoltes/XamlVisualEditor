@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
     private IDisposable? _saveFileHandler;
     private IDisposable? _renameSymbolHandler;
     private IDisposable? _previewerTrustHandler;
+    private IDisposable? _debugToolConsentHandler;
 
     public MainWindow()
         : this(null)
@@ -43,6 +44,7 @@ public sealed partial class MainWindow : Window
             _saveFileHandler?.Dispose();
             _renameSymbolHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
+            _debugToolConsentHandler?.Dispose();
         };
 
         if (viewModel is not null)
@@ -62,6 +64,7 @@ public sealed partial class MainWindow : Window
         _saveFileHandler?.Dispose();
         _renameSymbolHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
+        _debugToolConsentHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
@@ -138,6 +141,18 @@ public sealed partial class MainWindow : Window
             };
 
             PreviewerTrustDecision result = await dialog.ShowDialog<PreviewerTrustDecision>(this);
+            interaction.SetOutput(result);
+        });
+
+        _debugToolConsentHandler = vm.DebugToolConsentInteraction.RegisterHandler(async interaction =>
+        {
+            DebugToolConsentDialogViewModel dialogVm = new(interaction.Input);
+            DebugToolConsentDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            bool result = await dialog.ShowDialog<bool>(this);
             interaction.SetOutput(result);
         });
     }

@@ -12,6 +12,7 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Core.Events;
 using Dock.Model.ReactiveUI.Controls;
+using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Core.Interfaces;
@@ -55,12 +56,16 @@ public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
     private readonly Subject<Unit> _saveRequests = new();
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly DocumentDock _documentDock;
+    private readonly ILogger<InfiniteCanvasViewModel> _logger;
     private bool _isLoadingLayout;
     private int _openDocumentSeed;
 
-    public InfiniteCanvasViewModel(ILanguageIntellisenseRegistry? languageRegistry)
+    public InfiniteCanvasViewModel(
+        ILanguageIntellisenseRegistry? languageRegistry,
+        ILogger<InfiniteCanvasViewModel>? logger = null)
     {
         _languageRegistry = languageRegistry;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<InfiniteCanvasViewModel>.Instance;
         DockFactory = new CanvasDockFactory();
         DockLayout = DockFactory.CreateLayout();
         DockFactory.InitLayout(DockLayout);
@@ -348,7 +353,7 @@ public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to load MDI canvas layout: {ex.Message}");
+            _logger.LogWarning("Failed to load MDI canvas layout: {Message}", ex.Message);
         }
         finally
         {
@@ -382,7 +387,7 @@ public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to save MDI canvas layout: {ex.Message}");
+            _logger.LogWarning("Failed to save MDI canvas layout: {Message}", ex.Message);
         }
     }
 

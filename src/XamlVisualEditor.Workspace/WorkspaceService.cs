@@ -14,6 +14,7 @@ using System.ComponentModel;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
+using Microsoft.Extensions.Logging;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using Avalonia;
@@ -33,11 +34,17 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 {
     private MSBuildWorkspace? _workspace;
     private Solution? _solution;
+    private readonly ILogger<WorkspaceService> _logger;
+
+    public WorkspaceService(ILogger<WorkspaceService>? logger = null)
+    {
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance;
+    }
 
     /// <summary>
     /// Ensures MSBuild is located and registered.
     /// </summary>
-    public static void EnsureMSBuildRegistered()
+    private void EnsureMSBuildRegistered()
     {
         EnsureDotnetRoot();
         if (!MSBuildLocator.IsRegistered)
@@ -51,7 +58,10 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             VisualStudioInstance? instance = instances.FirstOrDefault();
             if (instance is not null)
             {
-                Console.WriteLine($"MSBuild selected: {instance.Name} {instance.Version} at {instance.MSBuildPath}");
+                _logger.LogInformation("MSBuild selected: {Name} {Version} at {Path}",
+                    instance.Name,
+                    instance.Version,
+                    instance.MSBuildPath);
             }
 
             VisualStudioInstance? instanceToRegister = instances.FirstOrDefault();
@@ -61,13 +71,13 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             }
             else
             {
-                Console.WriteLine("MSBuild instances not found. Falling back to defaults.");
+                _logger.LogInformation("MSBuild instances not found. Falling back to defaults.");
                 MSBuildLocator.RegisterDefaults();
             }
         }
     }
 
-    private static void EnsureDotnetRoot()
+    private void EnsureDotnetRoot()
     {
         string? dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
         if (!string.IsNullOrWhiteSpace(dotnetRoot))
@@ -79,22 +89,25 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         if (!string.IsNullOrWhiteSpace(arm64Root))
         {
             Environment.SetEnvironmentVariable("DOTNET_ROOT", arm64Root);
-            Console.WriteLine($"DOTNET_ROOT set to {arm64Root} from DOTNET_ROOT_ARM64");
+            _logger.LogInformation("DOTNET_ROOT set to {Path} from DOTNET_ROOT_ARM64", arm64Root);
         }
     }
 
-    private static void LogMsBuildInstances(IReadOnlyList<VisualStudioInstance> instances)
+    private void LogMsBuildInstances(IReadOnlyList<VisualStudioInstance> instances)
     {
         if (instances.Count == 0)
         {
-            Console.WriteLine("MSBuild instances: none");
+            _logger.LogInformation("MSBuild instances: none");
             return;
         }
 
-        Console.WriteLine("MSBuild instances:");
+        _logger.LogInformation("MSBuild instances:");
         foreach (VisualStudioInstance instance in instances)
         {
-            Console.WriteLine($"- {instance.Name} {instance.Version} at {instance.MSBuildPath}");
+            _logger.LogInformation("- {Name} {Version} at {Path}",
+                instance.Name,
+                instance.Version,
+                instance.MSBuildPath);
         }
     }
 
@@ -115,9 +128,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
             _workspace = MSBuildWorkspace.Create();
             workspaceFailed = _workspace.RegisterWorkspaceFailedHandler(OnWorkspaceFailed);
-            Console.WriteLine($"Loading solution: {solutionPath}");
+            _logger.LogInformation("Loading solution: {Path}", solutionPath);
             Progress<ProjectLoadProgress> progress = new(p =>
-                Console.WriteLine($"Workspace load: {FormatProgress(p)}"));
+                _logger.LogInformation("Workspace load: {Progress}", FormatProgress(p)));
             _solution = await _workspace.OpenSolutionAsync(solutionPath, progress, ct);
         }
         finally
@@ -212,9 +225,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
             _workspace = MSBuildWorkspace.Create();
             workspaceFailed = _workspace.RegisterWorkspaceFailedHandler(OnWorkspaceFailed);
-            Console.WriteLine($"Loading project: {projectPath}");
+            _logger.LogInformation("Loading project: {Path}", projectPath);
             Progress<ProjectLoadProgress> progress = new(p =>
-                Console.WriteLine($"Workspace load: {FormatProgress(p)}"));
+                _logger.LogInformation("Workspace load: {Progress}", FormatProgress(p)));
             project = await _workspace.OpenProjectAsync(projectPath, progress, ct);
         }
         finally
@@ -526,7 +539,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return trimmed;
     }
 
-    private static IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
+    private IReadOnlyList<XamlFileModel> LoadXamlFromProjectFile(string? projectPath)
     {
         if (string.IsNullOrWhiteSpace(projectPath) || !System.IO.File.Exists(projectPath))
         {
@@ -547,7 +560,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to read project '{projectPath}': {ex.Message}");
+            _logger.LogWarning("Failed to read project '{Path}': {Message}", projectPath, ex.Message);
             return results;
         }
 
@@ -585,7 +598,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return results;
     }
 
-    private static IEnumerable<string> EnumerateProjectXamlFiles(string projectDir)
+    private IEnumerable<string> EnumerateProjectXamlFiles(string projectDir)
     {
         IEnumerable<string> files;
         try
@@ -595,7 +608,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to enumerate XAML files in '{projectDir}': {ex.Message}");
+            _logger.LogWarning("Failed to enumerate XAML files in '{Directory}': {Message}", projectDir, ex.Message);
             yield break;
         }
 
@@ -622,7 +635,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                || path.Contains("\\.vs\\", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IEnumerable<string> ResolveItemFiles(string projectDir, string include, string? exclude)
+    private IEnumerable<string> ResolveItemFiles(string projectDir, string include, string? exclude)
     {
         string normalized = include.Replace('\\', '/');
         if (!HasWildcard(normalized))
@@ -645,7 +658,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to enumerate '{searchRoot}': {ex.Message}");
+            _logger.LogWarning("Failed to enumerate '{Root}': {Message}", searchRoot, ex.Message);
             yield break;
         }
 
@@ -710,11 +723,13 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return Regex.IsMatch(text, "^" + regex + "$", RegexOptions.IgnoreCase);
     }
 
-    private static void OnWorkspaceFailed(WorkspaceDiagnosticEventArgs e)
+    private void OnWorkspaceFailed(WorkspaceDiagnosticEventArgs e)
     {
         if (e.Diagnostic is not null)
         {
-            Console.WriteLine($"Workspace diagnostic [{e.Diagnostic.Kind}]: {e.Diagnostic.Message}");
+            _logger.LogWarning("Workspace diagnostic [{Kind}]: {Message}",
+                e.Diagnostic.Kind,
+                e.Diagnostic.Message);
         }
     }
 
@@ -746,10 +761,13 @@ public sealed class TypeMetadataService : ITypeMetadataService
     private readonly Dictionary<string, TypeMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<System.Reflection.Assembly> _loadedAssemblies = new();
     private readonly HashSet<string> _loadedAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger<TypeMetadataService> _logger;
+
     private readonly Dictionary<string, List<XmlnsDefinition>> _xmlnsMappings = new(StringComparer.OrdinalIgnoreCase);
 
-    public TypeMetadataService()
+    public TypeMetadataService(ILogger<TypeMetadataService>? logger = null)
     {
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<TypeMetadataService>.Instance;
         foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             string? name = asm.GetName().Name;
@@ -979,7 +997,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to load assembly '{assemblyPath}': {ex.Message}");
+            _logger.LogWarning("Failed to load assembly '{Path}': {Message}", assemblyPath, ex.Message);
         }
     }
 
@@ -1039,8 +1057,11 @@ public sealed class TypeMetadataService : ITypeMetadataService
                 !string.IsNullOrWhiteSpace(loaded?.Location) &&
                 !string.Equals(loaded.Location, assemblyPath, StringComparison.OrdinalIgnoreCase))
             {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"Assembly '{assemblyName}' already loaded from '{loaded.Location}'. Skipping '{assemblyPath}'.");
+                _logger.LogWarning(
+                    "Assembly '{Name}' already loaded from '{LoadedPath}'. Skipping '{Path}'.",
+                    assemblyName,
+                    loaded.Location,
+                    assemblyPath);
             }
             return false;
         }
@@ -1544,8 +1565,10 @@ public sealed class TypeMetadataService : ITypeMetadataService
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"Failed to enumerate exported types from '{asm.FullName}': {ex.Message}");
+                _logger.LogWarning(
+                    "Failed to enumerate exported types from '{Assembly}': {Message}",
+                    asm.FullName,
+                    ex.Message);
                 continue;
             }
 
@@ -1564,7 +1587,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
     private readonly record struct XmlnsDefinition(string XmlNamespace, string ClrNamespace, string AssemblyName);
 
-    private static bool TryGetTypeSafe(System.Reflection.Assembly asm, string typeName, out Type? type)
+    private bool TryGetTypeSafe(System.Reflection.Assembly asm, string typeName, out Type? type)
     {
         type = null;
         try
@@ -1574,8 +1597,11 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning(
-                $"Failed to resolve type '{typeName}' from '{asm.FullName}': {ex.Message}");
+            _logger.LogWarning(
+                "Failed to resolve type '{TypeName}' from '{Assembly}': {Message}",
+                typeName,
+                asm.FullName,
+                ex.Message);
             return false;
         }
     }

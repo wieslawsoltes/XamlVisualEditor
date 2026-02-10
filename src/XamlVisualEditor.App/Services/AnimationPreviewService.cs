@@ -7,7 +7,6 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Data;
-using Avalonia.Data;
 using Avalonia.Media;
 using Avalonia.Styling;
 using XamlVisualEditor.Animation;
@@ -143,7 +142,10 @@ public sealed class AnimationPreviewService : IAnimationPreviewService
 
                 if (!AnimationValueParser.TryParse(keyframe.Value, property.PropertyType, out object? value))
                 {
-                    continue;
+                    if (!AnimationValueParser.TryGetFallbackValue(keyframe.Value, control, property, out value))
+                    {
+                        continue;
+                    }
                 }
 
                 keyFrame.Setters.Add(new Setter(property, value));
@@ -192,12 +194,8 @@ public sealed class AnimationPreviewService : IAnimationPreviewService
         double cue = timeSeconds / durationSeconds;
         return Math.Clamp(cue, 0.0, 1.0);
     }
-                if (!AnimationValueParser.TryParse(keyframe.Value, property.PropertyType, out object? value))
     private static bool TryResolveKeySpline(string? easing, out KeySpline? keySpline)
-                    if (!AnimationValueParser.TryGetFallbackValue(keyframe.Value, control, property, out value))
-                    {
-                        continue;
-                    }
+    {
         keySpline = null;
         if (string.IsNullOrWhiteSpace(easing))
         {

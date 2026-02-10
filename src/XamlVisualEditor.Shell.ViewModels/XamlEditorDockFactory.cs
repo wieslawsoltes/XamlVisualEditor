@@ -10,6 +10,7 @@ using Dock.Model.Core;
 using Dock.Model.ReactiveUI;
 using Dock.Model.ReactiveUI.Controls;
 using Dock.Serializer.SystemTextJson;
+using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Collaboration.UI;
@@ -181,6 +182,121 @@ public sealed class OutputTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the debug settings panel.
+/// </summary>
+public sealed class DebugSettingsTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public DebugSettingsViewModel? DebugSettingsViewModel { get; set; }
+
+    public DebugSettingsTool()
+    {
+        Id = "DebugSettings";
+        Title = "Debug Settings";
+    }
+
+    public DebugSettingsTool(DebugSettingsViewModel debugSettingsViewModel)
+    {
+        DebugSettingsViewModel = debugSettingsViewModel;
+        Id = "DebugSettings";
+        Title = "Debug Settings";
+    }
+}
+
+/// <summary>
+/// Dock tool for the breakpoints panel.
+/// </summary>
+public sealed class BreakpointsTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public BreakpointsViewModel? BreakpointsViewModel { get; set; }
+
+    public BreakpointsTool()
+    {
+        Id = "Breakpoints";
+        Title = "Breakpoints";
+    }
+
+    public BreakpointsTool(BreakpointsViewModel breakpoints)
+    {
+        BreakpointsViewModel = breakpoints;
+        Id = "Breakpoints";
+        Title = "Breakpoints";
+    }
+}
+
+/// <summary>
+/// Dock tool for the call stack panel.
+/// </summary>
+public sealed class CallStackTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public CallStackViewModel? CallStackViewModel { get; set; }
+
+    public CallStackTool()
+    {
+        Id = "CallStack";
+        Title = "Call Stack";
+    }
+
+    public CallStackTool(CallStackViewModel callStack)
+    {
+        CallStackViewModel = callStack;
+        Id = "CallStack";
+        Title = "Call Stack";
+    }
+}
+
+/// <summary>
+/// Dock tool for the locals panel.
+/// </summary>
+public sealed class LocalsTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public LocalsViewModel? LocalsViewModel { get; set; }
+
+    public LocalsTool()
+    {
+        Id = "Locals";
+        Title = "Locals";
+    }
+
+    public LocalsTool(LocalsViewModel locals)
+    {
+        LocalsViewModel = locals;
+        Id = "Locals";
+        Title = "Locals";
+    }
+}
+
+/// <summary>
+/// Dock tool for the watches panel.
+/// </summary>
+public sealed class WatchesTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public WatchesViewModel? WatchesViewModel { get; set; }
+
+    public WatchesTool()
+    {
+        Id = "Watches";
+        Title = "Watches";
+    }
+
+    public WatchesTool(WatchesViewModel watches)
+    {
+        WatchesViewModel = watches;
+        Id = "Watches";
+        Title = "Watches";
+    }
+}
+
+/// <summary>
 /// Dock tool for the animation editor panel.
 /// </summary>
 public sealed class AnimationEditorTool : Tool
@@ -313,12 +429,17 @@ public sealed class InfiniteCanvasDocument : Document
 /// </summary>
 public sealed class XamlEditorDockFactory : Factory
 {
+    private static readonly bool LogLayoutWarnings = false;
     private readonly MainWindowViewModel _mainVm;
+    private readonly ILogger<XamlEditorDockFactory> _logger;
     private static readonly DockSerializer s_serializer = new(typeof(ObservableCollection<>));
 
-    public XamlEditorDockFactory(MainWindowViewModel mainVm)
+    public XamlEditorDockFactory(
+        MainWindowViewModel mainVm,
+        ILogger<XamlEditorDockFactory>? logger = null)
     {
         _mainVm = mainVm;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<XamlEditorDockFactory>.Instance;
         PropertyEditorTool.DefaultMainViewModel = mainVm;
         VisualTreeTool.DefaultMainViewModel = mainVm;
         LogicalTreeTool.DefaultMainViewModel = mainVm;
@@ -340,6 +461,11 @@ public sealed class XamlEditorDockFactory : Factory
 
         // Bottom tools: Output, Collaboration
         OutputTool outputTool = new(_mainVm.Output);
+        DebugSettingsTool debugSettingsTool = new(_mainVm.DebugSettings);
+        BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
+        CallStackTool callStackTool = new(_mainVm.CallStack);
+        LocalsTool localsTool = new(_mainVm.Locals);
+        WatchesTool watchesTool = new(_mainVm.Watches);
         ReferencesTool referencesTool = new(_mainVm.References);
         CollaborationTool collabTool = new(_mainVm.Collaboration);
         AnimationEditorTool animationTool = new(_mainVm.AnimationEditor);
@@ -373,7 +499,16 @@ public sealed class XamlEditorDockFactory : Factory
             Title = "Bottom Tools",
             Proportion = 0.25,
             ActiveDockable = outputTool,
-            VisibleDockables = CreateList<IDockable>(outputTool, referencesTool, animationTool, collabTool),
+            VisibleDockables = CreateList<IDockable>(
+                outputTool,
+                referencesTool,
+                debugSettingsTool,
+                breakpointsTool,
+                callStackTool,
+                localsTool,
+                watchesTool,
+                animationTool,
+                collabTool),
             Alignment = Alignment.Bottom
         };
 
@@ -467,6 +602,36 @@ public sealed class XamlEditorDockFactory : Factory
         if (outputTool is not null)
         {
             outputTool.OutputViewModel = _mainVm.Output;
+        }
+
+        DebugSettingsTool? debugSettingsTool = FindDockable<DebugSettingsTool>(rootDock, "DebugSettings");
+        if (debugSettingsTool is not null)
+        {
+            debugSettingsTool.DebugSettingsViewModel = _mainVm.DebugSettings;
+        }
+
+        BreakpointsTool? breakpointsTool = FindDockable<BreakpointsTool>(rootDock, "Breakpoints");
+        if (breakpointsTool is not null)
+        {
+            breakpointsTool.BreakpointsViewModel = _mainVm.Breakpoints;
+        }
+
+        CallStackTool? callStackTool = FindDockable<CallStackTool>(rootDock, "CallStack");
+        if (callStackTool is not null)
+        {
+            callStackTool.CallStackViewModel = _mainVm.CallStack;
+        }
+
+        LocalsTool? localsTool = FindDockable<LocalsTool>(rootDock, "Locals");
+        if (localsTool is not null)
+        {
+            localsTool.LocalsViewModel = _mainVm.Locals;
+        }
+
+        WatchesTool? watchesTool = FindDockable<WatchesTool>(rootDock, "Watches");
+        if (watchesTool is not null)
+        {
+            watchesTool.WatchesViewModel = _mainVm.Watches;
         }
 
         ReferencesTool? referencesTool = FindDockable<ReferencesTool>(rootDock, "References");
@@ -603,7 +768,7 @@ public sealed class XamlEditorDockFactory : Factory
     /// <summary>
     /// Saves the current dock layout to a JSON file.
     /// </summary>
-    public static void SaveLayout(IRootDock rootDock, string? filePath = null)
+    public void SaveLayout(IRootDock rootDock, string? filePath = null)
     {
         filePath ??= GetDefaultLayoutPath();
         List<Action> restoreActions = DetachToolViewModels(rootDock);
@@ -615,7 +780,10 @@ public sealed class XamlEditorDockFactory : Factory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to save dock layout: {ex.Message}");
+            if (LogLayoutWarnings)
+            {
+                _logger.LogWarning("Failed to save dock layout: {Message}", ex.Message);
+            }
         }
         finally
         {
@@ -629,7 +797,7 @@ public sealed class XamlEditorDockFactory : Factory
     /// <summary>
     /// Loads a dock layout from a JSON file.
     /// </summary>
-    public static IRootDock? LoadLayout(string? filePath = null)
+    public IRootDock? LoadLayout(string? filePath = null)
     {
         filePath ??= GetDefaultLayoutPath();
         try
@@ -649,7 +817,10 @@ public sealed class XamlEditorDockFactory : Factory
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Failed to load dock layout: {ex.Message}");
+            if (LogLayoutWarnings)
+            {
+                _logger.LogWarning("Failed to load dock layout: {Message}", ex.Message);
+            }
             try
             {
                 if (File.Exists(filePath))
@@ -659,7 +830,10 @@ public sealed class XamlEditorDockFactory : Factory
             }
             catch (Exception deleteEx)
             {
-                System.Diagnostics.Trace.TraceWarning($"Failed to delete invalid dock layout: {deleteEx.Message}");
+                if (LogLayoutWarnings)
+                {
+                    _logger.LogWarning("Failed to delete invalid dock layout: {Message}", deleteEx.Message);
+                }
             }
             return null;
         }
@@ -704,6 +878,46 @@ public sealed class XamlEditorDockFactory : Factory
         if (bottomDock is not null)
         {
             bottomDock.VisibleDockables ??= new ObservableCollection<IDockable>();
+            bool hasBreakpoints = bottomDock.VisibleDockables
+                .OfType<BreakpointsTool>()
+                .Any();
+            if (!hasBreakpoints)
+            {
+                bottomDock.VisibleDockables.Add(new BreakpointsTool());
+            }
+
+            bool hasDebugSettings = bottomDock.VisibleDockables
+                .OfType<DebugSettingsTool>()
+                .Any();
+            if (!hasDebugSettings)
+            {
+                bottomDock.VisibleDockables.Add(new DebugSettingsTool());
+            }
+
+            bool hasCallStack = bottomDock.VisibleDockables
+                .OfType<CallStackTool>()
+                .Any();
+            if (!hasCallStack)
+            {
+                bottomDock.VisibleDockables.Add(new CallStackTool());
+            }
+
+            bool hasLocals = bottomDock.VisibleDockables
+                .OfType<LocalsTool>()
+                .Any();
+            if (!hasLocals)
+            {
+                bottomDock.VisibleDockables.Add(new LocalsTool());
+            }
+
+            bool hasWatches = bottomDock.VisibleDockables
+                .OfType<WatchesTool>()
+                .Any();
+            if (!hasWatches)
+            {
+                bottomDock.VisibleDockables.Add(new WatchesTool());
+            }
+
             bool hasAnimationTool = bottomDock.VisibleDockables
                 .OfType<AnimationEditorTool>()
                 .Any();
@@ -752,6 +966,36 @@ public sealed class XamlEditorDockFactory : Factory
             FindDockable<OutputTool>(rootDock, "Output"),
             tool => tool.OutputViewModel,
             (tool, vm) => tool.OutputViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<DebugSettingsTool>(rootDock, "DebugSettings"),
+            tool => tool.DebugSettingsViewModel,
+            (tool, vm) => tool.DebugSettingsViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<BreakpointsTool>(rootDock, "Breakpoints"),
+            tool => tool.BreakpointsViewModel,
+            (tool, vm) => tool.BreakpointsViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<CallStackTool>(rootDock, "CallStack"),
+            tool => tool.CallStackViewModel,
+            (tool, vm) => tool.CallStackViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<LocalsTool>(rootDock, "Locals"),
+            tool => tool.LocalsViewModel,
+            (tool, vm) => tool.LocalsViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<WatchesTool>(rootDock, "Watches"),
+            tool => tool.WatchesViewModel,
+            (tool, vm) => tool.WatchesViewModel = vm,
             restore);
 
         DetachToolViewModel(

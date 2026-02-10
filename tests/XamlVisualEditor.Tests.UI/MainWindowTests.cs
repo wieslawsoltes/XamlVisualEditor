@@ -250,6 +250,10 @@ public sealed class DockingLayoutTests
         vm.IsToolboxVisible = false;
         vm.IsPropertiesVisible = false;
         vm.IsOutputVisible = false;
+        vm.IsBreakpointsVisible = false;
+        vm.IsCallStackVisible = false;
+        vm.IsLocalsVisible = false;
+        vm.IsWatchesVisible = false;
 
         vm.ResetLayoutCommand.Execute().Subscribe();
 
@@ -258,6 +262,10 @@ public sealed class DockingLayoutTests
         Assert.True(vm.IsVisualTreeVisible);
         Assert.True(vm.IsLogicalTreeVisible);
         Assert.True(vm.IsOutputVisible);
+        Assert.True(vm.IsBreakpointsVisible);
+        Assert.True(vm.IsCallStackVisible);
+        Assert.True(vm.IsLocalsVisible);
+        Assert.True(vm.IsWatchesVisible);
     }
 
     [AvaloniaFact]
@@ -325,6 +333,10 @@ public sealed class MainWindowTests
         Assert.True(vm.IsToolboxVisible);
         Assert.True(vm.IsPropertiesVisible);
         Assert.True(vm.IsOutputVisible);
+        Assert.True(vm.IsBreakpointsVisible);
+        Assert.True(vm.IsCallStackVisible);
+        Assert.True(vm.IsLocalsVisible);
+        Assert.True(vm.IsWatchesVisible);
         Assert.Empty(vm.Documents);
     }
 }

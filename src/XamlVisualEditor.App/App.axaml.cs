@@ -2,7 +2,12 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Core.Logging;
+using XamlVisualEditor.Debugging.Dap;
 using XamlVisualEditor.CSharp.Language;
 using XamlVisualEditor.Language;
 using XamlVisualEditor.App.Services;
@@ -56,12 +61,29 @@ public sealed class App : Application
 
     private static void ConfigureServices(ServiceCollection services)
     {
+        OutputLogSinkAccessor outputLogSinkAccessor = new();
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .Enrich.FromLogContext()
+            .WriteTo.Console()
+            .WriteTo.Sink(new OutputPanelLogSink(outputLogSinkAccessor))
+            .CreateLogger();
+
+        services.AddSingleton<IOutputLogSinkAccessor>(outputLogSinkAccessor);
+        services.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.AddSerilog(Log.Logger, dispose: true);
+        });
+
         // Core services (Singleton — thread-safe, shared)
         services.AddSingleton<IXamlParsingService, XamlParsingService>();
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
+        services.AddSingleton<IDebuggerService, DapDebuggerService>();
+        services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
 
         // Language services
         services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();

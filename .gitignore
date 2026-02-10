@@ -401,3 +401,4 @@ FodyWeavers.xsd
 *.sln.iml
 /plan
 /.idea
+/tools/netcoredbg

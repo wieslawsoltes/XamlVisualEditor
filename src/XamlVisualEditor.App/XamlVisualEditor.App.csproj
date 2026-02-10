@@ -18,8 +18,12 @@
     <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
     <PackageReference Include="Dock.Model.ReactiveUI" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="ReactiveUI" />
     <PackageReference Include="ReactiveUI.Fody" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+    <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
@@ -46,6 +50,7 @@
     <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Debugging.Dap\XamlVisualEditor.Debugging.Dap.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell\XamlVisualEditor.Shell.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj" ReferenceOutputAssembly="false" />

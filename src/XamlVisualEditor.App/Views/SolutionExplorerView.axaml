@@ -30,12 +30,18 @@
           <MenuItem Header="Open"
                     Command="{CompiledBinding SelectedNode.OpenCommand}"
                     IsEnabled="{CompiledBinding SelectedNode.Kind, Converter={x:Static v:SolutionExplorerConverters.IsOpenableFile}}" />
+          <MenuItem Header="Set as Startup Project"
+                    Command="{CompiledBinding SetStartupProjectCommand}"
+                    IsEnabled="{CompiledBinding SelectedNode.Kind, Converter={x:Static v:SolutionExplorerConverters.IsProject}}" />
         </ContextMenu>
       </dg:DataGrid.ContextMenu>
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:SolutionExplorerNodeViewModel" x:DataType="vm:SolutionExplorerNodeViewModel">
           <Grid>
             <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="▶"
+                         Foreground="#2E8B57"
+                         IsVisible="{CompiledBinding IsStartupProject}" />
               <TextBlock Text="{CompiledBinding Icon}" />
               <TextBlock Text="{CompiledBinding Name}" />
             </StackPanel>

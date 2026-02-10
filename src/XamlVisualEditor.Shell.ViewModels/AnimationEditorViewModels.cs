@@ -789,11 +789,6 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable
         SelectedKeyframe = null;
     }
 
-        SelectedKeyframe = keyframe;
-        SelectedTrack = keyframe.Owner ?? SelectedTrack;
-        keyframe.IsSelected = true;
-    }
-
     private void SubscribeKeyframeChanges(AnimationKeyframeViewModel? keyframe)
     {
         if (keyframe is null)

@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
@@ -208,6 +209,7 @@ public sealed class SharedFileCollabSession : ICollaborationBridge, IDisposable
     private readonly string _participantId;
     private readonly FileSystemWatcher _watcher;
     private readonly CancellationTokenSource _cts = new();
+    private readonly ILogger<SharedFileCollabSession> _logger;
     private int _sequenceNumber;
 
     /// <inheritdoc />
@@ -216,10 +218,14 @@ public sealed class SharedFileCollabSession : ICollaborationBridge, IDisposable
     /// <inheritdoc />
     public event Action<IReadOnlyList<AstChange>>? RemoteChangesReceived;
 
-    public SharedFileCollabSession(string sessionDirectory, string participantId)
+    public SharedFileCollabSession(
+        string sessionDirectory,
+        string participantId,
+        ILogger<SharedFileCollabSession>? logger = null)
     {
         _sessionDir = sessionDirectory;
         _participantId = participantId;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SharedFileCollabSession>.Instance;
 
         Directory.CreateDirectory(_sessionDir);
 
@@ -302,7 +308,7 @@ public sealed class SharedFileCollabSession : ICollaborationBridge, IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Skipping malformed collab change file: {ex.Message}");
+            _logger.LogWarning("Skipping malformed collab change file: {Message}", ex.Message);
         }
     }
 
@@ -358,6 +364,7 @@ public sealed class CollabRealtimeSession : ICollaborationBridge, IDisposable, I
     private readonly string _serverUri;
     private readonly string _sessionId;
     private readonly string _participantId;
+    private readonly ILogger<CollabRealtimeSession> _logger;
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _receiveCts;
     private Task? _receiveTask;
@@ -373,11 +380,16 @@ public sealed class CollabRealtimeSession : ICollaborationBridge, IDisposable, I
     /// </summary>
     public event Action<bool>? ConnectionStatusChanged;
 
-    public CollabRealtimeSession(string serverUri, string sessionId, string participantId)
+    public CollabRealtimeSession(
+        string serverUri,
+        string sessionId,
+        string participantId,
+        ILogger<CollabRealtimeSession>? logger = null)
     {
         _serverUri = serverUri;
         _sessionId = sessionId;
         _participantId = participantId;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CollabRealtimeSession>.Instance;
     }
 
     /// <summary>
@@ -485,7 +497,7 @@ public sealed class CollabRealtimeSession : ICollaborationBridge, IDisposable, I
             }
             catch (WebSocketException ex)
             {
-                System.Diagnostics.Trace.TraceWarning($"WebSocket connection lost: {ex.Message}");
+                _logger.LogWarning("WebSocket connection lost: {Message}", ex.Message);
                 IsConnected = false;
                 ConnectionStatusChanged?.Invoke(false);
                 break;

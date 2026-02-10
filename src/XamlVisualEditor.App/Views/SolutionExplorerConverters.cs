@@ -11,6 +11,8 @@ public static class SolutionExplorerConverters
         new[] { SolutionExplorerNodeKind.XamlFile, SolutionExplorerNodeKind.File }, true);
     public static readonly IValueConverter IsNotOpenableFile = new KindMultiEqualsConverter(
         new[] { SolutionExplorerNodeKind.XamlFile, SolutionExplorerNodeKind.File }, false);
+    public static readonly IValueConverter IsProject = new KindMultiEqualsConverter(
+        new[] { SolutionExplorerNodeKind.Project }, true);
 
     private sealed class KindMultiEqualsConverter : IValueConverter
     {

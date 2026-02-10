@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.DebugToolConsentDialog"
+        x:DataType="vm:DebugToolConsentDialogViewModel"
+        Width="520" Height="260"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="16" Spacing="10">
+    <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+    <TextBlock Text="{CompiledBinding Message}" TextWrapping="Wrap" />
+    <Border Background="#22000000" Padding="8" CornerRadius="4">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{CompiledBinding ToolId, StringFormat=Tool: {0}}" />
+        <TextBlock Text="{CompiledBinding Version, StringFormat=Version: {0}}" />
+        <TextBlock Text="{CompiledBinding DownloadUrl, StringFormat=Download: {0}}" TextWrapping="Wrap" />
+        <TextBlock Text="{CompiledBinding InstallPath, StringFormat=Install to: {0}}" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+      <Button Content="Download" Command="{CompiledBinding AllowCommand}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

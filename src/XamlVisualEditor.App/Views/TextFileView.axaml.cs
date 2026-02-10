@@ -7,6 +7,7 @@ using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.TextMate;
+using Serilog;
 using ReactiveUI;
 using TextMateSharp.Grammars;
 using XamlVisualEditor.Core;
@@ -136,6 +137,28 @@ public sealed partial class TextFileView : UserControl
         {
             _textEditor.TextArea.TextView.LineTransformers.Add(vm.DiagnosticColorizer);
         }
+
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.ExecutionLineColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(vm.ExecutionLineColorizer);
+        }
+
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.BreakpointLineColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(vm.BreakpointLineColorizer);
+        }
+
+        IDisposable executionLineSubscription = vm.WhenAnyValue(x => x.ExecutionLine)
+            .Subscribe(line =>
+            {
+                vm.ExecutionLineColorizer.LineNumber = line;
+                _textEditor.TextArea.TextView.InvalidateVisual();
+            });
+        _vmSubscriptions.Add(executionLineSubscription);
+
+        IDisposable breakpointHighlightSubscription = vm.WhenAnyValue(x => x.BreakpointHighlightVersion)
+            .Subscribe(_ => _textEditor.TextArea.TextView.InvalidateVisual());
+        _vmSubscriptions.Add(breakpointHighlightSubscription);
     }
 
     private void ApplyGrammar(TextDocumentViewModel vm, RegistryOptions registryOptions)
@@ -333,7 +356,7 @@ public sealed partial class TextFileView : UserControl
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Editor position lookup failed: {ex.Message}");
+                Log.Logger.Warning("Editor position lookup failed: {Message}", ex.Message);
             return null;
         }
     }

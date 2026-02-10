@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.CallStackView"
+             x:DataType="vm:CallStackViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+      <TextBlock Text="Call Stack" FontWeight="SemiBold" VerticalAlignment="Center" />
+    </StackPanel>
+
+    <dg:DataGrid ItemsSource="{CompiledBinding Frames}"
+                SelectedItem="{CompiledBinding SelectedFrame, Mode=TwoWay}"
+                AutoGenerateColumns="False"
+                GridLinesVisibility="None"
+                IsReadOnly="True">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTextColumn Header="Frame" Binding="{CompiledBinding DisplayText}" Width="3*" />
+        <dg:DataGridTextColumn Header="File" Binding="{CompiledBinding FilePath}" Width="2*" />
+        <dg:DataGridTextColumn Header="Line" Binding="{CompiledBinding Line}" Width="64" />
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

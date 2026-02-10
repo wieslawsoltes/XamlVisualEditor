@@ -3,6 +3,7 @@
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
              x:Class="XamlVisualEditor.App.Views.DesignerDocumentView"
+             x:Name="Root"
              x:DataType="vm:DesignerDocumentViewModel">
 
     <DockPanel>
@@ -151,7 +152,11 @@
                         <Binding Path="SplitOrientation" />
                     </MultiBinding>
                 </Grid.ColumnSpan>
-                <v:XamlCodeEditorView DataContext="{CompiledBinding CodeEditor}" />
+                <v:XamlCodeEditorView DataContext="{CompiledBinding CodeEditor}"
+                                      v:BreakpointMarginBehavior.IsEnabled="True"
+                                      v:BreakpointMarginBehavior.Breakpoints="{CompiledBinding DataContext.Breakpoints, ElementName=Root}"
+                                      v:BreakpointMarginBehavior.FilePath="{CompiledBinding DataContext.FilePath, ElementName=Root}"
+                                      v:BreakpointMarginBehavior.ExecutionLine="{CompiledBinding DataContext.CodeEditor.ExecutionLine, ElementName=Root}" />
             </Border>
         </Grid>
     </DockPanel>

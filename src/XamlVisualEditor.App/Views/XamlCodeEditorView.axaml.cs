@@ -11,6 +11,7 @@ using AvaloniaEdit.Folding;
 using AvaloniaEdit.TextMate;
 using ReactiveUI;
 using System.Reactive.Disposables;
+using Serilog;
 using System.Reactive.Linq;
 using TextMateSharp.Grammars;
 using XamlVisualEditor.CodeEditor;
@@ -230,6 +231,28 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             _textEditor.TextArea.TextView.LineTransformers.Add(vm.DiagnosticColorizer);
         }
+
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.ExecutionLineColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(vm.ExecutionLineColorizer);
+        }
+
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.BreakpointLineColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(vm.BreakpointLineColorizer);
+        }
+
+        IDisposable executionLineSubscription = vm.WhenAnyValue(x => x.ExecutionLine)
+            .Subscribe(line =>
+            {
+                vm.ExecutionLineColorizer.LineNumber = line;
+                _textEditor.TextArea.TextView.InvalidateVisual();
+            });
+        _vmSubscriptions.Add(executionLineSubscription);
+
+        IDisposable breakpointHighlightSubscription = vm.WhenAnyValue(x => x.BreakpointHighlightVersion)
+            .Subscribe(_ => _textEditor.TextArea.TextView.InvalidateVisual());
+        _vmSubscriptions.Add(breakpointHighlightSubscription);
 
         // Wire tooltip for diagnostics on hover
         _textEditor.TextArea.TextView.PointerMoved += (_, args) =>
@@ -530,7 +553,7 @@ public sealed partial class XamlCodeEditorView : UserControl
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Editor position lookup failed: {ex.Message}");
+            Log.Logger.Warning("Editor position lookup failed: {Message}", ex.Message);
             return null;
         }
     }

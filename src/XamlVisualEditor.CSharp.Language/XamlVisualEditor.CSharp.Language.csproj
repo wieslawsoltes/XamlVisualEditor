@@ -8,6 +8,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.Features" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />

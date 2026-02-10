@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -15,11 +15,17 @@ public sealed class CSharpWorkspaceManager : IDisposable
     private readonly object _gate = new();
     private readonly ConcurrentDictionary<string, DocumentId> _documentIds =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILogger<CSharpWorkspaceManager> _logger;
     private MSBuildWorkspace? _msbuildWorkspace;
     private AdhocWorkspace? _adhocWorkspace;
     private Workspace? _workspace;
     private Solution? _solution;
     private string? _workspacePath;
+
+    public CSharpWorkspaceManager(ILogger<CSharpWorkspaceManager>? logger = null)
+    {
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CSharpWorkspaceManager>.Instance;
+    }
 
     public async Task InitializeWorkspaceAsync(string workspacePath, CancellationToken ct)
     {
@@ -88,7 +94,12 @@ public sealed class CSharpWorkspaceManager : IDisposable
             _msbuildWorkspace?.Dispose();
             MSBuildWorkspace workspace = MSBuildWorkspace.Create();
             workspace.RegisterWorkspaceFailedHandler(diagnostic =>
-                Trace.TraceWarning($"MSBuild workspace: {diagnostic.Diagnostic.Message}"));
+            {
+                if (diagnostic.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
+                {
+                    _logger.LogWarning("MSBuild workspace: {Message}", diagnostic.Diagnostic.Message);
+                }
+            });
 
             Solution? solution = null;
             if (workspacePath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
@@ -119,7 +130,7 @@ public sealed class CSharpWorkspaceManager : IDisposable
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning($"Failed to load MSBuild workspace: {ex.Message}");
+            _logger.LogWarning("Failed to load MSBuild workspace: {Message}", ex.Message);
         }
     }
 

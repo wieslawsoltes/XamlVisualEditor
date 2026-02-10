@@ -7,6 +7,7 @@
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.AvaloniaEdit" />
     <PackageReference Include="AvaloniaEdit.TextMate" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="TextMateSharp.Grammars" />
     <PackageReference Include="ReactiveUI" />
     <PackageReference Include="ReactiveUI.Fody" />

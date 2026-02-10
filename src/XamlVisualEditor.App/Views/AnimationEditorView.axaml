@@ -99,30 +99,32 @@
             </Border>
             <Border Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
                     Padding="6,4">
-                <ContentControl Content="{CompiledBinding SelectedKeyframe}">
-                    <ContentControl.ContentTemplate>
-                        <DataTemplate x:DataType="vm:AnimationKeyframeViewModel">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="Keyframe" VerticalAlignment="Center" />
-                                <TextBlock Text="Time" VerticalAlignment="Center" />
-                                <TextBox Width="80"
-                                         Text="{CompiledBinding TimeSeconds, Mode=TwoWay}"
-                                         BorderBrush="{Binding DataContext.IsKeyframeTimeValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
-                                <TextBlock Text="Value" VerticalAlignment="Center" />
-                                <TextBox Width="160"
-                                         Text="{CompiledBinding Value, Mode=TwoWay}"
-                                         BorderBrush="{Binding DataContext.IsKeyframeValueValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
-                                <TextBlock Text="Easing" VerticalAlignment="Center" />
-                                <TextBox Width="160"
-                                         Text="{CompiledBinding Easing, Mode=TwoWay}"
-                                         BorderBrush="{Binding DataContext.IsKeyframeEasingValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ContentControl.ContentTemplate>
-                </ContentControl>
-                <TextBlock Text="{CompiledBinding KeyframeValidationMessage}"
-                           Foreground="#E24A4A"
-                           Opacity="0.9" />
+                <StackPanel Spacing="4">
+                    <ContentControl Content="{CompiledBinding SelectedKeyframe}">
+                        <ContentControl.ContentTemplate>
+                            <DataTemplate x:DataType="vm:AnimationKeyframeViewModel">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Keyframe" VerticalAlignment="Center" />
+                                    <TextBlock Text="Time" VerticalAlignment="Center" />
+                                    <TextBox Width="80"
+                                             Text="{CompiledBinding TimeSeconds, Mode=TwoWay}"
+                                             BorderBrush="{Binding DataContext.IsKeyframeTimeValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                    <TextBlock Text="Value" VerticalAlignment="Center" />
+                                    <TextBox Width="160"
+                                             Text="{CompiledBinding Value, Mode=TwoWay}"
+                                             BorderBrush="{Binding DataContext.IsKeyframeValueValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                    <TextBlock Text="Easing" VerticalAlignment="Center" />
+                                    <TextBox Width="160"
+                                             Text="{CompiledBinding Easing, Mode=TwoWay}"
+                                             BorderBrush="{Binding DataContext.IsKeyframeEasingValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ContentControl.ContentTemplate>
+                    </ContentControl>
+                    <TextBlock Text="{CompiledBinding KeyframeValidationMessage}"
+                               Foreground="#E24A4A"
+                               Opacity="0.9" />
+                </StackPanel>
             </Border>
         </StackPanel>
 
