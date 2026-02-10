@@ -11,24 +11,24 @@
     <PackageVersion Include="Avalonia.Remote.Protocol" Version="11.3.11" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.11" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.11" />
-    <PackageVersion Include="ProDiagnostics" Version="11.3.11-preview.6" />
-    <PackageVersion Include="ProDataGrid" Version="11.3.11-preview.6" />
+    <PackageVersion Include="ProDiagnostics" Version="11.3.11-preview.8" />
+    <PackageVersion Include="ProDataGrid" Version="11.3.11-preview.8" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="11.3.11" />
     <!-- AvaloniaEdit -->
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="11.4.1" />
     <!-- Dock -->
-    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.6" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.6" />
-    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.6" />
-    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.6" />
+    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.9" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.9" />
+    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.9" />
+    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.9" />
     <!-- ReactiveUI -->
     <PackageVersion Include="ReactiveUI" Version="22.3.1" />
     <PackageVersion Include="ReactiveUI.Fody" Version="19.5.41" />
     <PackageVersion Include="ReactiveUI.Avalonia" Version="11.3.8" />
     <!-- MSBuild / Roslyn -->
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
-    <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.31" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="18.0.2" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.0.0" />
@@ -39,9 +39,9 @@
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
     <!-- Logging -->
-    <PackageVersion Include="Serilog" Version="3.1.1" />
-    <PackageVersion Include="Serilog.Extensions.Logging" Version="8.0.0" />
-    <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
+    <PackageVersion Include="Serilog" Version="4.3.0" />
+    <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
     <!-- TextMate -->
     <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
     <!-- Testing -->
