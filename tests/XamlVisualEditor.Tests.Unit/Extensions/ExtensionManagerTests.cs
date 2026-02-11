@@ -12,7 +12,7 @@ public sealed class ExtensionManagerTests
         FakeStore store = new();
         FakeStateStore stateStore = new();
         FakeUpdateService updates = new();
-        ExtensionManager manager = new(store, stateStore, updates);
+        ExtensionManager manager = new(store, stateStore, updates, Array.Empty<IXveExtension>());
 
         await manager.InstallAsync("path.nupkg", CancellationToken.None);
         await manager.SetEnabledAsync("example.sample", true, CancellationToken.None);
