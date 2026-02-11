@@ -389,6 +389,29 @@ public sealed class CollaborationTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the git panel.
+/// </summary>
+public sealed class GitTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public GitPanelViewModel? GitPanelViewModel { get; set; }
+
+    public GitTool()
+    {
+        Id = "Git";
+        Title = "Git";
+    }
+
+    public GitTool(GitPanelViewModel gitPanelViewModel)
+    {
+        GitPanelViewModel = gitPanelViewModel;
+        Id = "Git";
+        Title = "Git";
+    }
+}
+
+/// <summary>
 /// Dock tool for the references panel.
 /// </summary>
 public sealed class ReferencesTool : Tool
@@ -516,6 +539,7 @@ public sealed class XamlEditorDockFactory : Factory
         ReferencesTool referencesTool = new(_mainVm.References);
         CollaborationTool collabTool = new(_mainVm.Collaboration);
         AnimationEditorTool animationTool = new(_mainVm.AnimationEditor);
+        GitTool gitTool = new(_mainVm.GitPanel);
 
         // Left tool dock
         ToolDock leftToolDock = new()
@@ -555,6 +579,7 @@ public sealed class XamlEditorDockFactory : Factory
                 localsTool,
                 watchesTool,
                 animationTool,
+                gitTool,
                 collabTool),
             Alignment = Alignment.Bottom
         };
@@ -697,6 +722,12 @@ public sealed class XamlEditorDockFactory : Factory
         if (collabTool is not null)
         {
             collabTool.CollaborationViewModel = _mainVm.Collaboration;
+        }
+
+        GitTool? gitTool = FindDockable<GitTool>(rootDock, "Git");
+        if (gitTool is not null)
+        {
+            gitTool.GitPanelViewModel = _mainVm.GitPanel;
         }
 
         AnimationEditorTool? animationTool = FindDockable<AnimationEditorTool>(rootDock, "AnimationEditor");

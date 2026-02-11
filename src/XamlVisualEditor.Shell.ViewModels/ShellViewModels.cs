@@ -2101,6 +2101,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public CollaborationPanelViewModel Collaboration { get; } = new();
 
     /// <summary>
+    /// Gets the git panel ViewModel.
+    /// </summary>
+    public GitPanelViewModel GitPanel { get; }
+
+    /// <summary>
     /// Gets the animation editor ViewModel.
     /// </summary>
     public AnimationEditorViewModel AnimationEditor { get; }
@@ -2312,6 +2317,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     public MainWindowViewModel(
         IWorkspaceService? workspaceService = null,
+        IGitService? gitService = null,
         ITypeMetadataService? metadataService = null,
         ILanguageIntellisenseRegistry? languageRegistry = null,
         IAnimationPreviewService? animationPreviewService = null,
@@ -2366,6 +2372,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             ConfirmDebugToolConsentAsync);
 
         Acp = new AcpToolViewModel(acpService, acpProfileStore, secretStore, oauthDeviceFlowService, () => _workspacePath);
+        GitPanel = new GitPanelViewModel(gitService, () => _workspacePath);
         _acpService?.SetPermissionHandler(HandleAcpPermissionAsync);
 
         if (_outputLogSinkAccessor is not null)
@@ -4681,6 +4688,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         _workspace = workspace;
         _workspacePath = workspacePath;
         HasWorkspace = true;
+        await GitPanel.RefreshAsync();
         RefreshWorkspaceProjects(workspace);
 
         string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
@@ -5403,6 +5411,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         Acp.Dispose();
         _acpService?.SetPermissionHandler(null);
         Collaboration.Dispose();
+        GitPanel.Dispose();
         AnimationEditor.Dispose();
         Debugger.Dispose();
         InfiniteCanvas.Dispose();

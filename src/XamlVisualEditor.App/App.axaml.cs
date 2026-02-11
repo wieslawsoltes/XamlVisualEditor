@@ -83,6 +83,7 @@ public sealed class App : Application
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
+        services.AddSingleton<IGitService, GitService>();
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
         services.AddSingleton<IDebuggerService, DapDebuggerService>();
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
