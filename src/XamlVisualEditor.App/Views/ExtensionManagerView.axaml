@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.ExtensionManagerView"
+             x:DataType="vm:ExtensionManagerViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top"
+                Orientation="Horizontal"
+                Spacing="8"
+                Margin="8">
+      <Button Content="Refresh"
+              Command="{CompiledBinding RefreshCommand}" />
+      <Button Content="Install..."
+              Command="{CompiledBinding InstallCommand}" />
+      <Button Content="Check Updates"
+              Command="{CompiledBinding CheckUpdatesCommand}" />
+      <Button Content="Uninstall"
+              Command="{CompiledBinding UninstallCommand}"
+              IsEnabled="{CompiledBinding HasSelection}" />
+      <TextBlock Text="{CompiledBinding StatusMessage}"
+                 Margin="12,0,0,0"
+                 VerticalAlignment="Center" />
+    </StackPanel>
+
+    <dg:DataGrid ItemsSource="{CompiledBinding InstalledPackages}"
+                SelectedItem="{CompiledBinding SelectedPackage, Mode=TwoWay}"
+                AutoGenerateColumns="False"
+                CanUserSortColumns="True"
+                GridLinesVisibility="None">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTextColumn Header="Name"
+                               Width="2*"
+                               Binding="{CompiledBinding DisplayName}" />
+        <dg:DataGridTextColumn Header="Version"
+                               Width="*"
+                               Binding="{CompiledBinding Version}" />
+        <dg:DataGridTemplateColumn Header="Enabled"
+                                   Width="Auto">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:ExtensionPackageItemViewModel">
+              <CheckBox IsChecked="{CompiledBinding IsEnabled, Mode=TwoWay}" />
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTextColumn Header="Update"
+                               Width="*"
+                               Binding="{CompiledBinding UpdateLabel}" />
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

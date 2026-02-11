@@ -5,7 +5,6 @@ using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
 using XamlVisualEditor.Core;
-using XamlVisualEditor.Acp;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.App.Views;
 
@@ -22,11 +21,10 @@ public sealed partial class MainWindow : Window
     private IDisposable? _definitionPickerHandler;
     private IDisposable? _codeActionPickerHandler;
     private IDisposable? _workspaceSymbolQueryHandler;
+    private IDisposable? _commandPaletteHandler;
+    private IDisposable? _extensionPackageOpenHandler;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
-    private IDisposable? _acpPermissionHandler;
-    private IDisposable? _acpClipboardHandler;
-    private IDisposable? _acpOpenUrlHandler;
 
     public MainWindow()
         : this(null)
@@ -55,11 +53,10 @@ public sealed partial class MainWindow : Window
             _definitionPickerHandler?.Dispose();
             _codeActionPickerHandler?.Dispose();
             _workspaceSymbolQueryHandler?.Dispose();
+            _commandPaletteHandler?.Dispose();
+            _extensionPackageOpenHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
-            _acpPermissionHandler?.Dispose();
-            _acpClipboardHandler?.Dispose();
-            _acpOpenUrlHandler?.Dispose();
         };
 
         if (viewModel is not null)
@@ -81,11 +78,11 @@ public sealed partial class MainWindow : Window
         _definitionPickerHandler?.Dispose();
         _codeActionPickerHandler?.Dispose();
         _workspaceSymbolQueryHandler?.Dispose();
+        _commandPaletteHandler?.Dispose();
+        _extensionPackageOpenHandler?.Dispose();
+        _extensionPackageOpenHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
-        _acpPermissionHandler?.Dispose();
-        _acpClipboardHandler?.Dispose();
-        _acpOpenUrlHandler?.Dispose();
 
         // Open file dialog interaction
         _openFileHandler = vm.OpenFileInteraction.RegisterHandler(async interaction =>
@@ -192,6 +189,43 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
+        _commandPaletteHandler = vm.CommandPaletteInteraction.RegisterHandler(async interaction =>
+        {
+            CommandPaletteDialogViewModel dialogVm = new(interaction.Input);
+            CommandPaletteDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            ExtensionCommandPaletteItemViewModel? result =
+                await dialog.ShowDialog<ExtensionCommandPaletteItemViewModel?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _extensionPackageOpenHandler = vm.ExtensionPackageOpenInteraction.RegisterHandler(async interaction =>
+        {
+            FilePickerOpenOptions options = new()
+            {
+                Title = "Install Extension Package",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("NuGet Package") { Patterns = new[] { "*.nupkg" } },
+                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } }
+                }
+            };
+
+            var files = await StorageProvider.OpenFilePickerAsync(options);
+            if (files.Count > 0)
+            {
+                interaction.SetOutput(files[0].Path.LocalPath);
+            }
+            else
+            {
+                interaction.SetOutput(null);
+            }
+        });
+
         _previewerTrustHandler = vm.PreviewerTrustInteraction.RegisterHandler(async interaction =>
         {
             PreviewerTrustDialogViewModel dialogVm = new(interaction.Input);
@@ -216,46 +250,5 @@ public sealed partial class MainWindow : Window
             interaction.SetOutput(result);
         });
 
-        _acpPermissionHandler = vm.AcpPermissionInteraction.RegisterHandler(async interaction =>
-        {
-            AcpPermissionDialogViewModel dialogVm = new(interaction.Input);
-            AcpPermissionDialog dialog = new()
-            {
-                DataContext = dialogVm
-            };
-
-            AcpPermissionOutcome result = await dialog.ShowDialog<AcpPermissionOutcome>(this);
-            interaction.SetOutput(result);
-        });
-
-        _acpClipboardHandler = vm.Acp.CopyToClipboardInteraction.RegisterHandler(async interaction =>
-        {
-            IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard is not null)
-            {
-                await clipboard.SetTextAsync(interaction.Input);
-            }
-
-            interaction.SetOutput(Unit.Default);
-        });
-
-        _acpOpenUrlHandler = vm.Acp.OpenUrlInteraction.RegisterHandler(interaction =>
-        {
-            try
-            {
-                ProcessStartInfo startInfo = new()
-                {
-                    FileName = interaction.Input,
-                    UseShellExecute = true
-                };
-                Process.Start(startInfo);
-            }
-            catch
-            {
-            }
-
-            interaction.SetOutput(Unit.Default);
-            return System.Threading.Tasks.Task.CompletedTask;
-        });
     }
 }

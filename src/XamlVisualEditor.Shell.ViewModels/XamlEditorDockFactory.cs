@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Collaboration.UI;
+using XamlVisualEditor.Extensions;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Shell.ViewModels;
 
@@ -127,6 +128,7 @@ public sealed class VisualTreeTool : Tool
     public VisualTreeTool(MainWindowViewModel mainViewModel)
     {
         MainViewModel = mainViewModel;
+
         Id = "VisualTree";
         Title = "Visual Tree";
     }
@@ -178,29 +180,6 @@ public sealed class OutputTool : Tool
         OutputViewModel = outputViewModel;
         Id = "Output";
         Title = "Output";
-    }
-}
-
-/// <summary>
-/// Dock tool for the ACP panel.
-/// </summary>
-public sealed class AcpTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public AcpToolViewModel? AcpToolViewModel { get; set; }
-
-    public AcpTool()
-    {
-        Id = "Acp";
-        Title = "ACP";
-    }
-
-    public AcpTool(AcpToolViewModel acpToolViewModel)
-    {
-        AcpToolViewModel = acpToolViewModel;
-        Id = "Acp";
-        Title = "ACP";
     }
 }
 
@@ -412,25 +391,57 @@ public sealed class CollaborationTool : Tool
 }
 
 /// <summary>
-/// Dock tool for the git panel.
+/// Dock tool for extension management.
 /// </summary>
-public sealed class GitTool : Tool
+public sealed class ExtensionManagerTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public GitPanelViewModel? GitPanelViewModel { get; set; }
+    public ExtensionManagerViewModel? ExtensionManagerViewModel { get; set; }
 
-    public GitTool()
+    public ExtensionManagerTool()
     {
-        Id = "Git";
-        Title = "Git";
+        Id = "ExtensionsManager";
+        Title = "Extensions";
     }
 
-    public GitTool(GitPanelViewModel gitPanelViewModel)
+    public ExtensionManagerTool(ExtensionManagerViewModel viewModel)
+        : this()
     {
-        GitPanelViewModel = gitPanelViewModel;
-        Id = "Git";
-        Title = "Git";
+        ExtensionManagerViewModel = viewModel;
+    }
+}
+
+/// <summary>
+/// Dock tool for extension-contributed views.
+/// </summary>
+public sealed class ExtensionTool : Tool
+{
+    public const string IdPrefix = "Extension:";
+
+    [IgnoreDataMember]
+    [Reactive]
+    public ExtensionViewModel? ExtensionViewModel { get; set; }
+
+    public string? ViewId { get; set; }
+
+    public ExtensionTool()
+    {
+        Id = "Extension";
+        Title = "Extension";
+    }
+
+    public ExtensionTool(ExtensionViewModel viewModel)
+    {
+        ExtensionViewModel = viewModel;
+        ViewId = viewModel.ViewId;
+        Id = BuildId(viewModel.ViewId);
+        Title = viewModel.Title;
+    }
+
+    public static string BuildId(string viewId)
+    {
+        return IdPrefix + viewId;
     }
 }
 
@@ -546,14 +557,13 @@ public sealed class XamlEditorDockFactory : Factory
         SolutionExplorerTool solutionExplorerTool = new(_mainVm.SolutionExplorer);
         ToolboxTool toolboxTool = new(_mainVm.Toolbox);
 
-        // Right tools: Properties, Visual Tree, Logical Tree, ACP
+        // Right tools: Properties, Visual Tree, Logical Tree
         PropertyEditorTool propertyTool = new(_mainVm);
         VisualTreeTool visualTreeTool = new(_mainVm);
         LogicalTreeTool logicalTreeTool = new(_mainVm);
 
         // Bottom tools: Output, Collaboration
         OutputTool outputTool = new(_mainVm.Output);
-        AcpTool acpTool = new(_mainVm.Acp);
         DebugSettingsTool debugSettingsTool = new(_mainVm.DebugSettings);
         LspSettingsTool lspSettingsTool = new(_mainVm.LspSettings);
         BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
@@ -563,7 +573,7 @@ public sealed class XamlEditorDockFactory : Factory
         ReferencesTool referencesTool = new(_mainVm.References);
         CollaborationTool collabTool = new(_mainVm.Collaboration);
         AnimationEditorTool animationTool = new(_mainVm.AnimationEditor);
-        GitTool gitTool = new(_mainVm.GitPanel);
+        ExtensionManagerTool extensionManagerTool = new(_mainVm.ExtensionManager);
 
         // Left tool dock
         ToolDock leftToolDock = new()
@@ -583,7 +593,7 @@ public sealed class XamlEditorDockFactory : Factory
             Title = "Right Tools",
             Proportion = 0.25,
             ActiveDockable = propertyTool,
-            VisibleDockables = CreateList<IDockable>(propertyTool, visualTreeTool, logicalTreeTool, acpTool),
+            VisibleDockables = CreateList<IDockable>(propertyTool, visualTreeTool, logicalTreeTool),
             Alignment = Alignment.Right
         };
 
@@ -604,8 +614,8 @@ public sealed class XamlEditorDockFactory : Factory
                 localsTool,
                 watchesTool,
                 animationTool,
-                gitTool,
-                collabTool),
+                collabTool,
+                extensionManagerTool),
             Alignment = Alignment.Bottom
         };
 
@@ -701,12 +711,6 @@ public sealed class XamlEditorDockFactory : Factory
             outputTool.OutputViewModel = _mainVm.Output;
         }
 
-        AcpTool? acpTool = FindDockable<AcpTool>(rootDock, "Acp");
-        if (acpTool is not null)
-        {
-            acpTool.AcpToolViewModel = _mainVm.Acp;
-        }
-
         DebugSettingsTool? debugSettingsTool = FindDockable<DebugSettingsTool>(rootDock, "DebugSettings");
         if (debugSettingsTool is not null)
         {
@@ -755,16 +759,28 @@ public sealed class XamlEditorDockFactory : Factory
             collabTool.CollaborationViewModel = _mainVm.Collaboration;
         }
 
-        GitTool? gitTool = FindDockable<GitTool>(rootDock, "Git");
-        if (gitTool is not null)
+        ExtensionManagerTool? extensionManagerTool =
+            FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager");
+        if (extensionManagerTool is not null)
         {
-            gitTool.GitPanelViewModel = _mainVm.GitPanel;
+            extensionManagerTool.ExtensionManagerViewModel = _mainVm.ExtensionManager;
         }
 
         AnimationEditorTool? animationTool = FindDockable<AnimationEditorTool>(rootDock, "AnimationEditor");
         if (animationTool is not null)
         {
             animationTool.AnimationEditor = _mainVm.AnimationEditor;
+        }
+
+        foreach (ExtensionTool extensionTool in FindDockables<ExtensionTool>(rootDock))
+        {
+            if (!string.IsNullOrWhiteSpace(extensionTool.ViewId)
+                && _mainVm.TryGetExtensionView(extensionTool.ViewId, out ExtensionViewModel? viewModel)
+                && viewModel is not null)
+            {
+                extensionTool.ExtensionViewModel = viewModel;
+                extensionTool.Title = viewModel.Title;
+            }
         }
 
         PruneTerminalTools(rootDock);
@@ -858,6 +874,29 @@ public sealed class XamlEditorDockFactory : Factory
             {
                 Title = terminalViewModel.Title
             };
+            AddDockable(toolDock, tool);
+            SetActiveDockable(tool);
+            SetFocusedDockable(toolDock, tool);
+            return tool;
+        }
+
+        return null;
+    }
+
+    public ExtensionTool? AddExtensionTool(IRootDock rootDock, ExtensionViewModel viewModel)
+    {
+        string dockId = viewModel.Location switch
+        {
+            ExtensionViewLocation.Left => "LeftToolDock",
+            ExtensionViewLocation.Right => "RightToolDock",
+            ExtensionViewLocation.Bottom => "BottomToolDock",
+            _ => "RightToolDock"
+        };
+
+        ToolDock? toolDock = FindDockable<ToolDock>(rootDock, dockId);
+        if (toolDock is not null)
+        {
+            ExtensionTool tool = new(viewModel);
             AddDockable(toolDock, tool);
             SetActiveDockable(tool);
             SetFocusedDockable(toolDock, tool);
@@ -1076,14 +1115,6 @@ public sealed class XamlEditorDockFactory : Factory
                 bottomDock.VisibleDockables.Add(new WatchesTool());
             }
 
-            bool hasAcpTool = bottomDock.VisibleDockables
-                .OfType<AcpTool>()
-                .Any();
-            if (!hasAcpTool)
-            {
-                bottomDock.VisibleDockables.Add(new AcpTool());
-            }
-
             bool hasAnimationTool = bottomDock.VisibleDockables
                 .OfType<AnimationEditorTool>()
                 .Any();
@@ -1132,12 +1163,6 @@ public sealed class XamlEditorDockFactory : Factory
             FindDockable<OutputTool>(rootDock, "Output"),
             tool => tool.OutputViewModel,
             (tool, vm) => tool.OutputViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<AcpTool>(rootDock, "Acp"),
-            tool => tool.AcpToolViewModel,
-            (tool, vm) => tool.AcpToolViewModel = vm,
             restore);
 
         DetachToolViewModel(
@@ -1196,6 +1221,21 @@ public sealed class XamlEditorDockFactory : Factory
                 (tool, vm) => tool.TerminalViewModel = vm,
                 restore);
         }
+
+        foreach (ExtensionTool extensionTool in FindDockables<ExtensionTool>(rootDock))
+        {
+            DetachToolViewModel(
+                extensionTool,
+                tool => tool.ExtensionViewModel,
+                (tool, vm) => tool.ExtensionViewModel = vm,
+                restore);
+        }
+
+        DetachToolViewModel(
+            FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager"),
+            tool => tool.ExtensionManagerViewModel,
+            (tool, vm) => tool.ExtensionManagerViewModel = vm,
+            restore);
 
         return restore;
     }

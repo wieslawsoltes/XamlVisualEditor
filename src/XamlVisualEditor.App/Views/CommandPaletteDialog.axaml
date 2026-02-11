@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dg="using:Avalonia.Controls"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.CommandPaletteDialog"
+        x:DataType="vm:CommandPaletteDialogViewModel"
+        Width="560"
+        Height="420"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="12">
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding Title}"
+               FontWeight="SemiBold"
+               Margin="0,0,0,8" />
+
+    <TextBox DockPanel.Dock="Top"
+             Watermark="Type a command..."
+             Text="{CompiledBinding FilterText, Mode=TwoWay}"
+             Margin="0,0,0,8" />
+
+    <StackPanel DockPanel.Dock="Bottom"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="8"
+                Margin="0,8,0,0">
+      <Button Content="Run"
+              Command="{CompiledBinding ApplyCommand}"
+              MinWidth="80" />
+      <Button Content="Cancel"
+              Command="{CompiledBinding CancelCommand}"
+              MinWidth="80" />
+    </StackPanel>
+
+    <dg:DataGrid ItemsSource="{CompiledBinding FilteredItems}"
+                SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
+                HeadersVisibility="None"
+                GridLinesVisibility="None"
+                AutoGenerateColumns="False"
+                CanUserSortColumns="False"
+                IsReadOnly="True">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTemplateColumn Header="Command" Width="*">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:ExtensionCommandPaletteItemViewModel">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{CompiledBinding Title}" />
+                <TextBlock Text="{CompiledBinding Category}"
+                           Opacity="0.6"
+                           FontSize="11" />
+              </StackPanel>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+      </dg:DataGrid.Columns>
+      <dg:DataGrid.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{CompiledBinding ApplyCommand}" />
+        <KeyBinding Gesture="Return" Command="{CompiledBinding ApplyCommand}" />
+      </dg:DataGrid.KeyBindings>
+    </dg:DataGrid>
+  </DockPanel>
+</Window>

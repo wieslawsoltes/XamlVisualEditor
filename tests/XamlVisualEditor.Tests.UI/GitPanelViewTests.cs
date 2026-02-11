@@ -5,9 +5,9 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Xunit;
-using XamlVisualEditor.App.Controls;
-using XamlVisualEditor.App.Views;
-using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.GitExtension;
+using XamlVisualEditor.GitExtension.Controls;
+using XamlVisualEditor.GitExtension.Views;
 
 namespace XamlVisualEditor.Tests.UI;
 

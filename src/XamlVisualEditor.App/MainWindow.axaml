@@ -95,6 +95,7 @@
                 <MenuItem Header="_Logical Tree" Command="{CompiledBinding ToggleLogicalTreeCommand}" />
                 <MenuItem Header="_Output" Command="{CompiledBinding ToggleOutputCommand}" />
                 <MenuItem Header="_References" Command="{CompiledBinding ToggleReferencesCommand}" />
+                <MenuItem Header="_Extensions Manager" Command="{CompiledBinding ToggleExtensionsManagerCommand}" />
                 <MenuItem Header="_Animation" Command="{CompiledBinding ToggleAnimationEditorCommand}" />
                 <Separator />
                 <MenuItem Header="_Breakpoints" Command="{CompiledBinding ToggleBreakpointsCommand}" />
@@ -127,6 +128,8 @@
                     <MenuItem Header="_New Terminal" Command="{CompiledBinding NewTerminalCommand}" InputGesture="Ctrl+Shift+T" />
                 </MenuItem>
                 <Separator />
+                <MenuItem Header="Command _Palette..." Command="{CompiledBinding ShowCommandPaletteCommand}" InputGesture="Ctrl+Shift+P" />
+                <Separator />
                 <MenuItem Header="_Collaboration" Command="{CompiledBinding ToggleCollaborationCommand}" />
                 <Separator />
                 <MenuItem Header="_Workspace">
@@ -135,6 +138,14 @@
                     <MenuItem Header="Re_build" Command="{CompiledBinding RebuildWorkspaceCommand}" />
                     <MenuItem Header="_Clean" Command="{CompiledBinding CleanWorkspaceCommand}" />
                 </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ExtensionMenuItems}">
+                <MenuItem.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                        <MenuItem Header="{CompiledBinding Title}"
+                                  Command="{CompiledBinding Command}" />
+                    </DataTemplate>
+                </MenuItem.ItemTemplate>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_About" Command="{CompiledBinding AboutCommand}" />
@@ -161,6 +172,9 @@
                 <Button ToolTip.Tip="New Terminal (Ctrl+Shift+T)" Command="{CompiledBinding NewTerminalCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm2 3 4 3-4 3v-2H4v-2h2V8zm6 6h6v2h-6v-2z" />
                 </Button>
+                <Button ToolTip.Tip="Command Palette (Ctrl+Shift+P)" Command="{CompiledBinding ShowCommandPaletteCommand}" Padding="6,4">
+                    <PathIcon Width="16" Height="16" Data="M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v12h16V6H4zm2 3h8v2H6V9zm0 4h6v2H6v-2z" />
+                </Button>
                 <Separator Margin="4,0" />
                 <Button ToolTip.Tip="Undo (Ctrl+Z)" Command="{CompiledBinding UndoCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M12.5 8c-2.65 0-5.05 1.04-6.83 2.75L3 8v8h8l-2.81-2.81C9.83 11.87 11.1 11 12.5 11c2.34 0 4.33 1.57 4.93 3.7l2.14-.7C18.63 10.73 15.84 8 12.5 8z" />
@@ -181,6 +195,22 @@
                 <Button ToolTip.Tip="Delete" Command="{CompiledBinding DeleteCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
                 </Button>
+                <Separator Margin="4,0" IsVisible="{CompiledBinding HasExtensionToolbarItems}" />
+                <ItemsControl ItemsSource="{CompiledBinding ExtensionToolbarItems}" IsVisible="{CompiledBinding HasExtensionToolbarItems}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionToolbarItemViewModel">
+                            <Button Content="{CompiledBinding Title}"
+                                    ToolTip.Tip="{CompiledBinding Tooltip}"
+                                    Command="{CompiledBinding Command}"
+                                    Padding="6,4" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Border>
 

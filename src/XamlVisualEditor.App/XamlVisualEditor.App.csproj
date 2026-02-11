@@ -31,6 +31,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Animation\XamlVisualEditor.Animation.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
@@ -52,6 +54,7 @@
     <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.GitExtension\XamlVisualEditor.GitExtension.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Debugging.Dap\XamlVisualEditor.Debugging.Dap.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell\XamlVisualEditor.Shell.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />

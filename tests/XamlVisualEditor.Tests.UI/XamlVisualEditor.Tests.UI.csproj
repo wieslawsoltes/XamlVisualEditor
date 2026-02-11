@@ -26,6 +26,8 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.TreeView\XamlVisualEditor.TreeView.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.GitExtension\XamlVisualEditor.GitExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Terminal.Avalonia\XamlVisualEditor.Terminal.Avalonia.csproj" />

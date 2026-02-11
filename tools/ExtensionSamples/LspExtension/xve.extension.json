@@ -1,0 +1,24 @@
+{
+  "name": "lsp-sample",
+  "displayName": "LSP Sample Extension",
+  "publisher": "sample",
+  "version": "0.1.0",
+  "engines": {
+    "xve": "^0.1.0"
+  },
+  "main": "lib/net10.0/LspExtension.dll",
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:xaml"
+  ],
+  "contributes": {
+    "languageServers": [
+      {
+        "id": "xaml-lsp",
+        "command": "xaml-language-server",
+        "args": ["--stdio"],
+        "languages": ["xaml", "axaml"]
+      }
+    ]
+  }
+}

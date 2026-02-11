@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Acp;
-using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.AcpExtension;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Integration;

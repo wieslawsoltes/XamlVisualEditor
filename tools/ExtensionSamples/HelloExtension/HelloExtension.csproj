@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>XamlVisualEditor.HelloExtension</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>sample</Authors>
+    <Description>Sample extension for XamlVisualEditor</Description>
+    <PackageOutputPath>bin/Release</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="xve.extension.json" Pack="true" PackagePath="" />
+  </ItemGroup>
+</Project>

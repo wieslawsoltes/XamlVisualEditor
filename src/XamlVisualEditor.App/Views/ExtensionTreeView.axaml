@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.ExtensionTreeView"
+             x:DataType="vm:ExtensionTreeViewModel">
+  <DockPanel>
+    <TextBox DockPanel.Dock="Top"
+             Watermark="Search..."
+             Text="{CompiledBinding FilterText, Mode=TwoWay}"
+             Margin="4" />
+
+    <dg:DataGrid ItemsSource="{CompiledBinding Model.Flattened}"
+                HierarchicalModel="{CompiledBinding Model}"
+                HierarchicalRowsEnabled="True"
+                SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                SortingModel="{CompiledBinding SortingModel}"
+                FilteringModel="{CompiledBinding FilteringModel}"
+                SearchModel="{CompiledBinding SearchModel}"
+                HeadersVisibility="Column"
+                GridLinesVisibility="None"
+                CanUserSortColumns="True"
+                IsReadOnly="True">
+      <dg:DataGrid.DataTemplates>
+        <DataTemplate DataType="vm:ExtensionTreeNodeViewModel" x:DataType="vm:ExtensionTreeNodeViewModel">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{CompiledBinding Label}" />
+            <TextBlock Text="{CompiledBinding Description}"
+                       Opacity="0.6" />
+          </StackPanel>
+        </DataTemplate>
+      </dg:DataGrid.DataTemplates>
+      <dg:DataGrid.Columns>
+        <dg:DataGridHierarchicalColumn Header="Name"
+                                       Width="*"
+                                       Binding="{CompiledBinding Item}"
+                                       SortMemberPath="Item.Label"
+                                       x:DataType="dh:HierarchicalNode">
+          <dg:DataGridHierarchicalColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" />
+            </DataTemplate>
+          </dg:DataGridHierarchicalColumn.CellTemplate>
+        </dg:DataGridHierarchicalColumn>
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

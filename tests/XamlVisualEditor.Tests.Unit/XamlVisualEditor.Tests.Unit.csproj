@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Animation\XamlVisualEditor.Animation.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Language\XamlVisualEditor.Language.csproj" />

@@ -2,10 +2,14 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Dock.Model.Core;
+using XamlVisualEditor.AcpExtension;
+using XamlVisualEditor.AcpExtension.Views;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Designer.Core;
+using XamlVisualEditor.GitExtension;
+using XamlVisualEditor.GitExtension.Views;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
@@ -48,8 +52,6 @@ public sealed class ViewLocator : IDataTemplate
                     return new LogicalTreeToolView { DataContext = tool };
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
-                case AcpTool tool:
-                    return new AcpToolView { DataContext = tool.AcpToolViewModel };
                 case TerminalTool tool:
                     return new TerminalView { DataContext = tool.TerminalViewModel };
                 case DebugSettingsTool tool:
@@ -70,8 +72,10 @@ public sealed class ViewLocator : IDataTemplate
                     return new CollaborationPanelView { DataContext = tool.CollaborationViewModel };
                 case AnimationEditorTool tool:
                     return new AnimationEditorView { DataContext = tool.AnimationEditor };
-                case GitTool tool:
-                    return new GitPanelView { DataContext = tool.GitPanelViewModel };
+                case ExtensionTool tool:
+                    return new ExtensionToolView { DataContext = tool };
+                case ExtensionManagerTool tool:
+                    return new ExtensionManagerView { DataContext = tool.ExtensionManagerViewModel };
             }
         }
 
@@ -99,6 +103,9 @@ public sealed class ViewLocator : IDataTemplate
             AnimationEditorViewModel => new AnimationEditorView(),
             TerminalViewModel => new TerminalView(),
             GitPanelViewModel => new GitPanelView(),
+            ExtensionTreeViewModel => new ExtensionTreeView(),
+            ExtensionWebviewViewModel => new ExtensionWebviewView(),
+            ExtensionManagerViewModel => new ExtensionManagerView(),
             _ => new TextBlock { Text = $"No view for {param?.GetType().FullName ?? "null"}" }
         };
     }
@@ -129,6 +136,9 @@ public sealed class ViewLocator : IDataTemplate
             or LogicalTreeNodeViewModel
             or AnimationEditorViewModel
             or TerminalViewModel
-            or GitPanelViewModel;
+            or GitPanelViewModel
+            or ExtensionTreeViewModel
+            or ExtensionWebviewViewModel
+            or ExtensionManagerViewModel;
     }
 }

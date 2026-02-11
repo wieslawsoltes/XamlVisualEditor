@@ -1,0 +1,39 @@
+{
+  "name": "hello-extension",
+  "displayName": "Hello Extension",
+  "publisher": "sample",
+  "version": "0.1.0",
+  "engines": {
+    "xve": "^0.1.0"
+  },
+  "main": "lib/net10.0/HelloExtension.dll",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:hello.showMessage",
+    "onView:hello.view"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "hello.showMessage",
+        "title": "Hello: Show Message",
+        "category": "Samples"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "hello.showMessage"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "hello.view",
+          "name": "Hello View"
+        }
+      ]
+    }
+  }
+}

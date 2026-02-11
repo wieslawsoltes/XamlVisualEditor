@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:XamlVisualEditor.Shell"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             xmlns:v="using:XamlVisualEditor.App.Views"
+             x:Class="XamlVisualEditor.App.Views.ExtensionToolView"
+             x:DataType="shell:ExtensionTool">
+  <ContentControl Content="{CompiledBinding ExtensionViewModel}">
+    <ContentControl.DataTemplates>
+      <DataTemplate x:DataType="vm:ExtensionTreeViewModel">
+        <v:ExtensionTreeView />
+      </DataTemplate>
+      <DataTemplate x:DataType="vm:ExtensionWebviewViewModel">
+        <v:ExtensionWebviewView />
+      </DataTemplate>
+      <DataTemplate x:DataType="vm:ExtensionCustomViewModel">
+        <ContentControl Content="{CompiledBinding ViewModel}" />
+      </DataTemplate>
+    </ContentControl.DataTemplates>
+  </ContentControl>
+</UserControl>

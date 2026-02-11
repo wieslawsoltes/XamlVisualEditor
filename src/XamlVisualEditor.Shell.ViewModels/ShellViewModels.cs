@@ -11,6 +11,7 @@ using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Xml.Linq;
 using System.Diagnostics;
 using System.IO;
@@ -31,12 +32,13 @@ using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Collaboration;
 using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Core;
-using XamlVisualEditor.Acp;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.Adorners;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Designer.Rendering;
+using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Lsp;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Sync;
@@ -2088,63 +2090,6 @@ public sealed class DebugToolConsentDialogViewModel : ReactiveObject
 }
 
 /// <summary>
-/// ViewModel for ACP permission prompt dialog.
-/// </summary>
-public sealed class AcpPermissionDialogViewModel : ReactiveObject
-{
-    public string Title { get; } = "Permission Required";
-    public string Message { get; }
-    public string SessionId { get; }
-    public string? ToolTitle { get; }
-    public string? ToolKind { get; }
-    public string? ToolCallId { get; }
-
-    public ObservableCollection<AcpPermissionOptionViewModel> Options { get; } = new();
-
-    public Interaction<AcpPermissionOutcome, Unit> CloseInteraction { get; } = new();
-
-    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
-
-    public AcpPermissionDialogViewModel(AcpPermissionRequest request)
-    {
-        SessionId = request.SessionId;
-        ToolTitle = request.ToolTitle;
-        ToolKind = request.ToolKind;
-        ToolCallId = request.ToolCallId;
-
-        string toolLabel = !string.IsNullOrWhiteSpace(ToolTitle) ? ToolTitle : "an operation";
-        string kindLabel = !string.IsNullOrWhiteSpace(ToolKind) ? ToolKind : "tool";
-        Message = $"The agent requests permission to run {kindLabel}: {toolLabel}.";
-
-        foreach (AcpPermissionOption option in request.Options)
-        {
-            ReactiveCommand<Unit, Unit> selectCommand = ReactiveCommand.CreateFromTask(async () =>
-                await CloseInteraction.Handle(AcpPermissionOutcome.Selected(option.OptionId)));
-            Options.Add(new AcpPermissionOptionViewModel(option, selectCommand));
-        }
-
-        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
-            await CloseInteraction.Handle(AcpPermissionOutcome.Cancelled()));
-    }
-}
-
-public sealed class AcpPermissionOptionViewModel : ReactiveObject
-{
-    public string OptionId { get; }
-    public string Name { get; }
-    public string Kind { get; }
-    public ReactiveCommand<Unit, Unit> SelectCommand { get; }
-
-    public AcpPermissionOptionViewModel(AcpPermissionOption option, ReactiveCommand<Unit, Unit> selectCommand)
-    {
-        OptionId = option.OptionId;
-        Name = option.Name;
-        Kind = option.Kind;
-        SelectCommand = selectCommand;
-    }
-}
-
-/// <summary>
 /// A message in the output panel.
 /// </summary>
 public sealed record OutputMessage(
@@ -2210,6 +2155,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly HashSet<Guid> _visualExpandedIds = new();
     private readonly HashSet<Guid> _logicalExpandedIds = new();
     private readonly IWorkspaceService? _workspaceService;
+    private readonly IWorkspaceInfoUpdater? _workspaceInfoUpdater;
     private readonly ITypeMetadataService? _metadataService;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
@@ -2219,7 +2165,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly XamlVisualEditor.Terminal.ITerminalService? _terminalService;
-    private readonly IAcpService? _acpService;
     private readonly Dictionary<string, ProjectModel> _projectLookup = new(StringComparer.OrdinalIgnoreCase);
     private System.Diagnostics.Process? _runProcess;
     private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
@@ -2238,6 +2183,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private readonly Dictionary<Guid, TerminalTool> _terminalTools = new();
     private readonly Stack<LanguageLocation> _backNavigation = new();
     private readonly Stack<LanguageLocation> _forwardNavigation = new();
+    private readonly IExtensionContributionRegistry? _extensionContributions;
+    private readonly IExtensionViewRegistry? _extensionViewRegistry;
+    private readonly ICommands? _extensionCommands;
+    private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the open documents.
@@ -2292,9 +2242,31 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public OutputViewModel Output { get; } = new();
 
     /// <summary>
-    /// Gets the ACP tool ViewModel.
+    /// Gets extension-provided menu items.
     /// </summary>
-    public AcpToolViewModel Acp { get; }
+    public ObservableCollection<ExtensionMenuItemViewModel> ExtensionMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided toolbar items.
+    /// </summary>
+    public ObservableCollection<ExtensionToolbarItemViewModel> ExtensionToolbarItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided command palette items.
+    /// </summary>
+    public ObservableCollection<ExtensionCommandPaletteItemViewModel> CommandPaletteItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided view models.
+    /// </summary>
+    public ObservableCollection<ExtensionViewModel> ExtensionViews { get; } = new();
+
+    /// <summary>
+    /// Gets the extension manager ViewModel.
+    /// </summary>
+    public ExtensionManagerViewModel ExtensionManager { get; }
+
+    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0;
 
     /// <summary>
     /// Gets the debugger ViewModel.
@@ -2388,11 +2360,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public CollaborationPanelViewModel Collaboration { get; } = new();
 
     /// <summary>
-    /// Gets the git panel ViewModel.
-    /// </summary>
-    public GitPanelViewModel GitPanel { get; }
-
-    /// <summary>
     /// Gets the animation editor ViewModel.
     /// </summary>
     public AnimationEditorViewModel AnimationEditor { get; }
@@ -2452,6 +2419,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
 
     /// <summary>
+    /// Interaction for selecting an extension package.
+    /// </summary>
+    public Interaction<Unit, string?> ExtensionPackageOpenInteraction { get; } = new();
+
+    /// <summary>
     /// Interaction for saving a file dialog.
     /// </summary>
     public Interaction<string, string?> SaveFileInteraction { get; } = new();
@@ -2477,6 +2449,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public Interaction<string, string?> WorkspaceSymbolQueryInteraction { get; } = new();
 
     /// <summary>
+    /// Interaction for command palette selection.
+    /// </summary>
+    public Interaction<CommandPaletteRequest, ExtensionCommandPaletteItemViewModel?> CommandPaletteInteraction { get; } = new();
+
+    /// <summary>
     /// Interaction for previewer trust warnings.
     /// </summary>
     public Interaction<PreviewerTrustRequest, PreviewerTrustDecision> PreviewerTrustInteraction { get; } = new();
@@ -2491,11 +2468,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public Interaction<DebugToolConsentRequest, bool> DebugToolConsentInteraction { get; } = new();
 
-    /// <summary>
-    /// Interaction for ACP permission prompts.
-    /// </summary>
-    public Interaction<AcpPermissionRequest, AcpPermissionOutcome> AcpPermissionInteraction { get; } = new();
-
     // Panel visibility
     [Reactive] public bool IsToolboxVisible { get; set; } = true;
     [Reactive] public bool IsPropertiesVisible { get; set; } = true;
@@ -2509,6 +2481,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     [Reactive] public bool IsCallStackVisible { get; set; } = true;
     [Reactive] public bool IsLocalsVisible { get; set; } = true;
     [Reactive] public bool IsWatchesVisible { get; set; } = true;
+    [Reactive] public bool IsExtensionsManagerVisible { get; set; }
 
     /// <summary>
     /// Gets or sets the debugger adapter path.
@@ -2587,6 +2560,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleCallStackCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleLocalsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleWatchesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleExtensionsManagerCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
 
@@ -2618,6 +2592,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     // Terminal Commands
     public ReactiveCommand<Unit, Unit> NewTerminalCommand { get; }
 
+    // Command palette
+    public ReactiveCommand<Unit, Unit> ShowCommandPaletteCommand { get; }
+
     /// <summary>
     /// Command to close a specific document (used by tab close button).
     /// </summary>
@@ -2625,7 +2602,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
     public MainWindowViewModel(
         IWorkspaceService? workspaceService = null,
-        IGitService? gitService = null,
+        IWorkspaceInfoUpdater? workspaceInfoUpdater = null,
         ITypeMetadataService? metadataService = null,
         ILanguageIntellisenseRegistry? languageRegistry = null,
         IAnimationPreviewService? animationPreviewService = null,
@@ -2633,24 +2610,43 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IDebugToolInstaller? debugToolInstaller = null,
         IOutputLogSinkAccessor? outputLogSinkAccessor = null,
         XamlVisualEditor.Terminal.ITerminalService? terminalService = null,
-        IAcpService? acpService = null,
-        IAcpProfileStore? acpProfileStore = null,
-        ISecretStore? secretStore = null,
-        IAcpOAuthDeviceFlowService? oauthDeviceFlowService = null,
         ILspSettingsStore? lspSettingsStore = null,
+        ICommands? extensionCommands = null,
+        IExtensionContributionRegistry? extensionContributionRegistry = null,
+        IExtensionViewRegistry? extensionViewRegistry = null,
+        IExtensionManager? extensionManager = null,
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null)
     {
         _workspaceService = workspaceService;
+        _workspaceInfoUpdater = workspaceInfoUpdater;
         _metadataService = metadataService;
         _languageRegistry = languageRegistry;
         _debuggerService = debuggerService ?? new NullDebuggerService();
         _debugToolInstaller = debugToolInstaller;
         _outputLogSinkAccessor = outputLogSinkAccessor;
         _terminalService = terminalService;
-        _acpService = acpService;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MainWindowViewModel>.Instance;
         _loggerFactory = loggerFactory;
+        _extensionCommands = extensionCommands;
+        _extensionContributions = extensionContributionRegistry;
+        _extensionViewRegistry = extensionViewRegistry;
+        ExtensionManager = new ExtensionManagerViewModel(
+            extensionManager ?? new NullExtensionManager(),
+            () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
+
+        if (_extensionContributions is not null)
+        {
+            _extensionContributions.Changed += OnExtensionContributionsChanged;
+        }
+
+        if (_extensionViewRegistry is not null)
+        {
+            _extensionViewRegistry.Changed += OnExtensionViewsChanged;
+        }
+
+        ExtensionToolbarItems.CollectionChanged += (_, _) =>
+            this.RaisePropertyChanged(nameof(HasExtensionToolbarItems));
 
         LoadTrustedPreviewerRoots();
 
@@ -2682,10 +2678,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         LspSettings = new LspSettingsViewModel(lspSettingsStore);
 
-        Acp = new AcpToolViewModel(acpService, acpProfileStore, secretStore, oauthDeviceFlowService, () => _workspacePath);
-        GitPanel = new GitPanelViewModel(gitService, () => _workspacePath);
-        _acpService?.SetPermissionHandler(HandleAcpPermissionAsync);
-
         if (_outputLogSinkAccessor is not null)
         {
             _outputLogSinkAccessor.Sink = Output;
@@ -2702,6 +2694,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
         WireDockEvents();
+        RefreshExtensionContributions();
+        SyncExtensionDockables();
 
         IObservable<int> activeLine = this.WhenAnyValue(x => x.ActiveDocument)
             .Select(doc => doc is null
@@ -2950,6 +2944,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             IsWatchesVisible = !IsWatchesVisible;
             SetDockableVisibility("Watches", IsWatchesVisible);
         });
+        ToggleExtensionsManagerCommand = ReactiveCommand.Create(() =>
+        {
+            IsExtensionsManagerVisible = !IsExtensionsManagerVisible;
+            SetDockableVisibility("ExtensionsManager", IsExtensionsManagerVisible);
+        });
         ResetLayoutCommand = ReactiveCommand.Create(ResetLayout);
         OpenCanvasCommand = ReactiveCommand.Create(ShowCanvasDocument);
 
@@ -2990,6 +2989,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         SetStartupProjectCommand = ReactiveCommand.Create<ProjectModel>(SetActiveProject);
 
         NewTerminalCommand = ReactiveCommand.Create(CreateTerminalSession);
+
+        ShowCommandPaletteCommand = ReactiveCommand.CreateFromTask(ShowCommandPaletteAsync);
 
         // Close document command (used by tab close buttons)
         CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
@@ -3895,6 +3896,270 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         StatusText = $"Auto-saved {doc.FileName}";
     }
 
+    public bool TryGetExtensionView(string viewId, out ExtensionViewModel? viewModel)
+    {
+        return _extensionViews.TryGetValue(viewId, out viewModel);
+    }
+
+    private async System.Threading.Tasks.Task ShowCommandPaletteAsync()
+    {
+        if (CommandPaletteItems.Count == 0)
+        {
+            StatusText = "No extension commands available.";
+            return;
+        }
+
+        CommandPaletteRequest request = new("Command Palette", CommandPaletteItems.ToList());
+        ExtensionCommandPaletteItemViewModel? selected = await CommandPaletteInteraction.Handle(request);
+        if (selected is null)
+        {
+            return;
+        }
+
+        await ExecuteExtensionCommandAsync(selected.CommandId);
+    }
+
+    private async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId)
+    {
+        if (_extensionCommands is null)
+        {
+            StatusText = "Extension commands unavailable.";
+            return;
+        }
+
+        try
+        {
+            await _extensionCommands.ExecuteAsync(commandId, null, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Extension command failed: {Message}", ex.Message);
+            StatusText = $"Extension command failed: {ex.Message}";
+        }
+    }
+
+    private void OnExtensionContributionsChanged(object? sender, EventArgs e)
+    {
+        RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
+    }
+
+    private void OnExtensionViewsChanged(object? sender, ExtensionViewRegistryChangedEventArgs e)
+    {
+        RxApp.MainThreadScheduler.Schedule(RefreshExtensionViews);
+    }
+
+    private void RefreshExtensionContributions()
+    {
+        if (_extensionContributions is null)
+        {
+            ExtensionMenuItems.Clear();
+            ExtensionToolbarItems.Clear();
+            CommandPaletteItems.Clear();
+            RefreshExtensionViews();
+            return;
+        }
+
+        UpdateExtensionMenuItems();
+        UpdateExtensionToolbarItems();
+        UpdateCommandPaletteItems();
+        RefreshExtensionViews();
+    }
+
+    private void RefreshExtensionViews()
+    {
+        foreach (IDisposable view in ExtensionViews.OfType<IDisposable>().ToList())
+        {
+            view.Dispose();
+        }
+
+        ExtensionViews.Clear();
+        _extensionViews.Clear();
+
+        if (_extensionContributions is null)
+        {
+            SyncExtensionDockables();
+            return;
+        }
+
+        IEnumerable<ExtensionViewContribution> ordered = _extensionContributions.ViewContributions
+            .OrderBy(contribution => contribution.Location)
+            .ThenBy(contribution => contribution.Priority)
+            .ThenBy(contribution => contribution.Title, StringComparer.OrdinalIgnoreCase);
+
+        foreach (ExtensionViewContribution contribution in ordered)
+        {
+            ExtensionViewModel viewModel = CreateExtensionViewModel(contribution);
+            _extensionViews[contribution.ViewId] = viewModel;
+            ExtensionViews.Add(viewModel);
+            if (viewModel is ExtensionTreeViewModel treeView)
+            {
+                _ = treeView.LoadAsync(CancellationToken.None);
+            }
+        }
+
+        SyncExtensionDockables();
+    }
+
+    private ExtensionViewModel CreateExtensionViewModel(ExtensionViewContribution contribution)
+    {
+        return contribution.Type switch
+        {
+            ExtensionViewType.Tree => new ExtensionTreeViewModel(
+                contribution,
+                ResolveTreeProvider(contribution.ViewId)),
+            ExtensionViewType.Webview => new ExtensionWebviewViewModel(
+                contribution,
+                "Webview support is not available yet."),
+            ExtensionViewType.Custom => new ExtensionCustomViewModel(
+                contribution,
+                ResolveCustomViewModel(contribution.ViewId)),
+            _ => new ExtensionWebviewViewModel(
+                contribution,
+                "Unsupported view type.")
+        };
+    }
+
+    private IExtensionTreeDataProvider ResolveTreeProvider(string viewId)
+    {
+        if (_extensionViewRegistry is not null
+            && _extensionViewRegistry.TryGetTreeProvider(viewId, out IExtensionTreeDataProvider provider))
+        {
+            return provider;
+        }
+
+        return NullExtensionTreeDataProvider.Instance;
+    }
+
+    private object? ResolveCustomViewModel(string viewId)
+    {
+        if (_extensionViewRegistry is not null
+            && _extensionViewRegistry.TryGetCustomViewProvider(viewId, out ICustomViewProvider provider))
+        {
+            return provider.CreateViewModel();
+        }
+
+        return null;
+    }
+
+    private void UpdateExtensionMenuItems()
+    {
+        ExtensionMenuItems.Clear();
+
+        if (_extensionContributions is null)
+        {
+            return;
+        }
+
+        foreach (ExtensionMenuContribution item in _extensionContributions.MenuItems
+            .OrderBy(menu => menu.Group, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(menu => menu.Title, StringComparer.OrdinalIgnoreCase))
+        {
+            ExtensionMenuItems.Add(new ExtensionMenuItemViewModel(
+                item.CommandId,
+                item.Title,
+                item.Group,
+                CreateExtensionCommand(item.CommandId)));
+        }
+    }
+
+    private void UpdateExtensionToolbarItems()
+    {
+        ExtensionToolbarItems.Clear();
+
+        if (_extensionContributions is null)
+        {
+            return;
+        }
+
+        foreach (ExtensionToolbarContribution item in _extensionContributions.ToolbarItems
+            .OrderBy(toolbar => toolbar.Group, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(toolbar => toolbar.Title, StringComparer.OrdinalIgnoreCase))
+        {
+            ExtensionToolbarItems.Add(new ExtensionToolbarItemViewModel(
+                item.CommandId,
+                item.Title,
+                item.Tooltip,
+                item.Group,
+                CreateExtensionCommand(item.CommandId)));
+        }
+    }
+
+    private void UpdateCommandPaletteItems()
+    {
+        CommandPaletteItems.Clear();
+
+        if (_extensionContributions is null)
+        {
+            return;
+        }
+
+        foreach (ExtensionCommandPaletteContribution item in _extensionContributions.CommandPaletteItems
+            .OrderBy(palette => palette.Category, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(palette => palette.Title, StringComparer.OrdinalIgnoreCase))
+        {
+            CommandPaletteItems.Add(new ExtensionCommandPaletteItemViewModel(
+                item.CommandId,
+                item.Title,
+                item.Category));
+        }
+    }
+
+    private ReactiveCommand<Unit, Unit> CreateExtensionCommand(string commandId)
+    {
+        return ReactiveCommand.CreateFromTask(() => ExecuteExtensionCommandAsync(commandId));
+    }
+
+    private void SyncExtensionDockables()
+    {
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        _extensionTools.Clear();
+
+        foreach (ExtensionTool tool in XamlEditorDockFactory.FindDockables<ExtensionTool>(DockLayout))
+        {
+            if (string.IsNullOrWhiteSpace(tool.ViewId) || !_extensionViews.ContainsKey(tool.ViewId))
+            {
+                if (tool.Owner is IDock dock && dock.VisibleDockables is not null)
+                {
+                    dock.VisibleDockables.Remove(tool);
+                }
+            }
+            else if (_extensionViews.TryGetValue(tool.ViewId, out ExtensionViewModel? viewModel))
+            {
+                tool.ExtensionViewModel = viewModel;
+                tool.Title = viewModel.Title;
+                _extensionTools[tool.ViewId] = tool;
+            }
+        }
+
+        foreach (ExtensionViewModel view in ExtensionViews)
+        {
+            if (_extensionTools.ContainsKey(view.ViewId))
+            {
+                continue;
+            }
+
+            string toolId = ExtensionTool.BuildId(view.ViewId);
+            ExtensionTool? existing = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, toolId);
+            if (existing is not null)
+            {
+                existing.ExtensionViewModel = view;
+                existing.Title = view.Title;
+                _extensionTools[view.ViewId] = existing;
+                continue;
+            }
+
+            ExtensionTool? created = DockFactory.AddExtensionTool(DockLayout, view);
+            if (created is not null)
+            {
+                _extensionTools[view.ViewId] = created;
+            }
+        }
+    }
+
     private void ResetLayout()
     {
         IsToolboxVisible = true;
@@ -3908,6 +4173,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IsCallStackVisible = true;
         IsLocalsVisible = true;
         IsWatchesVisible = true;
+        IsExtensionsManagerVisible = false;
 
         IRootDock layout = DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
@@ -3915,6 +4181,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DockFactory.ConfigureToolViewModels(layout);
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
+        _extensionTools.Clear();
+        SyncExtensionDockables();
 
         // Delete persisted layout so it reloads default on next start
         try
@@ -3932,6 +4200,39 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         StatusText = "Layout reset";
+    }
+
+    private sealed class NullExtensionManager : IExtensionManager
+    {
+        public Task<IReadOnlyList<ExtensionPackageInfo>> GetInstalledAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<ExtensionPackageInfo>>(Array.Empty<ExtensionPackageInfo>());
+        }
+
+        public Task<ExtensionPackageInfo> InstallAsync(string packagePath, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Extension manager unavailable.");
+        }
+
+        public Task UninstallAsync(string extensionId, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Extension manager unavailable.");
+        }
+
+        public Task<bool> GetEnabledAsync(string extensionId, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task SetEnabledAsync(string extensionId, bool enabled, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Extension manager unavailable.");
+        }
+
+        public Task<IReadOnlyList<ExtensionUpdateInfo>> CheckForUpdatesAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<ExtensionUpdateInfo>>(Array.Empty<ExtensionUpdateInfo>());
+        }
     }
 
     private void CreateTerminalSession()
@@ -5252,8 +5553,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         _workspace = workspace;
         _workspacePath = workspacePath;
+        _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
         HasWorkspace = true;
-        await GitPanel.RefreshAsync();
         RefreshWorkspaceProjects(workspace);
 
         string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
@@ -5508,18 +5809,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private System.Threading.Tasks.Task<bool> ConfirmDebugToolConsentAsync(DebugToolConsentRequest request)
     {
         return DebugToolConsentInteraction.Handle(request).ToTask();
-    }
-
-    private System.Threading.Tasks.Task<AcpPermissionOutcome> HandleAcpPermissionAsync(
-        AcpPermissionRequest request,
-        System.Threading.CancellationToken ct)
-    {
-        if (ct.IsCancellationRequested)
-        {
-            return System.Threading.Tasks.Task.FromResult(AcpPermissionOutcome.Cancelled());
-        }
-
-        return AcpPermissionInteraction.Handle(request).ToTask();
     }
 
     private async System.Threading.Tasks.Task StartPreviewerForActiveDocumentAsync()
@@ -5973,10 +6262,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         _disposables.Dispose();
-        Acp.Dispose();
-        _acpService?.SetPermissionHandler(null);
         Collaboration.Dispose();
-        GitPanel.Dispose();
         AnimationEditor.Dispose();
         Debugger.Dispose();
         InfiniteCanvas.Dispose();

@@ -9,6 +9,10 @@ using XamlVisualEditor.Core.Debugging;
 using XamlVisualEditor.Core.Logging;
 using XamlVisualEditor.Debugging.Dap;
 using XamlVisualEditor.CSharp.Language;
+using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Extensions.Hosting;
+using AcpExtensionEntry = XamlVisualEditor.AcpExtension.AcpExtension;
+using GitExtensionEntry = XamlVisualEditor.GitExtension.GitExtension;
 using XamlVisualEditor.Language;
 using XamlVisualEditor.Acp;
 using XamlVisualEditor.App.Services;
@@ -22,6 +26,7 @@ using XamlVisualEditor.Xaml.Language;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Terminal;
+using System.Threading;
 
 namespace XamlVisualEditor.App;
 
@@ -49,12 +54,16 @@ public sealed class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            BuiltInExtensionHost extensionHost = Services.GetRequiredService<BuiltInExtensionHost>();
+            extensionHost.ActivateAsync(CancellationToken.None).GetAwaiter().GetResult();
+
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
             desktop.MainWindow = new MainWindow(mainVm);
 
             desktop.ShutdownRequested += (_, _) =>
             {
                 mainVm.Dispose();
+                extensionHost.Dispose();
                 (Services as IDisposable)?.Dispose();
             };
         }
@@ -97,6 +106,13 @@ public sealed class App : Application
         services.AddSingleton<ISecretStore, OsSecretStore>();
         services.AddSingleton<IAcpOAuthDeviceFlowService, AcpOAuthDeviceFlowService>();
 
+        services.AddSingleton<WorkspaceInfoService>();
+        services.AddSingleton<IWorkspaceInfo>(sp => sp.GetRequiredService<WorkspaceInfoService>());
+        services.AddSingleton<IWorkspaceInfoUpdater>(sp => sp.GetRequiredService<WorkspaceInfoService>());
+        services.AddSingleton<IWorkspace, InMemoryWorkspace>();
+        services.AddSingleton<IWindow, InMemoryWindow>();
+        services.AddSingleton<ISettings, InMemorySettingsStore>();
+
         // LSP services
         services.AddSingleton<ILspSettingsStore, LspSettingsStore>();
         services.AddSingleton<ILspSettings>(sp => new LspSettings(
@@ -109,11 +125,35 @@ public sealed class App : Application
         // Language services
         services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();
         services.AddSingleton<ILanguageIntellisenseService, XamlLanguageService>();
+        services.AddSingleton<ExtensionLanguageServiceRegistry>();
+        services.AddSingleton<ILanguageIntellisenseService, ExtensionLanguageIntellisenseService>();
         services.AddSingleton<ILanguageIntellisenseRegistry, LanguageServiceRegistry>();
 
         // Transient services (stateless/lightweight)
         services.AddTransient<CompletionProviderRegistry>(_ => CompletionProviderRegistry.CreateDefault());
         services.AddTransient<AstNodeMap>();
+
+        // Extension services
+        services.AddSingleton<ICommands, CommandRegistry>();
+        services.AddSingleton<IExtensionContributionRegistry, ExtensionContributionRegistry>();
+        services.AddSingleton<IExtensionViewRegistry, ExtensionViewRegistry>();
+        services.AddSingleton<IViews>(sp => sp.GetRequiredService<IExtensionViewRegistry>());
+        services.AddSingleton<IExtensionLanguageServices>(sp => sp.GetRequiredService<ExtensionLanguageServiceRegistry>());
+        services.AddSingleton<IEditorServices, EditorServicesAdapter>();
+        services.AddSingleton<ExtensionPackageLoader>();
+        services.AddSingleton<IExtensionPackageStore>(sp => new ExtensionPackageStore(
+            ExtensionPackagePaths.GetInstalledRoot(),
+            sp.GetRequiredService<ExtensionPackageLoader>()));
+        services.AddSingleton<IExtensionPackageCatalog>(sp => new LocalExtensionPackageCatalog(
+            ExtensionPackagePaths.GetCatalogRoot(),
+            sp.GetRequiredService<ExtensionPackageLoader>()));
+        services.AddSingleton<IExtensionStateStore>(_ => new FileExtensionStateStore(
+            ExtensionPackagePaths.GetStateFilePath()));
+        services.AddSingleton<IExtensionUpdateService, ExtensionUpdateService>();
+        services.AddSingleton<IExtensionManager, ExtensionManager>();
+        services.AddSingleton<BuiltInExtensionHost>();
+        services.AddSingleton<IXveExtension, AcpExtensionEntry>();
+        services.AddSingleton<IXveExtension, GitExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
         services.AddSingleton<MainWindowViewModel>();

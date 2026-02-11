@@ -2,7 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/XamlVisualEditor.Acp/XamlVisualEditor.Acp.csproj" />
     <Project Path="src/XamlVisualEditor.Acp.MockAgent/XamlVisualEditor.Acp.MockAgent.csproj" />
+    <Project Path="extensions/XamlVisualEditor.AcpExtension/XamlVisualEditor.AcpExtension.csproj" />
     <Project Path="src/XamlVisualEditor.Core/XamlVisualEditor.Core.csproj" />
+    <Project Path="src/XamlVisualEditor.Extensions/XamlVisualEditor.Extensions.csproj" />
     <Project Path="src/XamlVisualEditor.Animation/XamlVisualEditor.Animation.csproj" />
     <Project Path="src/XamlVisualEditor.Xaml.Parsing/XamlVisualEditor.Xaml.Parsing.csproj" />
     <Project Path="src/XamlVisualEditor.Xaml.Ast/XamlVisualEditor.Xaml.Ast.csproj" />
@@ -25,6 +27,7 @@
     <Project Path="src/XamlVisualEditor.Sync/XamlVisualEditor.Sync.csproj" />
     <Project Path="src/XamlVisualEditor.Collaboration/XamlVisualEditor.Collaboration.csproj" />
     <Project Path="src/XamlVisualEditor.Collaboration.UI/XamlVisualEditor.Collaboration.UI.csproj" />
+    <Project Path="extensions/XamlVisualEditor.GitExtension/XamlVisualEditor.GitExtension.csproj" />
     <Project Path="src/XamlVisualEditor.Shell/XamlVisualEditor.Shell.csproj" />
     <Project Path="src/XamlVisualEditor.Shell.ViewModels/XamlVisualEditor.Shell.ViewModels.csproj" />
     <Project Path="src/XamlVisualEditor.Terminal/XamlVisualEditor.Terminal.csproj" />

@@ -7,8 +7,8 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Xunit;
 using XamlVisualEditor.Acp;
-using XamlVisualEditor.App.Views;
-using XamlVisualEditor.Shell.ViewModels;
+using XamlVisualEditor.AcpExtension;
+using XamlVisualEditor.AcpExtension.Views;
 
 namespace XamlVisualEditor.Tests.UI;
 
