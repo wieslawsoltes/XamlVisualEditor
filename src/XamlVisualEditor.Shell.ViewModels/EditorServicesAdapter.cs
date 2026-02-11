@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Avalonia.Threading;
 using AvaloniaTextDocument = AvaloniaEdit.Document.TextDocument;
 using ReactiveUI;
 using XamlVisualEditor.CodeEditor;
@@ -41,6 +42,19 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     /// <inheritdoc />
     public IReadOnlyList<IEditorDocument> GetOpenDocuments()
     {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return GetOpenDocumentsCore();
+        }
+
+        return Dispatcher.UIThread
+            .InvokeAsync(GetOpenDocumentsCore, DispatcherPriority.Background)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    private IReadOnlyList<IEditorDocument> GetOpenDocumentsCore()
+    {
         List<IEditorDocument> results = new(_mainViewModel.Documents.Count);
         foreach (IEditorDocumentViewModel doc in _mainViewModel.Documents)
         {
@@ -58,7 +72,23 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             return null;
         }
 
-        await _mainViewModel.OpenFileAsync(filePath).ConfigureAwait(false);
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await OpenDocumentCoreAsync(filePath).ConfigureAwait(false);
+        }
+
+        IEditorDocument? result = null;
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            result = await OpenDocumentCoreAsync(filePath);
+        }, DispatcherPriority.Background, ct);
+
+        return result;
+    }
+
+    private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath)
+    {
+        await _mainViewModel.OpenFileAsync(filePath);
         IEditorDocumentViewModel? document = _mainViewModel.Documents
             .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
         return document is null ? null : GetAdapter(document);

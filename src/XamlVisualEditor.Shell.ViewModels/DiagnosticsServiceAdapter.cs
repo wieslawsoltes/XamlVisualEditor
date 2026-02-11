@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Linq;
 using System.Reactive.Linq;
+using Avalonia.Threading;
 using ReactiveUI;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
@@ -25,20 +26,33 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
 
     public event EventHandler<DiagnosticsChangedEventArgs>? DiagnosticsChanged;
 
-    public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(string? filePath, CancellationToken ct)
+    public async Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(string? filePath, CancellationToken ct)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return GetDiagnosticsCore(filePath);
+        }
+
+        return await Dispatcher.UIThread.InvokeAsync(
+            () => GetDiagnosticsCore(filePath),
+            DispatcherPriority.Background,
+            ct);
+    }
+
+    private IReadOnlyList<LanguageDiagnostic> GetDiagnosticsCore(string? filePath)
     {
         TextDocumentViewModel? document = _activeDocument ?? _mainViewModel.ActiveTextDocument;
         if (document is null)
         {
-            return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+            return Array.Empty<LanguageDiagnostic>();
         }
 
         if (string.IsNullOrWhiteSpace(filePath) || string.Equals(document.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(document.Diagnostics.ToList());
+            return document.Diagnostics.ToList();
         }
 
-        return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+        return Array.Empty<LanguageDiagnostic>();
     }
 
     public void Dispose()

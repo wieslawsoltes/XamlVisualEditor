@@ -34,6 +34,7 @@
     <ProjectReference Include="..\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.McpExtension\XamlVisualEditor.McpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.VscodeCompatExtension\XamlVisualEditor.VscodeCompatExtension.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Animation\XamlVisualEditor.Animation.csproj" />

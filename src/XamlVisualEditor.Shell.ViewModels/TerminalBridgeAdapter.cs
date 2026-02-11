@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Avalonia.Threading;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Terminal;
 
@@ -15,7 +16,34 @@ public sealed class TerminalBridgeAdapter : ITerminalBridge
         _mainViewModel = mainViewModel;
     }
 
-    public Task<TerminalInfo> CreateAsync(TerminalCreateRequest request, CancellationToken ct)
+    public async Task<TerminalInfo> CreateAsync(TerminalCreateRequest request, CancellationToken ct)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return CreateTerminal(request);
+        }
+
+        return await Dispatcher.UIThread.InvokeAsync(
+            () => CreateTerminal(request),
+            DispatcherPriority.Background,
+            ct);
+    }
+
+    public async Task SendTextAsync(Guid terminalId, string text, CancellationToken ct)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            SendTextCore(terminalId, text);
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(
+            () => SendTextCore(terminalId, text),
+            DispatcherPriority.Background,
+            ct);
+    }
+
+    private TerminalInfo CreateTerminal(TerminalCreateRequest request)
     {
         TerminalSessionOptions options = new()
         {
@@ -25,19 +53,18 @@ public sealed class TerminalBridgeAdapter : ITerminalBridge
         };
 
         TerminalViewModel terminal = _mainViewModel.CreateTerminalSession(options);
-        return Task.FromResult(new TerminalInfo(terminal.Id, terminal.Title));
+        return new TerminalInfo(terminal.Id, terminal.Title);
     }
 
-    public Task SendTextAsync(Guid terminalId, string text, CancellationToken ct)
+    private void SendTextCore(Guid terminalId, string text)
     {
         TerminalViewModel? terminal = _mainViewModel.Terminals
             .FirstOrDefault(vm => vm.Id == terminalId);
         if (terminal is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         terminal.SendText(text);
-        return Task.CompletedTask;
     }
 }

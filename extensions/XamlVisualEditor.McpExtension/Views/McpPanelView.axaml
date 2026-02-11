@@ -1,0 +1,106 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             xmlns:vm="using:XamlVisualEditor.McpExtension"
+             x:Class="XamlVisualEditor.McpExtension.Views.McpPanelView"
+             x:DataType="vm:McpPanelViewModel">
+  <DockPanel LastChildFill="True">
+    <Border DockPanel.Dock="Top" Background="#1B1E24" Padding="10" CornerRadius="8" Margin="8,8,8,6">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="MCP" FontWeight="SemiBold" FontSize="14" />
+          <Border Background="#2A2F39" CornerRadius="10" Padding="8,2">
+            <TextBlock Text="{CompiledBinding StatusText}" />
+          </Border>
+          <TextBlock Text="Endpoint:" Opacity="0.7" Margin="8,0,0,0" />
+          <TextBlock Text="{CompiledBinding EndpointText}" />
+          <Button Content="Copy HTTP" Command="{CompiledBinding CopyHttpEndpointCommand}" Padding="6,2" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Button Content="Apply" Command="{CompiledBinding ApplySettingsCommand}" Padding="8,2" />
+          <Button Content="Restart" Command="{CompiledBinding RestartCommand}" Padding="8,2" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Margin="8" RowDefinitions="Auto,*" ColumnDefinitions="2*,3*" ColumnSpacing="12" RowSpacing="12">
+      <Border Grid.Row="0" Grid.Column="0" Background="#13161B" CornerRadius="8" Padding="10">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*" ColumnSpacing="10" RowSpacing="8">
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Settings" FontWeight="SemiBold" />
+          <CheckBox Grid.Row="1" Grid.ColumnSpan="2" Content="Enabled" IsChecked="{CompiledBinding IsEnabled, Mode=TwoWay}" />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Transport" VerticalAlignment="Center" />
+          <ComboBox Grid.Row="2" Grid.Column="1"
+                    ItemsSource="{CompiledBinding TransportOptions}"
+                    SelectedItem="{CompiledBinding SelectedTransport, Mode=TwoWay}"
+                    HorizontalAlignment="Stretch" />
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="HTTP Port" VerticalAlignment="Center" />
+          <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="65535" Value="{CompiledBinding HttpPort, Mode=TwoWay}" Width="120" />
+          <TextBlock Grid.Row="4" Grid.Column="0" Text="HTTP Path" VerticalAlignment="Center" />
+          <TextBox Grid.Row="4" Grid.Column="1" Text="{CompiledBinding HttpPath, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+        </Grid>
+      </Border>
+
+      <Border Grid.Row="0" Grid.Column="1" Background="#13161B" CornerRadius="8" Padding="10">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" RowSpacing="8">
+          <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="Session" FontWeight="SemiBold" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Workspace" VerticalAlignment="Center" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{CompiledBinding WorkspaceId}" />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Token" VerticalAlignment="Center" />
+          <TextBox Grid.Row="2" Grid.Column="1" Text="{CompiledBinding SessionToken}" IsReadOnly="True" HorizontalAlignment="Stretch" />
+          <Button Grid.Row="2" Grid.Column="2" Content="Copy" Command="{CompiledBinding CopyTokenCommand}" Padding="6,2" />
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Clients" VerticalAlignment="Center" />
+          <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{CompiledBinding ConnectionCount}" />
+            <TextBlock Text="Last" Opacity="0.6" Margin="12,0,0,0" />
+            <TextBlock Text="{CompiledBinding LastConnectionAt}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <TabControl Grid.Row="1" Grid.ColumnSpan="2">
+        <TabItem Header="Allowlist">
+          <Border Background="#13161B" CornerRadius="8" Padding="10">
+            <DockPanel LastChildFill="True">
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Allowlist" FontWeight="SemiBold" />
+                <Button Content="Refresh" Command="{CompiledBinding RefreshPermissionsCommand}" Padding="6,2" />
+                <Button Content="Revoke" Command="{CompiledBinding RevokePermissionCommand}" Padding="6,2" />
+                <Button Content="Clear All" Command="{CompiledBinding ClearPermissionsCommand}" Padding="6,2" />
+              </StackPanel>
+              <dg:DataGrid ItemsSource="{CompiledBinding Permissions}"
+                           SelectedItem="{CompiledBinding SelectedPermission, Mode=TwoWay}"
+                           AutoGenerateColumns="False"
+                           GridLinesVisibility="None"
+                           IsReadOnly="True"
+                           Margin="0,8,0,0">
+                <dg:DataGrid.Columns>
+                  <dg:DataGridTextColumn Header="Workspace" Width="2*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding WorkspaceId}" />
+                  <dg:DataGridTextColumn Header="Access" Width="*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding AccessLevel}" />
+                  <dg:DataGridTextColumn Header="Granted" Width="*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding GrantedAt}" />
+                  <dg:DataGridTextColumn Header="Token" Width="2*" x:DataType="vm:McpPermissionEntryViewModel" Binding="{CompiledBinding SessionToken}" />
+                </dg:DataGrid.Columns>
+              </dg:DataGrid>
+            </DockPanel>
+          </Border>
+        </TabItem>
+        <TabItem Header="Activity">
+          <Border Background="#13161B" CornerRadius="8" Padding="10">
+            <DockPanel LastChildFill="True">
+              <TextBlock DockPanel.Dock="Top" Text="Activity" FontWeight="SemiBold" />
+              <dg:DataGrid ItemsSource="{CompiledBinding ActivityLog}"
+                           AutoGenerateColumns="False"
+                           GridLinesVisibility="None"
+                           IsReadOnly="True"
+                           Margin="0,8,0,0">
+                <dg:DataGrid.Columns>
+                  <dg:DataGridTextColumn Header="Event" Width="*" x:DataType="sys:String" Binding="{CompiledBinding}" />
+                </dg:DataGrid.Columns>
+              </dg:DataGrid>
+            </DockPanel>
+          </Border>
+        </TabItem>
+      </TabControl>
+    </Grid>
+  </DockPanel>
+</UserControl>

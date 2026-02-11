@@ -14,6 +14,7 @@ using XamlVisualEditor.Extensions.Hosting;
 using AcpExtensionEntry = XamlVisualEditor.AcpExtension.AcpExtension;
 using GitExtensionEntry = XamlVisualEditor.GitExtension.GitExtension;
 using IdeBridgeExtensionEntry = XamlVisualEditor.IdeBridgeExtension.IdeBridgeExtension;
+using McpExtensionEntry = XamlVisualEditor.McpExtension.McpExtension;
 using VscodeCompatExtensionEntry = XamlVisualEditor.VscodeCompatExtension.VscodeCompatExtension;
 using XamlVisualEditor.Language;
 using XamlVisualEditor.Acp;
@@ -159,6 +160,7 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, AcpExtensionEntry>();
         services.AddSingleton<IXveExtension, GitExtensionEntry>();
         services.AddSingleton<IXveExtension, IdeBridgeExtensionEntry>();
+        services.AddSingleton<IXveExtension, McpExtensionEntry>();
         services.AddSingleton<IXveExtension, VscodeCompatExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
