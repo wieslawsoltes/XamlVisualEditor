@@ -898,8 +898,11 @@ public sealed class XamlEditorDockFactory : Factory
         {
             ExtensionTool tool = new(viewModel);
             AddDockable(toolDock, tool);
-            SetActiveDockable(tool);
-            SetFocusedDockable(toolDock, tool);
+            if (toolDock.ActiveDockable is null)
+            {
+                SetActiveDockable(tool);
+                SetFocusedDockable(toolDock, tool);
+            }
             return tool;
         }
 
