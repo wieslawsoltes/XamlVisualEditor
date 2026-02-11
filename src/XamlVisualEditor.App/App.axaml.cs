@@ -12,6 +12,7 @@ using XamlVisualEditor.CSharp.Language;
 using XamlVisualEditor.Language;
 using XamlVisualEditor.Acp;
 using XamlVisualEditor.App.Services;
+using XamlVisualEditor.Lsp;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Workspace;
@@ -95,6 +96,15 @@ public sealed class App : Application
         services.AddSingleton<IAcpProfileStore, AcpProfileStore>();
         services.AddSingleton<ISecretStore, OsSecretStore>();
         services.AddSingleton<IAcpOAuthDeviceFlowService, AcpOAuthDeviceFlowService>();
+
+        // LSP services
+        services.AddSingleton<ILspSettingsStore, LspSettingsStore>();
+        services.AddSingleton<ILspSettings>(sp => new LspSettings(
+            sp.GetRequiredService<ILspSettingsStore>()));
+        services.AddSingleton<ILanguageServiceRouter>(sp => new LspLanguageServiceRouter(
+            sp.GetRequiredService<ILspSettings>().Servers,
+            sp.GetService<ILoggerFactory>()));
+        services.AddSingleton<ILanguageIntellisenseService, LspLanguageIntellisenseService>();
 
         // Language services
         services.AddSingleton<ILanguageIntellisenseService, CSharpLanguageService>();

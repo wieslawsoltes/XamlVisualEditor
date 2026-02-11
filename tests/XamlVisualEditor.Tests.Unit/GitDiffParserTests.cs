@@ -35,13 +35,13 @@ public sealed class GitDiffParserTests
 
         Assert.Equal(2, diff.Files.Count);
         Assert.Equal("foo.txt", diff.Files[0].Path);
-        Assert.Equal(1, diff.Files[0].Hunks.Count);
+        Assert.Single(diff.Files[0].Hunks);
         Assert.Equal(4, diff.Files[0].Hunks[0].Lines.Count);
         Assert.Equal(GitDiffLineKind.Removed, diff.Files[0].Hunks[0].Lines[1].Kind);
         Assert.Equal(GitDiffLineKind.Added, diff.Files[0].Hunks[0].Lines[2].Kind);
 
         Assert.Equal("bar.txt", diff.Files[1].Path);
-        Assert.Equal(1, diff.Files[1].Hunks.Count);
+        Assert.Single(diff.Files[1].Hunks);
         Assert.True(diff.Files[1].Hunks[0].Lines.All(line => line.Kind == GitDiffLineKind.Added));
     }
 

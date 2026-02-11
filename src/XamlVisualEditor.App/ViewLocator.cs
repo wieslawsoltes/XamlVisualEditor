@@ -54,6 +54,8 @@ public sealed class ViewLocator : IDataTemplate
                     return new TerminalView { DataContext = tool.TerminalViewModel };
                 case DebugSettingsTool tool:
                     return new DebugSettingsView { DataContext = tool.DebugSettingsViewModel };
+                case LspSettingsTool tool:
+                    return new LspSettingsView { DataContext = tool.LspSettingsViewModel };
                 case BreakpointsTool tool:
                     return new BreakpointsView { DataContext = tool.BreakpointsViewModel };
                 case CallStackTool tool:
@@ -80,6 +82,7 @@ public sealed class ViewLocator : IDataTemplate
             OutputViewModel => new OutputView(),
             AcpToolViewModel => new AcpToolView(),
             DebugSettingsViewModel => new DebugSettingsView(),
+            LspSettingsViewModel => new LspSettingsView(),
             BreakpointsViewModel => new BreakpointsView(),
             CallStackViewModel => new CallStackView(),
             LocalsViewModel => new LocalsView(),
@@ -110,6 +113,7 @@ public sealed class ViewLocator : IDataTemplate
             or OutputViewModel
             or AcpToolViewModel
             or DebugSettingsViewModel
+            or LspSettingsViewModel
             or BreakpointsViewModel
             or CallStackViewModel
             or LocalsViewModel

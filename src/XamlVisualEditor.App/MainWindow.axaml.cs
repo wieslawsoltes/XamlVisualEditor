@@ -19,6 +19,9 @@ public sealed partial class MainWindow : Window
     private IDisposable? _openFileHandler;
     private IDisposable? _saveFileHandler;
     private IDisposable? _renameSymbolHandler;
+    private IDisposable? _definitionPickerHandler;
+    private IDisposable? _codeActionPickerHandler;
+    private IDisposable? _workspaceSymbolQueryHandler;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
     private IDisposable? _acpPermissionHandler;
@@ -49,6 +52,9 @@ public sealed partial class MainWindow : Window
             _openFileHandler?.Dispose();
             _saveFileHandler?.Dispose();
             _renameSymbolHandler?.Dispose();
+            _definitionPickerHandler?.Dispose();
+            _codeActionPickerHandler?.Dispose();
+            _workspaceSymbolQueryHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
             _acpPermissionHandler?.Dispose();
@@ -72,6 +78,9 @@ public sealed partial class MainWindow : Window
         _openFileHandler?.Dispose();
         _saveFileHandler?.Dispose();
         _renameSymbolHandler?.Dispose();
+        _definitionPickerHandler?.Dispose();
+        _codeActionPickerHandler?.Dispose();
+        _workspaceSymbolQueryHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
         _acpPermissionHandler?.Dispose();
@@ -135,6 +144,45 @@ public sealed partial class MainWindow : Window
                 "Rename Symbol",
                 "New name:",
                 info.Name);
+            RenameSymbolDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            string? result = await dialog.ShowDialog<string?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _definitionPickerHandler = vm.SelectDefinitionInteraction.RegisterHandler(async interaction =>
+        {
+            DefinitionPickerDialogViewModel dialogVm = new(interaction.Input);
+            DefinitionPickerDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            ReferenceLocationViewModel? result = await dialog.ShowDialog<ReferenceLocationViewModel?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _codeActionPickerHandler = vm.SelectCodeActionInteraction.RegisterHandler(async interaction =>
+        {
+            CodeActionPickerDialogViewModel dialogVm = new(interaction.Input);
+            CodeActionPickerDialog dialog = new()
+            {
+                DataContext = dialogVm
+            };
+
+            LanguageCodeAction? result = await dialog.ShowDialog<LanguageCodeAction?>(this);
+            interaction.SetOutput(result);
+        });
+
+        _workspaceSymbolQueryHandler = vm.WorkspaceSymbolQueryInteraction.RegisterHandler(async interaction =>
+        {
+            RenameSymbolDialogViewModel dialogVm = new(
+                "Workspace Symbols",
+                "Search:",
+                interaction.Input ?? string.Empty);
             RenameSymbolDialog dialog = new()
             {
                 DataContext = dialogVm

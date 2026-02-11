@@ -94,6 +94,25 @@ public sealed class XamlLanguageService : ILanguageIntellisenseService
         return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(diagnostics);
     }
 
+    public Task<IReadOnlyList<LanguageSemanticToken>> GetSemanticTokensAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(context.Text))
+        {
+            return Task.FromResult<IReadOnlyList<LanguageSemanticToken>>(Array.Empty<LanguageSemanticToken>());
+        }
+
+        return Task.FromResult(BuildSemanticTokens(context.Text));
+    }
+
+    public Task<IReadOnlyList<TextEdit>> GetFormattingEditsAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<TextEdit>>(Array.Empty<TextEdit>());
+    }
+
     public Task<LanguageHover?> GetHoverAsync(LanguagePositionContext context, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(context.Text))
@@ -218,6 +237,27 @@ public sealed class XamlLanguageService : ILanguageIntellisenseService
         return Task.FromResult<LanguageSignatureHelp?>(null);
     }
 
+    public Task<IReadOnlyList<LanguageCodeAction>> GetCodeActionsAsync(
+        LanguageCodeActionContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageCodeAction>>(Array.Empty<LanguageCodeAction>());
+    }
+
+    public Task<IReadOnlyList<LanguageSymbol>> GetDocumentSymbolsAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageSymbol>>(Array.Empty<LanguageSymbol>());
+    }
+
+    public Task<IReadOnlyList<LanguageSymbol>> GetWorkspaceSymbolsAsync(
+        LanguageSymbolQuery query,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageSymbol>>(Array.Empty<LanguageSymbol>());
+    }
+
     private static string ExtractTokenAt(string text, int offset)
     {
         if (offset < 0 || offset > text.Length)
@@ -243,6 +283,416 @@ public sealed class XamlLanguageService : ILanguageIntellisenseService
     private static bool IsTokenChar(char c)
     {
         return char.IsLetterOrDigit(c) || c == '.' || c == ':' || c == '_';
+    }
+
+    private static IReadOnlyList<LanguageSemanticToken> BuildSemanticTokens(string text)
+    {
+        List<LanguageSemanticToken> tokens = new();
+        List<int> lineStarts = BuildLineStarts(text);
+        int length = text.Length;
+        bool inTag = false;
+
+        int i = 0;
+        while (i < length)
+        {
+            char c = text[i];
+            if (c == '<')
+            {
+                if (i + 3 < length && text[i + 1] == '!' && text[i + 2] == '-' && text[i + 3] == '-')
+                {
+                    int end = text.IndexOf("-->", i + 4, StringComparison.Ordinal);
+                    int endOffset = end < 0 ? length : Math.Min(length, end + 3);
+                    AddToken(tokens, lineStarts, i, endOffset, "comment");
+                    i = endOffset;
+                    inTag = false;
+                    continue;
+                }
+
+                inTag = true;
+                int nameStart = i + 1;
+                if (nameStart < length && (text[nameStart] == '/' || text[nameStart] == '?'))
+                {
+                    nameStart++;
+                }
+
+                while (nameStart < length && char.IsWhiteSpace(text[nameStart]))
+                {
+                    nameStart++;
+                }
+
+                int nameEnd = nameStart;
+                while (nameEnd < length && IsTokenChar(text[nameEnd]))
+                {
+                    nameEnd++;
+                }
+
+                if (nameEnd > nameStart)
+                {
+                    AddToken(tokens, lineStarts, nameStart, nameEnd, "class");
+                    i = nameEnd;
+                    continue;
+                }
+            }
+
+            if (inTag)
+            {
+                if (c == '>' )
+                {
+                    inTag = false;
+                    i++;
+                    continue;
+                }
+
+                if (c == '/' && i + 1 < length && text[i + 1] == '>')
+                {
+                    inTag = false;
+                    i += 2;
+                    continue;
+                }
+
+                if (char.IsWhiteSpace(c))
+                {
+                    i++;
+                    continue;
+                }
+
+                int attrStart = i;
+                int attrEnd = attrStart;
+                while (attrEnd < length && IsTokenChar(text[attrEnd]))
+                {
+                    attrEnd++;
+                }
+
+                if (attrEnd > attrStart)
+                {
+                    AddToken(tokens, lineStarts, attrStart, attrEnd, "property");
+                    i = attrEnd;
+
+                    while (i < length && char.IsWhiteSpace(text[i]))
+                    {
+                        i++;
+                    }
+
+                    if (i < length && text[i] == '=')
+                    {
+                        i++;
+                        while (i < length && char.IsWhiteSpace(text[i]))
+                        {
+                            i++;
+                        }
+
+                        if (i < length && (text[i] == '"' || text[i] == '\''))
+                        {
+                            char quote = text[i];
+                            int valueStart = i + 1;
+                            int valueEnd = text.IndexOf(quote, valueStart);
+                            if (valueEnd < 0)
+                            {
+                                valueEnd = length;
+                            }
+
+                            if (!TryAddMarkupExtensionTokens(tokens, lineStarts, text, valueStart, valueEnd))
+                            {
+                                AddToken(tokens, lineStarts, valueStart, valueEnd, "string");
+                            }
+
+                            i = Math.Min(length, valueEnd + 1);
+                        }
+                    }
+
+                    continue;
+                }
+            }
+
+            i++;
+        }
+
+        return tokens;
+    }
+
+    private static List<int> BuildLineStarts(string text)
+    {
+        List<int> starts = new() { 0 };
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                starts.Add(i + 1);
+            }
+        }
+
+        return starts;
+    }
+
+    private static void AddToken(
+        List<LanguageSemanticToken> tokens,
+        IReadOnlyList<int> lineStarts,
+        int startOffset,
+        int endOffset,
+        string type)
+    {
+        if (endOffset <= startOffset)
+        {
+            return;
+        }
+
+        LanguageTextPosition start = OffsetToPosition(lineStarts, startOffset);
+        LanguageTextPosition end = OffsetToPosition(lineStarts, endOffset);
+        tokens.Add(new LanguageSemanticToken
+        {
+            Range = new LanguageTextRange(start, end),
+            Type = type
+        });
+    }
+
+    private static bool TryAddMarkupExtensionTokens(
+        List<LanguageSemanticToken> tokens,
+        IReadOnlyList<int> lineStarts,
+        string text,
+        int valueStart,
+        int valueEnd)
+    {
+        if (!TryGetMarkupExtensionBounds(text, valueStart, valueEnd, out int innerStart, out int innerEnd))
+        {
+            return false;
+        }
+
+        int i = innerStart;
+        SkipWhitespace(text, ref i, innerEnd);
+
+        int nameStart = i;
+        while (i < innerEnd && IsTokenChar(text[i]))
+        {
+            i++;
+        }
+
+        if (i <= nameStart)
+        {
+            return false;
+        }
+
+        string extensionName = text.Substring(nameStart, i - nameStart);
+        AddToken(tokens, lineStarts, nameStart, i, "function");
+
+        SkipWhitespace(text, ref i, innerEnd);
+
+        bool parsedPositional = false;
+        if (IsPositionalArgument(extensionName, text, i, innerEnd))
+        {
+            int valueTokenStart = i;
+            while (i < innerEnd && text[i] != ',' && text[i] != '}')
+            {
+                if (char.IsWhiteSpace(text[i]))
+                {
+                    break;
+                }
+                i++;
+            }
+
+            if (i > valueTokenStart)
+            {
+                string valueToken = text.Substring(valueTokenStart, i - valueTokenStart);
+                if (!string.IsNullOrWhiteSpace(valueToken))
+                {
+                    AddToken(tokens, lineStarts, valueTokenStart, i, "variable");
+                }
+            }
+
+            parsedPositional = true;
+        }
+
+        while (i < innerEnd)
+        {
+            SkipSeparators(text, ref i, innerEnd);
+            int propStart = i;
+            while (i < innerEnd && IsTokenChar(text[i]))
+            {
+                i++;
+            }
+
+            if (i <= propStart)
+            {
+                i++;
+                continue;
+            }
+
+            int propEnd = i;
+            SkipWhitespace(text, ref i, innerEnd);
+            if (i < innerEnd && text[i] == '=')
+            {
+                AddToken(tokens, lineStarts, propStart, propEnd, "property");
+                i++;
+                SkipWhitespace(text, ref i, innerEnd);
+
+                if (i >= innerEnd)
+                {
+                    break;
+                }
+
+                if (text[i] == '"' || text[i] == '\'')
+                {
+                    char quote = text[i];
+                    int valueStartIndex = i + 1;
+                    int valueEndIndex = text.IndexOf(quote, valueStartIndex);
+                    if (valueEndIndex < 0 || valueEndIndex > innerEnd)
+                    {
+                        valueEndIndex = innerEnd;
+                    }
+
+                    AddToken(tokens, lineStarts, valueStartIndex, valueEndIndex, "string");
+                    i = Math.Min(innerEnd, valueEndIndex + 1);
+                }
+                else
+                {
+                    int valueStartIndex = i;
+                    while (i < innerEnd && text[i] != ',' && text[i] != '}')
+                    {
+                        if (char.IsWhiteSpace(text[i]))
+                        {
+                            break;
+                        }
+                        i++;
+                    }
+
+                    string value = text.Substring(valueStartIndex, i - valueStartIndex);
+                    if (IsBindingPathProperty(extensionName, text.Substring(propStart, propEnd - propStart)))
+                    {
+                        AddToken(tokens, lineStarts, valueStartIndex, i, "variable");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        AddToken(tokens, lineStarts, valueStartIndex, i, "string");
+                    }
+                }
+            }
+        }
+
+        return parsedPositional || tokens.Count > 0;
+    }
+
+    private static bool TryGetMarkupExtensionBounds(
+        string text,
+        int valueStart,
+        int valueEnd,
+        out int innerStart,
+        out int innerEnd)
+    {
+        innerStart = 0;
+        innerEnd = 0;
+
+        int start = valueStart;
+        while (start < valueEnd && char.IsWhiteSpace(text[start]))
+        {
+            start++;
+        }
+
+        int end = valueEnd;
+        while (end > start && char.IsWhiteSpace(text[end - 1]))
+        {
+            end--;
+        }
+
+        if (end - start < 2 || text[start] != '{' || text[end - 1] != '}')
+        {
+            return false;
+        }
+
+        innerStart = start + 1;
+        innerEnd = end - 1;
+        return innerEnd > innerStart;
+    }
+
+    private static bool IsPositionalArgument(string extensionName, string text, int index, int end)
+    {
+        SkipWhitespace(text, ref index, end);
+        if (index >= end)
+        {
+            return false;
+        }
+
+        if (!char.IsLetterOrDigit(text[index]) && text[index] != '{')
+        {
+            return false;
+        }
+
+        int tokenStart = index;
+        while (index < end && IsTokenChar(text[index]))
+        {
+            index++;
+        }
+
+        SkipWhitespace(text, ref index, end);
+        if (index < end && text[index] == '=')
+        {
+            return false;
+        }
+
+        return IsBindingPathExtension(extensionName) || IsResourceExtension(extensionName);
+    }
+
+    private static bool IsBindingPathExtension(string extensionName)
+    {
+        return extensionName.Equals("Binding", StringComparison.OrdinalIgnoreCase)
+            || extensionName.Equals("TemplateBinding", StringComparison.OrdinalIgnoreCase)
+            || extensionName.Equals("RelativeSource", StringComparison.OrdinalIgnoreCase)
+            || extensionName.Equals("CompiledBinding", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsResourceExtension(string extensionName)
+    {
+        return extensionName.Equals("StaticResource", StringComparison.OrdinalIgnoreCase)
+            || extensionName.Equals("DynamicResource", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBindingPathProperty(string extensionName, string propertyName)
+    {
+        if (!IsBindingPathExtension(extensionName))
+        {
+            return false;
+        }
+
+        return propertyName.Equals("Path", StringComparison.OrdinalIgnoreCase)
+            || propertyName.Equals("ElementName", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void SkipWhitespace(string text, ref int index, int end)
+    {
+        while (index < end && char.IsWhiteSpace(text[index]))
+        {
+            index++;
+        }
+    }
+
+    private static void SkipSeparators(string text, ref int index, int end)
+    {
+        while (index < end && (char.IsWhiteSpace(text[index]) || text[index] == ','))
+        {
+            index++;
+        }
+    }
+
+    private static LanguageTextPosition OffsetToPosition(IReadOnlyList<int> lineStarts, int offset)
+    {
+        int index = lineStarts.Count - 1;
+        int lo = 0;
+        int hi = lineStarts.Count - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) / 2;
+            if (lineStarts[mid] <= offset)
+            {
+                index = mid;
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+
+        int line = index + 1;
+        int column = offset - lineStarts[index] + 1;
+        return new LanguageTextPosition(line, Math.Max(1, column));
     }
 
     private static bool TryGetRenameTarget(string text, int offset, out RenameTarget target)

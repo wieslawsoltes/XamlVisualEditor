@@ -107,6 +107,87 @@ public sealed class LanguageWorkspaceEdit
 }
 
 /// <summary>
+/// Represents a semantic token in a document.
+/// </summary>
+public sealed class LanguageSemanticToken
+{
+    /// <summary>Gets the token range.</summary>
+    public required LanguageTextRange Range { get; init; }
+
+    /// <summary>Gets the semantic token type.</summary>
+    public required string Type { get; init; }
+}
+
+/// <summary>
+/// Represents a code action.
+/// </summary>
+public sealed class LanguageCodeAction
+{
+    /// <summary>Gets the code action title.</summary>
+    public required string Title { get; init; }
+
+    /// <summary>Gets the code action kind.</summary>
+    public string? Kind { get; init; }
+
+    /// <summary>Gets whether this action is preferred.</summary>
+    public bool IsPreferred { get; init; }
+
+    /// <summary>Gets the optional edit to apply.</summary>
+    public LanguageWorkspaceEdit? Edit { get; init; }
+}
+
+/// <summary>
+/// Represents a symbol in a document or workspace.
+/// </summary>
+public sealed class LanguageSymbol
+{
+    /// <summary>Gets the symbol name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the symbol kind.</summary>
+    public required LanguageSymbolKind Kind { get; init; }
+
+    /// <summary>Gets the file path for the symbol.</summary>
+    public required string FilePath { get; init; }
+
+    /// <summary>Gets the symbol range.</summary>
+    public required LanguageTextRange Range { get; init; }
+}
+
+/// <summary>
+/// Represents symbol kinds.
+/// </summary>
+public enum LanguageSymbolKind
+{
+    File,
+    Module,
+    Namespace,
+    Package,
+    Class,
+    Method,
+    Property,
+    Field,
+    Constructor,
+    Enum,
+    Interface,
+    Function,
+    Variable,
+    Constant,
+    String,
+    Number,
+    Boolean,
+    Array,
+    Object,
+    Key,
+    Null,
+    EnumMember,
+    Struct,
+    Event,
+    Operator,
+    TypeParameter
+}
+
+/// <summary>
 /// Represents a single callable signature.
 /// </summary>
 public sealed class LanguageSignature

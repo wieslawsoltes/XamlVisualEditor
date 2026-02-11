@@ -24,6 +24,24 @@ public class LanguagePositionContext : LanguageDocumentContext
 }
 
 /// <summary>
+/// Context for code action operations.
+/// </summary>
+public sealed class LanguageCodeActionContext : LanguagePositionContext
+{
+    /// <summary>Gets the length of the selection.</summary>
+    public int Length { get; init; }
+}
+
+/// <summary>
+/// Context for workspace symbol searches.
+/// </summary>
+public sealed class LanguageSymbolQuery
+{
+    /// <summary>Gets the query text.</summary>
+    public required string Query { get; init; }
+}
+
+/// <summary>
 /// Context for rename operations.
 /// </summary>
 public sealed class LanguageRenameContext : LanguagePositionContext
@@ -59,6 +77,16 @@ public interface ILanguageIntellisenseService
         LanguageDocumentContext context,
         CancellationToken ct = default);
 
+    /// <summary>Gets semantic tokens for the given document.</summary>
+    System.Threading.Tasks.Task<IReadOnlyList<LanguageSemanticToken>> GetSemanticTokensAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default);
+
+    /// <summary>Formats the document and returns edits.</summary>
+    System.Threading.Tasks.Task<IReadOnlyList<TextEdit>> GetFormattingEditsAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default);
+
     /// <summary>Gets hover information at the specified position.</summary>
     System.Threading.Tasks.Task<LanguageHover?> GetHoverAsync(
         LanguagePositionContext context,
@@ -87,6 +115,21 @@ public interface ILanguageIntellisenseService
     /// <summary>Gets signature help at the specified position.</summary>
     System.Threading.Tasks.Task<LanguageSignatureHelp?> GetSignatureHelpAsync(
         LanguagePositionContext context,
+        CancellationToken ct = default);
+
+    /// <summary>Gets code actions at the specified position.</summary>
+    System.Threading.Tasks.Task<IReadOnlyList<LanguageCodeAction>> GetCodeActionsAsync(
+        LanguageCodeActionContext context,
+        CancellationToken ct = default);
+
+    /// <summary>Gets document symbols for the current document.</summary>
+    System.Threading.Tasks.Task<IReadOnlyList<LanguageSymbol>> GetDocumentSymbolsAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default);
+
+    /// <summary>Gets workspace symbols using the provided query.</summary>
+    System.Threading.Tasks.Task<IReadOnlyList<LanguageSymbol>> GetWorkspaceSymbolsAsync(
+        LanguageSymbolQuery query,
         CancellationToken ct = default);
 }
 

@@ -37,6 +37,7 @@ using XamlVisualEditor.Designer.Adorners;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.Designer.DragDrop;
 using XamlVisualEditor.Designer.Rendering;
+using XamlVisualEditor.Lsp;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.TreeView;
@@ -216,7 +217,8 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         Func<WorkspaceModel?>? workspaceProvider = null,
         Func<string, System.Threading.Tasks.Task>? openFileAsync = null,
         ILogger<DesignerDocumentViewModel>? logger = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ILanguageIntellisenseRegistry? languageRegistry = null)
     {
         FilePath = filePath;
         _metadataService = metadataService;
@@ -236,8 +238,10 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         DesignSurface = new DesignSurfaceViewModel();
         CompletionProviderRegistry completionRegistry = CompletionProviderRegistry.CreateDefault();
         CodeEditor = new CodeEditorViewModel(
+            filePath,
             SyncEngine,
             completionRegistry,
+            languageRegistry,
             metadataService,
             _loggerFactory?.CreateLogger<CodeEditorViewModel>());
         PropertyEditor = new PropertyEditorViewModel(
@@ -572,6 +576,8 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
             await SyncEngine.LoadAsync(text);
             CodeEditor.SetTextSilently(text);
 
+            await CodeEditor.InitializeLanguageServicesAsync();
+
             // Ensure the design surface rebuilds after loading
             DesignSurface.RequestRebuild();
         }
@@ -604,6 +610,8 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
     private readonly CompositeDisposable _disposables = new();
     public bool IsDisposed { get; private set; }
     private readonly ILanguageIntellisenseService? _languageService;
+    private readonly ILanguageDocumentSync? _documentSyncService;
+    private readonly ILanguageDiagnosticsSource? _diagnosticsSource;
     private bool _suppressTextChanged;
     private BreakpointsViewModel? _breakpointsSource;
 
@@ -640,6 +648,8 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
 
     public XamlVisualEditor.CodeEditor.LanguageDiagnosticColorizer DiagnosticColorizer { get; } = new();
 
+    public XamlVisualEditor.CodeEditor.SemanticTokenColorizer SemanticTokenColorizer { get; } = new();
+
     public XamlVisualEditor.CodeEditor.ExecutionLineColorizer ExecutionLineColorizer { get; } = new();
 
     public XamlVisualEditor.CodeEditor.BreakpointLineColorizer BreakpointLineColorizer { get; } = new();
@@ -649,6 +659,9 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
 
     [Reactive]
     public int BreakpointHighlightVersion { get; private set; }
+
+    [Reactive]
+    public int SemanticTokenVersion { get; private set; }
 
     /// <summary>
     /// Gets or sets the shared breakpoints view model.
@@ -663,6 +676,8 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         FilePath = filePath;
         LanguageId = GetLanguageIdForFile(filePath);
         _languageService = languageRegistry?.GetService(filePath, LanguageId);
+        _documentSyncService = _languageService as ILanguageDocumentSync;
+        _diagnosticsSource = _languageService as ILanguageDiagnosticsSource;
 
         IDisposable textChangedSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
             h => Document.TextChanged += h,
@@ -680,7 +695,30 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             .Subscribe(evt => { _ = RefreshDiagnosticsAsync(); });
         _disposables.Add(diagnosticsSubscription);
 
+        IDisposable semanticTokensSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+            h => Document.TextChanged += h,
+            h => Document.TextChanged -= h)
+            .Where(_ => !_suppressTextChanged && _languageService is not null)
+            .Throttle(TimeSpan.FromMilliseconds(500))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
+        _disposables.Add(semanticTokensSubscription);
+
+        IDisposable syncSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+            h => Document.TextChanged += h,
+            h => Document.TextChanged -= h)
+            .Where(_ => !_suppressTextChanged && _documentSyncService is not null)
+            .Throttle(TimeSpan.FromMilliseconds(200))
+            .Subscribe(evt => { _ = NotifyDocumentChangedAsync(); });
+        _disposables.Add(syncSubscription);
+
         SaveCommand = ReactiveCommand.CreateFromTask(SaveAsync);
+
+        if (_diagnosticsSource is not null)
+        {
+            _diagnosticsSource.DiagnosticsChanged += OnDiagnosticsChanged;
+            _disposables.Add(Disposable.Create(() => _diagnosticsSource.DiagnosticsChanged -= OnDiagnosticsChanged));
+        }
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
             .ObserveOn(RxApp.MainThreadScheduler)
@@ -707,6 +745,16 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
     private void OnBreakpointsChanged()
     {
         UpdateBreakpointHighlights();
+    }
+
+    private void OnDiagnosticsChanged(object? sender, LanguageDiagnosticsChangedEventArgs e)
+    {
+        if (!string.Equals(e.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _ = RefreshDiagnosticsAsync();
     }
 
     private void UpdateBreakpointHighlights()
@@ -746,7 +794,9 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             _suppressTextChanged = false;
         }
 
+        await NotifyDocumentOpenedAsync();
         await RefreshDiagnosticsAsync();
+        await RefreshSemanticTokensAsync();
     }
 
     private async System.Threading.Tasks.Task SaveAsync()
@@ -850,6 +900,76 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         return await _languageService.GetSignatureHelpAsync(context, ct).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<TextEdit>> GetFormattingEditsAsync(CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return Array.Empty<TextEdit>();
+        }
+
+        LanguageDocumentContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        };
+
+        return await _languageService.GetFormattingEditsAsync(context, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<LanguageCodeAction>> GetCodeActionsAsync(
+        int offset,
+        int length = 0,
+        CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return Array.Empty<LanguageCodeAction>();
+        }
+
+        LanguageCodeActionContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text,
+            Offset = offset,
+            Length = length
+        };
+
+        return await _languageService.GetCodeActionsAsync(context, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<LanguageSymbol>> GetDocumentSymbolsAsync(CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return Array.Empty<LanguageSymbol>();
+        }
+
+        LanguageDocumentContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        };
+
+        return await _languageService.GetDocumentSymbolsAsync(context, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<LanguageSymbol>> GetWorkspaceSymbolsAsync(
+        string query,
+        CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return Array.Empty<LanguageSymbol>();
+        }
+
+        LanguageSymbolQuery request = new()
+        {
+            Query = query
+        };
+
+        return await _languageService.GetWorkspaceSymbolsAsync(request, ct).ConfigureAwait(false);
+    }
+
     public async Task<LanguageRenameInfo?> PrepareRenameAsync(int offset, CancellationToken ct = default)
     {
         if (_languageService is null)
@@ -922,6 +1042,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
 
         IsModified = true;
         _ = RefreshDiagnosticsAsync();
+        _ = NotifyDocumentChangedAsync();
     }
 
     public void SetCaretOffset(int offset)
@@ -970,6 +1091,57 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             }
 
             DiagnosticColorizer.UpdateDiagnostics(diagnostics);
+        });
+    }
+
+    private async Task RefreshSemanticTokensAsync()
+    {
+        if (_languageService is null)
+        {
+            return;
+        }
+
+        LanguageDocumentContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        };
+
+        IReadOnlyList<LanguageSemanticToken> tokens =
+            await _languageService.GetSemanticTokensAsync(context).ConfigureAwait(false);
+
+        RxApp.MainThreadScheduler.Schedule(() =>
+        {
+            SemanticTokenColorizer.UpdateTokens(tokens);
+            SemanticTokenVersion++;
+        });
+    }
+
+    private Task NotifyDocumentOpenedAsync()
+    {
+        if (_documentSyncService is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _documentSyncService.DocumentOpenedAsync(new LanguageDocumentContext
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        });
+    }
+
+    private Task NotifyDocumentChangedAsync()
+    {
+        if (_documentSyncService is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _documentSyncService.DocumentChangedAsync(new LanguageDocumentContext
+        {
+            FilePath = FilePath,
+            Text = Document.Text
         });
     }
 
@@ -1703,6 +1875,108 @@ public sealed class ReferencesViewModel : ReactiveObject
     }
 }
 
+public sealed record DefinitionPickerRequest(
+    string Title,
+    IReadOnlyList<ReferenceLocationViewModel> Items);
+
+public sealed record CodeActionPickerRequest(
+    string Title,
+    IReadOnlyList<LanguageCodeAction> Items);
+
+/// <summary>
+/// ViewModel for the definition picker dialog.
+/// </summary>
+public sealed class DefinitionPickerDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+
+    public ObservableCollection<ReferenceLocationViewModel> Items { get; } = new();
+
+    [Reactive]
+    public ReferenceLocationViewModel? SelectedItem { get; set; }
+
+    public Interaction<ReferenceLocationViewModel?, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> OpenCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public DefinitionPickerDialogViewModel(DefinitionPickerRequest request)
+    {
+        Title = request.Title;
+        foreach (ReferenceLocationViewModel item in request.Items)
+        {
+            Items.Add(item);
+        }
+
+        if (Items.Count > 0)
+        {
+            SelectedItem = Items[0];
+        }
+
+        IObservable<bool> canOpen = this.WhenAnyValue(x => x.SelectedItem)
+            .Select(item => item is not null);
+
+        OpenCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(SelectedItem), canOpen);
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(null));
+    }
+}
+
+public sealed class CodeActionItemViewModel : ReactiveObject
+{
+    public CodeActionItemViewModel(LanguageCodeAction action)
+    {
+        Action = action;
+    }
+
+    public LanguageCodeAction Action { get; }
+
+    public string Title => Action.Title;
+
+    public string Kind => Action.Kind ?? string.Empty;
+}
+
+/// <summary>
+/// ViewModel for the code action picker dialog.
+/// </summary>
+public sealed class CodeActionPickerDialogViewModel : ReactiveObject
+{
+    public string Title { get; }
+
+    public ObservableCollection<CodeActionItemViewModel> Items { get; } = new();
+
+    [Reactive]
+    public CodeActionItemViewModel? SelectedItem { get; set; }
+
+    public Interaction<LanguageCodeAction?, Unit> CloseInteraction { get; } = new();
+
+    public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelCommand { get; }
+
+    public CodeActionPickerDialogViewModel(CodeActionPickerRequest request)
+    {
+        Title = request.Title;
+        foreach (LanguageCodeAction action in request.Items)
+        {
+            Items.Add(new CodeActionItemViewModel(action));
+        }
+
+        if (Items.Count > 0)
+        {
+            SelectedItem = Items[0];
+        }
+
+        IObservable<bool> canApply = this.WhenAnyValue(x => x.SelectedItem)
+            .Select(item => item is not null);
+
+        ApplyCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(SelectedItem?.Action), canApply);
+        CancelCommand = ReactiveCommand.CreateFromTask(async () =>
+            await CloseInteraction.Handle(null));
+    }
+}
+
 /// <summary>
 /// ViewModel for the rename symbol dialog.
 /// </summary>
@@ -1962,6 +2236,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private bool _isLoadingRecentFiles;
     private InfiniteCanvasDocument? _canvasDocument;
     private readonly Dictionary<Guid, TerminalTool> _terminalTools = new();
+    private readonly Stack<LanguageLocation> _backNavigation = new();
+    private readonly Stack<LanguageLocation> _forwardNavigation = new();
 
     /// <summary>
     /// Gets the open documents.
@@ -1973,6 +2249,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     [Reactive]
     public IEditorDocumentViewModel? ActiveDocument { get; set; }
+
+    [Reactive]
+    public bool CanNavigateBack { get; private set; }
+
+    [Reactive]
+    public bool CanNavigateForward { get; private set; }
 
     public int ActiveLine => _activeLine.Value;
 
@@ -2023,6 +2305,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// Gets the debug settings ViewModel.
     /// </summary>
     public DebugSettingsViewModel DebugSettings { get; }
+
+    /// <summary>
+    /// Gets the LSP settings ViewModel.
+    /// </summary>
+    public LspSettingsViewModel LspSettings { get; }
 
     /// <summary>
     /// Gets the breakpoints ViewModel.
@@ -2175,6 +2462,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public Interaction<LanguageRenameInfo, string?> RenameSymbolInteraction { get; } = new();
 
     /// <summary>
+    /// Interaction for selecting between multiple definitions.
+    /// </summary>
+    public Interaction<DefinitionPickerRequest, ReferenceLocationViewModel?> SelectDefinitionInteraction { get; } = new();
+
+    /// <summary>
+    /// Interaction for selecting a code action to apply.
+    /// </summary>
+    public Interaction<CodeActionPickerRequest, LanguageCodeAction?> SelectCodeActionInteraction { get; } = new();
+
+    /// <summary>
+    /// Interaction for prompting workspace symbol queries.
+    /// </summary>
+    public Interaction<string, string?> WorkspaceSymbolQueryInteraction { get; } = new();
+
+    /// <summary>
     /// Interaction for previewer trust warnings.
     /// </summary>
     public Interaction<PreviewerTrustRequest, PreviewerTrustDecision> PreviewerTrustInteraction { get; } = new();
@@ -2265,6 +2567,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> GoToDefinitionCommand { get; }
     public ReactiveCommand<Unit, Unit> FindReferencesCommand { get; }
     public ReactiveCommand<Unit, Unit> RenameSymbolCommand { get; }
+    public ReactiveCommand<Unit, Unit> FormatDocumentCommand { get; }
+    public ReactiveCommand<Unit, Unit> CodeActionsCommand { get; }
+    public ReactiveCommand<Unit, Unit> DocumentSymbolsCommand { get; }
+    public ReactiveCommand<Unit, Unit> WorkspaceSymbolsCommand { get; }
+    public ReactiveCommand<Unit, Unit> NavigateBackCommand { get; }
+    public ReactiveCommand<Unit, Unit> NavigateForwardCommand { get; }
 
     // View Commands
     public ReactiveCommand<Unit, Unit> ToggleToolboxCommand { get; }
@@ -2329,6 +2637,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         IAcpProfileStore? acpProfileStore = null,
         ISecretStore? secretStore = null,
         IAcpOAuthDeviceFlowService? oauthDeviceFlowService = null,
+        ILspSettingsStore? lspSettingsStore = null,
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null)
     {
@@ -2370,6 +2679,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             () => AutoDownloadTools,
             value => AutoDownloadTools = value,
             ConfirmDebugToolConsentAsync);
+
+        LspSettings = new LspSettingsViewModel(lspSettingsStore);
 
         Acp = new AcpToolViewModel(acpService, acpProfileStore, secretStore, oauthDeviceFlowService, () => _workspacePath);
         GitPanel = new GitPanelViewModel(gitService, () => _workspacePath);
@@ -2475,6 +2786,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         GoToDefinitionCommand = ReactiveCommand.CreateFromTask(GoToDefinitionAsync, hasTextDoc);
         FindReferencesCommand = ReactiveCommand.CreateFromTask(FindReferencesAsync, hasTextDoc);
         RenameSymbolCommand = ReactiveCommand.CreateFromTask(RenameSymbolAsync, hasTextDoc);
+        FormatDocumentCommand = ReactiveCommand.CreateFromTask(FormatDocumentAsync, hasTextDoc);
+        CodeActionsCommand = ReactiveCommand.CreateFromTask(ShowCodeActionsAsync, hasTextDoc);
+        DocumentSymbolsCommand = ReactiveCommand.CreateFromTask(ShowDocumentSymbolsAsync, hasTextDoc);
+        WorkspaceSymbolsCommand = ReactiveCommand.CreateFromTask(ShowWorkspaceSymbolsAsync, hasTextDoc);
+        NavigateBackCommand = ReactiveCommand.CreateFromTask(NavigateBackAsync,
+            this.WhenAnyValue(x => x.CanNavigateBack));
+        NavigateForwardCommand = ReactiveCommand.CreateFromTask(NavigateForwardAsync,
+            this.WhenAnyValue(x => x.CanNavigateForward));
 
         // Edit commands
         UndoCommand = ReactiveCommand.Create(() =>
@@ -2935,7 +3254,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             () => _workspace,
             OpenFileAsync,
             _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
-            _loggerFactory);
+            _loggerFactory,
+            _languageRegistry);
         doc.StartPreviewerCommand = StartPreviewerCommand;
         doc.Breakpoints = Breakpoints;
         Documents.Add(doc);
@@ -3090,7 +3410,35 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        await NavigateToLocationAsync(locations[0]);
+        if (locations.Count == 1)
+        {
+            await NavigateToLocationAsync(locations[0]);
+            return;
+        }
+
+        List<ReferenceLocationViewModel> items = locations
+            .Select(location => new ReferenceLocationViewModel(
+                location.FilePath,
+                location.Range.Start.Line,
+                location.Range.Start.Column))
+            .ToList();
+
+        DefinitionPickerRequest request = new("Select Definition", items);
+        ReferenceLocationViewModel? selection = await SelectDefinitionInteraction.Handle(request);
+        if (selection is null)
+        {
+            return;
+        }
+
+        LanguageLocation target = new()
+        {
+            FilePath = selection.FilePath,
+            Range = new LanguageTextRange(
+                new LanguageTextPosition(selection.Line, selection.Column),
+                new LanguageTextPosition(selection.Line, selection.Column))
+        };
+
+        await NavigateToLocationAsync(target);
     }
 
     private async System.Threading.Tasks.Task FindReferencesAsync()
@@ -3153,6 +3501,115 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         StatusText = $"Renamed {info.Name} to {newName}";
     }
 
+    private async System.Threading.Tasks.Task FormatDocumentAsync()
+    {
+        if (ActiveTextDocument is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<TextEdit> edits = await ActiveTextDocument.GetFormattingEditsAsync();
+        if (edits.Count == 0)
+        {
+            StatusText = "Format: no edits";
+            return;
+        }
+
+        ActiveTextDocument.ApplyTextEdits(edits);
+        StatusText = "Format applied";
+    }
+
+    private async System.Threading.Tasks.Task ShowCodeActionsAsync()
+    {
+        if (ActiveTextDocument is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<LanguageCodeAction> actions = await ActiveTextDocument
+            .GetCodeActionsAsync(ActiveTextDocument.CaretOffset);
+        if (actions.Count == 0)
+        {
+            StatusText = "No code actions";
+            return;
+        }
+
+        LanguageCodeAction? selection = null;
+        if (actions.Count == 1)
+        {
+            selection = actions[0];
+        }
+        else
+        {
+            CodeActionPickerRequest request = new("Code Actions", actions);
+            selection = await SelectCodeActionInteraction.Handle(request);
+        }
+
+        if (selection?.Edit is null)
+        {
+            return;
+        }
+
+        await ApplyWorkspaceEditAsync(selection.Edit);
+        StatusText = $"Applied: {selection.Title}";
+    }
+
+    private async System.Threading.Tasks.Task ShowDocumentSymbolsAsync()
+    {
+        if (ActiveTextDocument is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<LanguageSymbol> symbols = await ActiveTextDocument.GetDocumentSymbolsAsync();
+        if (symbols.Count == 0)
+        {
+            StatusText = "No document symbols";
+            return;
+        }
+
+        References.ReplaceItems(symbols.Select(symbol =>
+            new ReferenceLocationViewModel(
+                symbol.FilePath,
+                symbol.Range.Start.Line,
+                symbol.Range.Start.Column,
+                $"{symbol.Name} ({symbol.Kind})")));
+
+        IsReferencesVisible = true;
+        SetDockableVisibility("References", true);
+    }
+
+    private async System.Threading.Tasks.Task ShowWorkspaceSymbolsAsync()
+    {
+        if (ActiveTextDocument is null)
+        {
+            return;
+        }
+
+        string? query = await WorkspaceSymbolQueryInteraction.Handle(string.Empty);
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return;
+        }
+
+        IReadOnlyList<LanguageSymbol> symbols = await ActiveTextDocument.GetWorkspaceSymbolsAsync(query);
+        if (symbols.Count == 0)
+        {
+            StatusText = "No workspace symbols";
+            return;
+        }
+
+        References.ReplaceItems(symbols.Select(symbol =>
+            new ReferenceLocationViewModel(
+                symbol.FilePath,
+                symbol.Range.Start.Line,
+                symbol.Range.Start.Column,
+                $"{symbol.Name} ({symbol.Kind})")));
+
+        IsReferencesVisible = true;
+        SetDockableVisibility("References", true);
+    }
+
     private async System.Threading.Tasks.Task ApplyWorkspaceEditAsync(LanguageWorkspaceEdit edit)
     {
         foreach (LanguageDocumentEdit docEdit in edit.DocumentEdits)
@@ -3206,8 +3663,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         return builder.ToString();
     }
 
-    private async System.Threading.Tasks.Task NavigateToLocationAsync(LanguageLocation location)
+    private async System.Threading.Tasks.Task NavigateToLocationAsync(
+        LanguageLocation location,
+        bool recordHistory = true)
     {
+        if (recordHistory)
+        {
+            RecordNavigation(location);
+        }
+
         IEditorDocumentViewModel? doc = await EnsureDocumentOpenAsync(
             location.FilePath,
             addRecent: false,
@@ -3222,6 +3686,98 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
             textDoc.SetCaretOffset(offset);
             StatusText = $"Navigated to {System.IO.Path.GetFileName(location.FilePath)}";
         }
+    }
+
+    private void RecordNavigation(LanguageLocation target)
+    {
+        if (!TryGetCurrentLocation(out LanguageLocation current))
+        {
+            return;
+        }
+
+        if (AreLocationsEquivalent(current, target))
+        {
+            return;
+        }
+
+        _backNavigation.Push(current);
+        _forwardNavigation.Clear();
+        UpdateNavigationState();
+    }
+
+    private bool TryGetCurrentLocation(out LanguageLocation location)
+    {
+        if (ActiveTextDocument is null)
+        {
+            location = new LanguageLocation
+            {
+                FilePath = string.Empty,
+                Range = new LanguageTextRange(
+                    new LanguageTextPosition(1, 1),
+                    new LanguageTextPosition(1, 1))
+            };
+            return false;
+        }
+
+        int line = Math.Max(1, ActiveTextDocument.CurrentLine);
+        int column = Math.Max(1, ActiveTextDocument.CurrentColumn);
+
+        location = new LanguageLocation
+        {
+            FilePath = ActiveTextDocument.FilePath,
+            Range = new LanguageTextRange(
+                new LanguageTextPosition(line, column),
+                new LanguageTextPosition(line, column))
+        };
+
+        return true;
+    }
+
+    private static bool AreLocationsEquivalent(LanguageLocation left, LanguageLocation right)
+    {
+        return string.Equals(left.FilePath, right.FilePath, StringComparison.OrdinalIgnoreCase)
+            && left.Range.Start.Line == right.Range.Start.Line
+            && left.Range.Start.Column == right.Range.Start.Column;
+    }
+
+    private void UpdateNavigationState()
+    {
+        CanNavigateBack = _backNavigation.Count > 0;
+        CanNavigateForward = _forwardNavigation.Count > 0;
+    }
+
+    private async System.Threading.Tasks.Task NavigateBackAsync()
+    {
+        if (_backNavigation.Count == 0)
+        {
+            return;
+        }
+
+        if (TryGetCurrentLocation(out LanguageLocation current))
+        {
+            _forwardNavigation.Push(current);
+        }
+
+        LanguageLocation target = _backNavigation.Pop();
+        UpdateNavigationState();
+        await NavigateToLocationAsync(target, recordHistory: false);
+    }
+
+    private async System.Threading.Tasks.Task NavigateForwardAsync()
+    {
+        if (_forwardNavigation.Count == 0)
+        {
+            return;
+        }
+
+        if (TryGetCurrentLocation(out LanguageLocation current))
+        {
+            _backNavigation.Push(current);
+        }
+
+        LanguageLocation target = _forwardNavigation.Pop();
+        UpdateNavigationState();
+        await NavigateToLocationAsync(target, recordHistory: false);
     }
 
     private async System.Threading.Tasks.Task NavigateToOutputMessageAsync(OutputMessage? message)
@@ -3239,6 +3795,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         if (doc is TextDocumentViewModel textDoc)
         {
+            LanguageLocation location = new()
+            {
+                FilePath = message.FilePath,
+                Range = new LanguageTextRange(
+                    new LanguageTextPosition(message.Line, message.Column),
+                    new LanguageTextPosition(message.Line, message.Column))
+            };
+            RecordNavigation(location);
             int offset = textDoc.GetOffsetForLineColumn(message.Line, message.Column);
             textDoc.SetCaretOffset(offset);
             StatusText = $"Navigated to {System.IO.Path.GetFileName(message.FilePath)}";
@@ -3279,8 +3843,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         IDisposable subscription = Observable.FromEventPattern<EventHandler, EventArgs>(
-                h => doc.Document.TextChanged += h,
-                h => doc.Document.TextChanged -= h)
+            h => doc.Document.TextChanged += h,
+            h => doc.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(500))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(evt =>
@@ -4499,7 +5063,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
                 () => _workspace,
                 OpenFileAsync,
                 _loggerFactory?.CreateLogger<DesignerDocumentViewModel>(),
-                _loggerFactory);
+                _loggerFactory,
+                _languageRegistry);
             designer.StartPreviewerCommand = StartPreviewerCommand;
             designer.Breakpoints = Breakpoints;
             Documents.Add(designer);

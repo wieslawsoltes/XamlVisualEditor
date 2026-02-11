@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -12,6 +13,8 @@ using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Xaml.Intellisense;
+using XamlVisualEditor.Xaml.Language;
+using XamlVisualEditor.Xaml.Parsing;
 
 namespace XamlVisualEditor.CodeEditor;
 
@@ -25,6 +28,10 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     private readonly SyncEngine _syncEngine;
     private readonly CompletionProviderRegistry _completionRegistry;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly XamlLanguageService _semanticLanguageService;
+    private readonly ILanguageIntellisenseService? _languageService;
+    private readonly ILanguageDocumentSync? _documentSyncService;
+    private readonly ILanguageDiagnosticsSource? _diagnosticsSource;
     private readonly ILogger<CodeEditorViewModel> _logger;
     private bool _suppressTextChanged;
     private int _ignoreCaretUpdates;
@@ -33,6 +40,16 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// Gets the text document for AvaloniaEdit.
     /// </summary>
     public TextDocument Document { get; } = new();
+
+    /// <summary>
+    /// Gets the file path for the document.
+    /// </summary>
+    public string FilePath { get; }
+
+    /// <summary>
+    /// Gets the file name for the document.
+    /// </summary>
+    public string FileName => Path.GetFileName(FilePath);
 
     /// <summary>
     /// Gets or sets the caret offset.
@@ -75,6 +92,11 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// </summary>
     [Reactive]
     public double FontSize { get; set; } = 14.0;
+
+    /// <summary>
+    /// Gets the language identifier for the document.
+    /// </summary>
+    public string? LanguageId { get; }
 
     /// <summary>
     /// Gets the AST node ID at the current caret position, if any.
@@ -127,6 +149,17 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     public BreakpointLineColorizer BreakpointLineColorizer { get; } = new();
 
     /// <summary>
+    /// Gets the semantic token colorizer for richer syntax highlighting.
+    /// </summary>
+    public SemanticTokenColorizer SemanticTokenColorizer { get; } = new();
+
+    /// <summary>
+    /// Gets the version used to refresh semantic token highlights.
+    /// </summary>
+    [Reactive]
+    public int SemanticTokenVersion { get; private set; }
+
+    /// <summary>
     /// Gets the completion items for the popup.
     /// </summary>
     public ObservableCollection<CompletionItem> CompletionItems { get; } = new();
@@ -173,15 +206,27 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> DecreaseFontSizeCommand { get; }
 
     public CodeEditorViewModel(
+        string filePath,
         SyncEngine syncEngine,
         CompletionProviderRegistry completionRegistry,
+        ILanguageIntellisenseRegistry? languageRegistry = null,
         ITypeMetadataService? metadataService = null,
         ILogger<CodeEditorViewModel>? logger = null)
     {
+        FilePath = filePath;
+        LanguageId = GetLanguageIdForFile(filePath);
         _syncEngine = syncEngine;
         _completionRegistry = completionRegistry;
         _metadataService = metadataService;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CodeEditorViewModel>.Instance;
+
+        _languageService = languageRegistry?.GetService(filePath, LanguageId);
+        _documentSyncService = _languageService as ILanguageDocumentSync;
+        _diagnosticsSource = _languageService as ILanguageDiagnosticsSource;
+
+        ITypeMetadataService metadata = metadataService ?? new NullTypeMetadataService();
+        XamlParsingService parsingService = new();
+        _semanticLanguageService = new XamlLanguageService(_completionRegistry, parsingService, metadata);
 
         TriggerCompletionCommand = ReactiveCommand.Create(TriggerCompletion);
         UndoCommand = ReactiveCommand.Create(() => Document.UndoStack.Undo());
@@ -200,6 +245,23 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             .Subscribe(_ => OnTextChanged());
         _disposables.Add(textChangedSubscription);
 
+        IDisposable semanticTokensSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => Document.TextChanged += h,
+                h => Document.TextChanged -= h)
+            .Where(_ => !_suppressTextChanged)
+            .Throttle(TimeSpan.FromMilliseconds(500))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
+        _disposables.Add(semanticTokensSubscription);
+
+        IDisposable syncDocumentSubscription = Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => Document.TextChanged += h,
+                h => Document.TextChanged -= h)
+            .Where(_ => !_suppressTextChanged && _documentSyncService is not null)
+            .Throttle(TimeSpan.FromMilliseconds(200))
+            .Subscribe(evt => { _ = NotifyDocumentChangedAsync(); });
+        _disposables.Add(syncDocumentSubscription);
+
         // Subscribe to sync events to receive AST→text updates
         IDisposable syncSubscription = _syncEngine.SyncEvents
             .Where(e => e.Source == SyncSource.DesignSurface || e.Source == SyncSource.Collaboration)
@@ -213,6 +275,12 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(offset => UpdateCaretPosition(offset));
         _disposables.Add(caretSubscription);
+
+        if (_diagnosticsSource is not null)
+        {
+            _diagnosticsSource.DiagnosticsChanged += OnDiagnosticsChanged;
+            _disposables.Add(Disposable.Create(() => _diagnosticsSource.DiagnosticsChanged -= OnDiagnosticsChanged));
+        }
     }
 
     public void BumpBreakpointHighlightVersion()
@@ -325,22 +393,122 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             SetCaretOffsetFromSync(caretOffset);
         }
 
-        // Update diagnostics
-        Diagnostics.Clear();
-        if (syncEvent.Diagnostics is not null)
+        if (_languageService is null)
         {
-            foreach (XamlDiagnostic diagnostic in syncEvent.Diagnostics)
+            // Update diagnostics from sync engine when no language service is available.
+            Diagnostics.Clear();
+            if (syncEvent.Diagnostics is not null)
+            {
+                foreach (XamlDiagnostic diagnostic in syncEvent.Diagnostics)
+                {
+                    Diagnostics.Add(diagnostic);
+                }
+
+                // Update colorizer for squiggly underlines.
+                DiagnosticColorizer.UpdateDiagnostics(syncEvent.Diagnostics);
+            }
+            else
+            {
+                DiagnosticColorizer.UpdateDiagnostics(Array.Empty<XamlDiagnostic>());
+            }
+        }
+
+        _ = RefreshSemanticTokensAsync();
+    }
+
+    public async Task InitializeLanguageServicesAsync(CancellationToken ct = default)
+    {
+        await NotifyDocumentOpenedAsync(ct).ConfigureAwait(false);
+        await RefreshDiagnosticsAsync(ct).ConfigureAwait(false);
+        await RefreshSemanticTokensAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task NotifyDocumentOpenedAsync(CancellationToken ct = default)
+    {
+        if (_documentSyncService is null)
+        {
+            return;
+        }
+
+        await _documentSyncService.DocumentOpenedAsync(new LanguageDocumentContext
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        }, ct).ConfigureAwait(false);
+    }
+
+    private async Task NotifyDocumentChangedAsync(CancellationToken ct = default)
+    {
+        if (_documentSyncService is null)
+        {
+            return;
+        }
+
+        await _documentSyncService.DocumentChangedAsync(new LanguageDocumentContext
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        }, ct).ConfigureAwait(false);
+    }
+
+    private void OnDiagnosticsChanged(object? sender, LanguageDiagnosticsChangedEventArgs e)
+    {
+        if (!string.Equals(e.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _ = RefreshDiagnosticsAsync();
+    }
+
+    private async Task RefreshDiagnosticsAsync(CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return;
+        }
+
+        LanguageDocumentContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text
+        };
+
+        IReadOnlyList<LanguageDiagnostic> diagnostics =
+            await _languageService.GetDiagnosticsAsync(context, ct).ConfigureAwait(false);
+        IReadOnlyList<XamlDiagnostic> mapped = MapDiagnostics(diagnostics);
+
+        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        {
+            Diagnostics.Clear();
+            foreach (XamlDiagnostic diagnostic in mapped)
             {
                 Diagnostics.Add(diagnostic);
             }
 
-            // Update colorizer for squiggly underlines
-            DiagnosticColorizer.UpdateDiagnostics(syncEvent.Diagnostics);
-        }
-        else
+            DiagnosticColorizer.UpdateDiagnostics(mapped);
+            return Disposable.Empty;
+        });
+    }
+
+    private async Task RefreshSemanticTokensAsync(CancellationToken ct = default)
+    {
+        LanguageDocumentContext context = new()
         {
-            DiagnosticColorizer.UpdateDiagnostics(Array.Empty<XamlDiagnostic>());
-        }
+            FilePath = FilePath,
+            Text = Document.Text
+        };
+
+        IReadOnlyList<LanguageSemanticToken> tokens = _languageService is not null
+            ? await _languageService.GetSemanticTokensAsync(context, ct).ConfigureAwait(false)
+            : await _semanticLanguageService.GetSemanticTokensAsync(context, ct).ConfigureAwait(false);
+
+        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        {
+            SemanticTokenColorizer.UpdateTokens(tokens);
+            SemanticTokenVersion++;
+            return Disposable.Empty;
+        });
     }
 
     private void UpdateCaretPosition(int offset)
@@ -430,6 +598,11 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
 
     private void TriggerCompletion()
     {
+        _ = TriggerCompletionAsync();
+    }
+
+    private async Task TriggerCompletionAsync()
+    {
         CompletionItems.Clear();
 
         string text = Document.Text;
@@ -442,8 +615,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
 
         CompletionContext context = BuildCompletionContext(text, offset, CompletionTrigger.Invoked, null);
 
-        IReadOnlyList<CompletionItem> items = _completionRegistry.GetCompletions(context);
-
+        IReadOnlyList<CompletionItem> items = await GetCompletionsAsync(context).ConfigureAwait(false);
         foreach (CompletionItem item in items)
         {
             CompletionItems.Add(item);
@@ -483,10 +655,53 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Gets completions for the given context, delegating to the provider registry.
     /// </summary>
-    public IReadOnlyList<CompletionItem> GetCompletions(CompletionContext context)
+    public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(
+        CompletionContext context,
+        CancellationToken ct = default)
     {
+        if (_languageService is not null)
+        {
+            return await _languageService.GetCompletionsAsync(context, ct).ConfigureAwait(false);
+        }
+
         CompletionContext prepared = EnsureMetadata(context);
         return _completionRegistry.GetCompletions(prepared);
+    }
+
+    public async Task<LanguageSignatureHelp?> GetSignatureHelpAsync(
+        int offset,
+        CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return null;
+        }
+
+        LanguagePositionContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text,
+            Offset = offset
+        };
+
+        return await _languageService.GetSignatureHelpAsync(context, ct).ConfigureAwait(false);
+    }
+
+    public async Task<LanguageHover?> GetHoverAsync(int offset, CancellationToken ct = default)
+    {
+        if (_languageService is null)
+        {
+            return null;
+        }
+
+        LanguagePositionContext context = new()
+        {
+            FilePath = FilePath,
+            Text = Document.Text,
+            Offset = offset
+        };
+
+        return await _languageService.GetHoverAsync(context, ct).ConfigureAwait(false);
     }
 
     private CompletionContext BuildCompletionContext(
@@ -499,7 +714,8 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
         {
             TextBefore = text.Substring(0, offset),
             DocumentText = text,
-            LanguageId = "xml",
+            FilePath = FilePath,
+            LanguageId = LanguageId ?? "xml",
             Offset = offset,
             Trigger = trigger,
             TriggerCharacter = triggerCharacter,
@@ -533,5 +749,67 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     public void Dispose()
     {
         _disposables.Dispose();
+    }
+
+    private static IReadOnlyList<XamlDiagnostic> MapDiagnostics(
+        IReadOnlyList<LanguageDiagnostic> diagnostics)
+    {
+        if (diagnostics.Count == 0)
+        {
+            return Array.Empty<XamlDiagnostic>();
+        }
+
+        List<XamlDiagnostic> results = new(diagnostics.Count);
+        foreach (LanguageDiagnostic diagnostic in diagnostics)
+        {
+            int length = 1;
+            if (diagnostic.Range.End.Line == diagnostic.Range.Start.Line)
+            {
+                length = Math.Max(1, diagnostic.Range.End.Column - diagnostic.Range.Start.Column);
+            }
+
+            results.Add(new XamlDiagnostic
+            {
+                Severity = diagnostic.Severity,
+                Message = diagnostic.Message,
+                Line = diagnostic.Range.Start.Line,
+                Column = diagnostic.Range.Start.Column,
+                Length = length
+            });
+        }
+
+        return results;
+    }
+
+    private static string? GetLanguageIdForFile(string filePath)
+    {
+        string extension = Path.GetExtension(filePath);
+        return string.Equals(extension, ".xaml", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".axaml", StringComparison.OrdinalIgnoreCase)
+            ? "xml"
+            : "xml";
+    }
+
+    private sealed class NullTypeMetadataService : ITypeMetadataService
+    {
+        public TypeMetadata? GetType(string xmlNamespace, string typeName) => null;
+
+        public IReadOnlyList<TypeMetadata> GetAvailableTypes(string? xmlNamespace = null) => Array.Empty<TypeMetadata>();
+
+        public IReadOnlyList<PropertyMetadata> GetProperties(TypeMetadata type) => Array.Empty<PropertyMetadata>();
+
+        public IReadOnlyList<EventMetadata> GetEvents(TypeMetadata type) => Array.Empty<EventMetadata>();
+
+        public IReadOnlyList<string> GetAvailableNamespaces() => Array.Empty<string>();
+
+        public void LoadAssembly(string assemblyPath)
+        {
+        }
+
+        public void LoadAssemblies(IEnumerable<string> assemblyPaths)
+        {
+        }
+
+        public Type? ResolveClrType(TypeMetadata type) => null;
     }
 }

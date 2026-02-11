@@ -62,6 +62,20 @@ public sealed class LanguageServiceRegistryTests
             return Task.FromResult<IReadOnlyList<XamlVisualEditor.Core.LanguageDiagnostic>>(Array.Empty<XamlVisualEditor.Core.LanguageDiagnostic>());
         }
 
+        public Task<IReadOnlyList<XamlVisualEditor.Core.LanguageSemanticToken>> GetSemanticTokensAsync(
+            LanguageDocumentContext context,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<XamlVisualEditor.Core.LanguageSemanticToken>>(Array.Empty<XamlVisualEditor.Core.LanguageSemanticToken>());
+        }
+
+        public Task<IReadOnlyList<XamlVisualEditor.Core.TextEdit>> GetFormattingEditsAsync(
+            LanguageDocumentContext context,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<XamlVisualEditor.Core.TextEdit>>(Array.Empty<XamlVisualEditor.Core.TextEdit>());
+        }
+
         public Task<XamlVisualEditor.Core.LanguageHover?> GetHoverAsync(
             LanguagePositionContext context,
             CancellationToken ct = default)
@@ -102,6 +116,27 @@ public sealed class LanguageServiceRegistryTests
             CancellationToken ct = default)
         {
             return Task.FromResult<XamlVisualEditor.Core.LanguageSignatureHelp?>(null);
+        }
+
+        public Task<IReadOnlyList<XamlVisualEditor.Core.LanguageCodeAction>> GetCodeActionsAsync(
+            LanguageCodeActionContext context,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<XamlVisualEditor.Core.LanguageCodeAction>>(Array.Empty<XamlVisualEditor.Core.LanguageCodeAction>());
+        }
+
+        public Task<IReadOnlyList<XamlVisualEditor.Core.LanguageSymbol>> GetDocumentSymbolsAsync(
+            LanguageDocumentContext context,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<XamlVisualEditor.Core.LanguageSymbol>>(Array.Empty<XamlVisualEditor.Core.LanguageSymbol>());
+        }
+
+        public Task<IReadOnlyList<XamlVisualEditor.Core.LanguageSymbol>> GetWorkspaceSymbolsAsync(
+            LanguageSymbolQuery query,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<XamlVisualEditor.Core.LanguageSymbol>>(Array.Empty<XamlVisualEditor.Core.LanguageSymbol>());
         }
     }
 }

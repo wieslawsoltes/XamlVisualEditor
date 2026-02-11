@@ -17,6 +17,8 @@
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Ast\XamlVisualEditor.Xaml.Ast.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Language\XamlVisualEditor.Xaml.Language.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
   </ItemGroup>

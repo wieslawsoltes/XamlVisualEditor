@@ -13,6 +13,8 @@ using TextMateSharp.Grammars;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell.ViewModels;
+using System.Text.RegularExpressions;
+using XamlVisualEditor.CodeEditor;
 
 namespace XamlVisualEditor.App.Views;
 
@@ -28,6 +30,7 @@ public sealed partial class TextFileView : UserControl
     private CompositeDisposable? _vmSubscriptions;
     private bool _suppressCaretUpdate;
     private CancellationTokenSource? _hoverCts;
+    private readonly HoverRangeColorizer _hoverRangeColorizer = new();
 
     public TextFileView()
     {
@@ -89,6 +92,11 @@ public sealed partial class TextFileView : UserControl
         _textEditor.TextArea.TextEntering += OnTextEntering;
         _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
 
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(_hoverRangeColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(_hoverRangeColorizer);
+        }
+
         if (DataContext is TextDocumentViewModel vm)
         {
             BindViewModel(vm);
@@ -110,6 +118,11 @@ public sealed partial class TextFileView : UserControl
         _textEditor.FontSize = vm.FontSize;
         _textEditor.ShowLineNumbers = vm.ShowLineNumbers;
         _textEditor.WordWrap = vm.WordWrap;
+
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.SemanticTokenColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(vm.SemanticTokenColorizer);
+        }
 
         IDisposable fontSizeSubscription = vm.WhenAnyValue(x => x.FontSize)
             .Subscribe(size => _textEditor.FontSize = size);
@@ -159,6 +172,10 @@ public sealed partial class TextFileView : UserControl
         IDisposable breakpointHighlightSubscription = vm.WhenAnyValue(x => x.BreakpointHighlightVersion)
             .Subscribe(_ => _textEditor.TextArea.TextView.InvalidateVisual());
         _vmSubscriptions.Add(breakpointHighlightSubscription);
+
+        IDisposable semanticTokenSubscription = vm.WhenAnyValue(x => x.SemanticTokenVersion)
+            .Subscribe(_ => _textEditor.TextArea.TextView.InvalidateVisual());
+        _vmSubscriptions.Add(semanticTokenSubscription);
     }
 
     private void ApplyGrammar(TextDocumentViewModel vm, RegistryOptions registryOptions)
@@ -202,6 +219,11 @@ public sealed partial class TextFileView : UserControl
     {
         if (_completionWindow is not null && e.Text is { Length: > 0 })
         {
+            if (TryHandleCommitCharacter(e, e.Text[0]))
+            {
+                return;
+            }
+
             if (!char.IsLetterOrDigit(e.Text[0]) && e.Text[0] != '.' && e.Text[0] != '_' && e.Text[0] != ':')
             {
                 _completionWindow.CompletionList.RequestInsertion(e);
@@ -311,6 +333,7 @@ public sealed partial class TextFileView : UserControl
         if (offset is null || offset < 0 || offset >= _textEditor.Document.TextLength)
         {
             ToolTip.SetTip(_textEditor, null);
+            ClearHoverHighlight();
             return;
         }
 
@@ -321,6 +344,7 @@ public sealed partial class TextFileView : UserControl
         if (diag is not null)
         {
             ToolTip.SetTip(_textEditor, $"[{diag.Severity}] {diag.Message}");
+            ClearHoverHighlight();
             return;
         }
 
@@ -335,7 +359,79 @@ public sealed partial class TextFileView : UserControl
             return;
         }
 
-        ToolTip.SetTip(_textEditor, hover?.Contents);
+        string? formatted = FormatHoverText(hover?.Contents);
+        ToolTip.SetTip(_textEditor, formatted);
+        UpdateHoverHighlight(vm, hover);
+    }
+
+    private void UpdateHoverHighlight(TextDocumentViewModel vm, LanguageHover? hover)
+    {
+        if (_textEditor?.Document is null || hover?.Range is null)
+        {
+            ClearHoverHighlight();
+            return;
+        }
+
+        LanguageTextRange range = hover.Range.Value;
+        int startOffset = vm.GetOffsetForLineColumn(range.Start.Line, range.Start.Column);
+        int endOffset = vm.GetOffsetForLineColumn(range.End.Line, range.End.Column);
+        int length = _textEditor.Document.TextLength;
+        startOffset = Math.Clamp(startOffset, 0, length);
+        endOffset = Math.Clamp(endOffset, 0, length);
+
+        _hoverRangeColorizer.UpdateRange(startOffset, endOffset);
+        _textEditor.TextArea.TextView.InvalidateVisual();
+    }
+
+    private void ClearHoverHighlight()
+    {
+        if (_textEditor is null)
+        {
+            return;
+        }
+
+        _hoverRangeColorizer.Clear();
+        _textEditor.TextArea.TextView.InvalidateVisual();
+    }
+
+    private bool TryHandleCommitCharacter(TextInputEventArgs e, char character)
+    {
+        if (_completionWindow?.CompletionList.SelectedItem is not TextFileCompletionData data)
+        {
+            return false;
+        }
+
+        if (data.CommitCharacters.Count == 0 || !data.CommitCharacters.Contains(character))
+        {
+            return false;
+        }
+
+        _completionWindow.CompletionList.RequestInsertion(e);
+
+        return true;
+    }
+
+    private static string? FormatHoverText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        string formatted = text;
+
+        // Strip common markdown markers.
+        formatted = formatted.Replace("```", string.Empty, StringComparison.Ordinal)
+            .Replace("`", string.Empty, StringComparison.Ordinal)
+            .Replace("**", string.Empty, StringComparison.Ordinal)
+            .Replace("__", string.Empty, StringComparison.Ordinal)
+            .Replace("*", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal);
+
+        // Convert markdown links to plain text.
+        formatted = Regex.Replace(formatted, "\\[([^\\]]+)\\]\\([^\\)]+\\)", "$1");
+
+        return formatted.Trim();
     }
 
     private static int? GetOffsetFromPoint(TextEditor editor, Avalonia.Point point)
@@ -363,6 +459,7 @@ public sealed partial class TextFileView : UserControl
 }
 
 internal sealed class TextFileCompletionData : ICompletionData
+    , ICommitCharactersProvider
 {
     private readonly CompletionItem _item;
 
@@ -378,6 +475,8 @@ internal sealed class TextFileCompletionData : ICompletionData
     public object? Description => _item.Description;
 
     public double Priority => _item.Priority;
+
+    public IReadOnlyList<char> CommitCharacters => _item.CommitCharacters ?? Array.Empty<char>();
 
     public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
     {

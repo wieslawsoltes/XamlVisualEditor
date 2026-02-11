@@ -99,7 +99,7 @@ public sealed class CodeEditorTests
         AstNodeMap map = new();
         SyncEngine engine = new(parser, serializer, map);
         XamlVisualEditor.Xaml.Intellisense.CompletionProviderRegistry registry = new();
-        XamlVisualEditor.CodeEditor.CodeEditorViewModel vm = new(engine, registry);
+        XamlVisualEditor.CodeEditor.CodeEditorViewModel vm = new("Test.xaml", engine, registry);
 
         string xaml = "<Grid xmlns=\"https://github.com/avaloniaui\" />";
         vm.SetTextSilently(xaml);
@@ -115,7 +115,7 @@ public sealed class CodeEditorTests
         AstNodeMap map = new();
         SyncEngine engine = new(parser, serializer, map);
         XamlVisualEditor.Xaml.Intellisense.CompletionProviderRegistry registry = new();
-        XamlVisualEditor.CodeEditor.CodeEditorViewModel vm = new(engine, registry);
+        XamlVisualEditor.CodeEditor.CodeEditorViewModel vm = new("Test.xaml", engine, registry);
 
         Assert.True(vm.ShowLineNumbers);
         Assert.True(vm.FontSize > 0);

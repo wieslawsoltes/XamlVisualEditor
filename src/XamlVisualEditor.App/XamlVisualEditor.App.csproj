@@ -46,6 +46,7 @@
     <ProjectReference Include="..\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Language\XamlVisualEditor.Language.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Lsp\XamlVisualEditor.Lsp.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.CSharp.Language\XamlVisualEditor.CSharp.Language.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Language\XamlVisualEditor.Xaml.Language.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />

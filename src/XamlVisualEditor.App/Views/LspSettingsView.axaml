@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+             x:Class="XamlVisualEditor.App.Views.LspSettingsView"
+             x:DataType="vm:LspSettingsViewModel">
+  <DockPanel Margin="8">
+    <StackPanel Spacing="8">
+      <TextBlock Text="LSP Settings" FontWeight="SemiBold" FontSize="14" />
+      <TextBlock Text="Settings file:" FontSize="12" />
+      <TextBlock Text="{CompiledBinding SettingsPath}" FontSize="12" />
+
+      <TextBlock Text="Environment variable entries override file settings and require restart." FontSize="11" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="Add Server" Command="{CompiledBinding AddServerCommand}" />
+        <Button Content="Remove Selected" Command="{CompiledBinding RemoveServerCommand}" />
+        <Button Content="Reload" Command="{CompiledBinding ReloadCommand}" />
+        <Button Content="Save" Command="{CompiledBinding SaveCommand}" />
+        <TextBlock Text="{CompiledBinding StatusText}" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <TextBlock Text="Restart required to apply LSP changes."
+                 IsVisible="{CompiledBinding RequiresRestart}"
+                 FontSize="11" />
+
+      <ListBox ItemsSource="{CompiledBinding Servers}" SelectedItem="{CompiledBinding SelectedServer}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:LspServerEntryViewModel">
+            <Border BorderThickness="1" BorderBrush="#3A3A3A" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+              <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Language" Width="90" />
+                  <TextBox Text="{CompiledBinding LanguageId, Mode=TwoWay}" Width="180" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Server Path" Width="90" />
+                  <TextBox Text="{CompiledBinding ServerPath, Mode=TwoWay}" Width="420" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Arguments" Width="90" />
+                  <TextBox Text="{CompiledBinding Arguments, Mode=TwoWay}" Width="420" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Work Dir" Width="90" />
+                  <TextBox Text="{CompiledBinding WorkingDirectory, Mode=TwoWay}" Width="420" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Extensions" Width="90" />
+                  <TextBox Text="{CompiledBinding FileExtensions, Mode=TwoWay}" Width="220" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </StackPanel>
+  </DockPanel>
+</UserControl>

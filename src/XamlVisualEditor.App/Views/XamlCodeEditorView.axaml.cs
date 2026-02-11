@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using AvaloniaEdit;
@@ -42,6 +45,8 @@ public sealed partial class XamlCodeEditorView : UserControl
     private FoldingManager? _foldingManager;
     private readonly XmlFoldingStrategy _foldingStrategy = new();
     private IDisposable? _foldingSubscription;
+    private readonly HoverRangeColorizer _hoverRangeColorizer = new();
+    private CancellationTokenSource? _hoverCts;
 
     public XamlCodeEditorView()
     {
@@ -73,7 +78,12 @@ public sealed partial class XamlCodeEditorView : UserControl
             {
                 _textEditor.TextArea.Caret.PositionChanged -= _caretPositionChangedHandler;
             }
+            _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
         }
+
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
+        _hoverCts = null;
 
         _foldingSubscription?.Dispose();
         _foldingSubscription = null;
@@ -242,6 +252,16 @@ public sealed partial class XamlCodeEditorView : UserControl
             _textEditor.TextArea.TextView.LineTransformers.Add(vm.BreakpointLineColorizer);
         }
 
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.SemanticTokenColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(vm.SemanticTokenColorizer);
+        }
+
+        if (!_textEditor.TextArea.TextView.LineTransformers.Contains(_hoverRangeColorizer))
+        {
+            _textEditor.TextArea.TextView.LineTransformers.Add(_hoverRangeColorizer);
+        }
+
         IDisposable executionLineSubscription = vm.WhenAnyValue(x => x.ExecutionLine)
             .Subscribe(line =>
             {
@@ -254,33 +274,43 @@ public sealed partial class XamlCodeEditorView : UserControl
             .Subscribe(_ => _textEditor.TextArea.TextView.InvalidateVisual());
         _vmSubscriptions.Add(breakpointHighlightSubscription);
 
-        // Wire tooltip for diagnostics on hover
-        _textEditor.TextArea.TextView.PointerMoved += (_, args) =>
+        IDisposable semanticTokenSubscription = vm.WhenAnyValue(x => x.SemanticTokenVersion)
+            .Subscribe(_ => _textEditor.TextArea.TextView.InvalidateVisual());
+        _vmSubscriptions.Add(semanticTokenSubscription);
+
+        _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
+        _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
+    }
+
+    private void UpdateHoverHighlight(DocumentLine line, XamlDiagnostic diag)
+    {
+        if (_textEditor?.Document is null)
         {
-            Avalonia.Point position = args.GetPosition(_textEditor.TextArea.TextView);
+            return;
+        }
 
-            // Get the text position from the mouse
-            int? offset = GetOffsetFromPoint(_textEditor, position);
-            if (offset is null || offset < 0 || _textEditor.Document is null || offset >= _textEditor.Document.TextLength)
-            {
-                ToolTip.SetTip(_textEditor, null);
-                return;
-            }
+        int start = line.Offset + Math.Max(0, diag.Column - 1);
+        int end = diag.Length > 0
+            ? Math.Min(line.EndOffset, start + diag.Length)
+            : line.EndOffset;
 
-            DocumentLine line = _textEditor.Document.GetLineByOffset(offset.Value);
-            int col = offset.Value - line.Offset + 1;
+        int length = _textEditor.Document.TextLength;
+        start = Math.Clamp(start, 0, length);
+        end = Math.Clamp(end, 0, length);
 
-            XamlDiagnostic? diag = vm.DiagnosticColorizer.GetDiagnosticAt(line.LineNumber, col);
-            if (diag is not null)
-            {
-                string severity = diag.Severity.ToString();
-                ToolTip.SetTip(_textEditor, $"[{severity}] {diag.Message}");
-            }
-            else
-            {
-                ToolTip.SetTip(_textEditor, null);
-            }
-        };
+        _hoverRangeColorizer.UpdateRange(start, end);
+        _textEditor.TextArea.TextView.InvalidateVisual();
+    }
+
+    private void ClearHoverHighlight()
+    {
+        if (_textEditor is null)
+        {
+            return;
+        }
+
+        _hoverRangeColorizer.Clear();
+        _textEditor.TextArea.TextView.InvalidateVisual();
     }
 
     private void UpdateFoldings()
@@ -334,6 +364,11 @@ public sealed partial class XamlCodeEditorView : UserControl
         // let the window handle insertion (e.g., completing with Enter/Tab)
         if (_completionWindow is not null && e.Text is { Length: > 0 })
         {
+            if (TryHandleCommitCharacter(e, e.Text[0]))
+            {
+                return;
+            }
+
             if (!char.IsLetterOrDigit(e.Text[0]) && e.Text[0] != '.' && e.Text[0] != ':' && e.Text[0] != '_')
             {
                 _completionWindow.CompletionList.RequestInsertion(e);
@@ -440,7 +475,7 @@ public sealed partial class XamlCodeEditorView : UserControl
         return current == '\n' || current == '\r';
     }
 
-    private void OnTextEntered(object? sender, TextInputEventArgs e)
+    private async void OnTextEntered(object? sender, TextInputEventArgs e)
     {
         if (DataContext is not CodeEditorViewModel vm || _textEditor is null)
         {
@@ -453,17 +488,28 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Trigger completion on '<', ' ' (inside tag), '=' or '"' (attribute values), ':'
         if (trigger is '<' or ' ' or '=' or '"' or ':' or '/')
         {
-            ShowCompletionWindow(vm, CompletionTrigger.CharacterTyped, trigger);
+            await ShowCompletionWindowAsync(vm, CompletionTrigger.CharacterTyped, trigger);
         }
 
-        // Show insight window for markup extensions after '{'
+        if (trigger is '(' or ',')
+        {
+            await ShowSignatureHelpAsync(vm);
+        }
+
         if (trigger == '{')
         {
-            ShowInsightWindow(vm);
+            bool shown = await ShowSignatureHelpAsync(vm);
+            if (!shown)
+            {
+                ShowInsightWindow();
+            }
         }
     }
 
-    private void ShowCompletionWindow(CodeEditorViewModel vm, CompletionTrigger trigger, char? triggerCharacter)
+    private async Task ShowCompletionWindowAsync(
+        CodeEditorViewModel vm,
+        CompletionTrigger trigger,
+        char triggerCharacter)
     {
         if (_textEditor is null)
         {
@@ -486,13 +532,14 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             TextBefore = text[..offset],
             DocumentText = text,
+            FilePath = vm.FilePath,
+            LanguageId = vm.LanguageId,
             Offset = offset,
             Trigger = trigger,
-            TriggerCharacter = triggerCharacter,
-            LanguageId = "xml"
+            TriggerCharacter = triggerCharacter
         };
 
-        IReadOnlyList<CompletionItem> items = vm.GetCompletions(context);
+        IReadOnlyList<CompletionItem> items = await vm.GetCompletionsAsync(context);
 
         if (items.Count == 0)
         {
@@ -511,7 +558,54 @@ public sealed partial class XamlCodeEditorView : UserControl
         _completionWindow.Closed += (_, _) => _completionWindow = null;
     }
 
-    private void ShowInsightWindow(CodeEditorViewModel vm)
+    private bool TryHandleCommitCharacter(TextInputEventArgs e, char character)
+    {
+        if (_completionWindow?.CompletionList.SelectedItem is not ICommitCharactersProvider provider)
+        {
+            return false;
+        }
+
+        if (provider.CommitCharacters.Count == 0)
+        {
+            return false;
+        }
+
+        if (!provider.CommitCharacters.Contains(character))
+        {
+            return false;
+        }
+
+        _completionWindow.CompletionList.RequestInsertion(e);
+
+        return true;
+    }
+
+    private async Task<bool> ShowSignatureHelpAsync(CodeEditorViewModel vm)
+    {
+        if (_textEditor is null)
+        {
+            return false;
+        }
+
+        _insightWindow?.Close();
+        _insightWindow = null;
+
+        LanguageSignatureHelp? help = await vm.GetSignatureHelpAsync(_textEditor.CaretOffset);
+        if (help is null || help.Signatures.Count == 0)
+        {
+            return false;
+        }
+
+        _insightWindow = new OverloadInsightWindow(_textEditor.TextArea)
+        {
+            Provider = new LanguageSignatureHelpProvider(help)
+        };
+        _insightWindow.Show();
+        _insightWindow.Closed += (_, _) => _insightWindow = null;
+        return true;
+    }
+
+    private void ShowInsightWindow()
     {
         if (_textEditor is null)
         {
@@ -521,19 +615,102 @@ public sealed partial class XamlCodeEditorView : UserControl
         _insightWindow?.Close();
         _insightWindow = null;
 
-        // Provide a basic markup extension hint
-        string text = _textEditor.Document.Text;
-        int offset = _textEditor.CaretOffset;
+        _insightWindow = new OverloadInsightWindow(_textEditor.TextArea)
+        {
+            Provider = new MarkupExtensionInsightProvider()
+        };
+        _insightWindow.Show();
+        _insightWindow.Closed += (_, _) => _insightWindow = null;
+    }
 
-        if (offset < 2)
+    private async void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_textEditor is null || DataContext is not CodeEditorViewModel vm)
         {
             return;
         }
 
-        _insightWindow = new OverloadInsightWindow(_textEditor.TextArea);
-        _insightWindow.Provider = new MarkupExtensionInsightProvider();
-        _insightWindow.Show();
-        _insightWindow.Closed += (_, _) => _insightWindow = null;
+        int? offset = GetOffsetFromPoint(_textEditor, e.GetPosition(_textEditor.TextArea.TextView));
+        if (offset is null || offset < 0 || offset >= _textEditor.Document.TextLength)
+        {
+            ToolTip.SetTip(_textEditor, null);
+            ClearHoverHighlight();
+            return;
+        }
+
+        DocumentLine line = _textEditor.Document.GetLineByOffset(offset.Value);
+        int col = offset.Value - line.Offset + 1;
+
+        XamlDiagnostic? diag = vm.DiagnosticColorizer.GetDiagnosticAt(line.LineNumber, col);
+        if (diag is not null)
+        {
+            string severity = diag.Severity.ToString();
+            ToolTip.SetTip(_textEditor, $"[{severity}] {diag.Message}");
+            UpdateHoverHighlight(line, diag);
+            return;
+        }
+
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
+        _hoverCts = new CancellationTokenSource();
+        CancellationToken token = _hoverCts.Token;
+
+        try
+        {
+            LanguageHover? hover = await vm.GetHoverAsync(offset.Value, token);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            string? formatted = FormatHoverText(hover?.Contents);
+            ToolTip.SetTip(_textEditor, formatted);
+            UpdateHoverHighlight(vm, hover);
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignore canceled hover requests (e.g., rapid mouse movement or LSP shutdown).
+        }
+    }
+
+    private void UpdateHoverHighlight(CodeEditorViewModel vm, LanguageHover? hover)
+    {
+        if (_textEditor?.Document is null || hover?.Range is null)
+        {
+            ClearHoverHighlight();
+            return;
+        }
+
+        LanguageTextRange range = hover.Range.Value;
+        int startOffset = vm.GetOffsetForLineColumn(range.Start.Line, range.Start.Column);
+        int endOffset = vm.GetOffsetForLineColumn(range.End.Line, range.End.Column);
+        int length = _textEditor.Document.TextLength;
+        startOffset = Math.Clamp(startOffset, 0, length);
+        endOffset = Math.Clamp(endOffset, 0, length);
+
+        _hoverRangeColorizer.UpdateRange(startOffset, endOffset);
+        _textEditor.TextArea.TextView.InvalidateVisual();
+    }
+
+    private static string? FormatHoverText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        string formatted = text;
+
+        formatted = formatted.Replace("```", string.Empty, StringComparison.Ordinal)
+            .Replace("`", string.Empty, StringComparison.Ordinal)
+            .Replace("**", string.Empty, StringComparison.Ordinal)
+            .Replace("__", string.Empty, StringComparison.Ordinal)
+            .Replace("*", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal);
+
+        formatted = Regex.Replace(formatted, "\\[([^\\]]+)\\]\\([^\\)]+\\)", "$1");
+
+        return formatted.Trim();
     }
 
     private static int? GetOffsetFromPoint(TextEditor editor, Avalonia.Point point)
@@ -563,6 +740,7 @@ public sealed partial class XamlCodeEditorView : UserControl
 /// Bridges the internal CompletionItem to AvaloniaEdit's ICompletionData.
 /// </summary>
 internal sealed class AvaloniaCompletionData : ICompletionData
+    , ICommitCharactersProvider
 {
     private readonly CompletionItem _item;
 
@@ -579,8 +757,18 @@ internal sealed class AvaloniaCompletionData : ICompletionData
 
     public double Priority => _item.Priority;
 
+    public IReadOnlyList<char> CommitCharacters => _item.CommitCharacters ?? Array.Empty<char>();
+
     public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
     {
+        if (_item.TextEdit is not null)
+        {
+            int offset = Math.Clamp(_item.TextEdit.Offset, 0, textArea.Document.TextLength);
+            int length = Math.Clamp(_item.TextEdit.Length, 0, textArea.Document.TextLength - offset);
+            textArea.Document.Replace(offset, length, _item.TextEdit.NewText);
+            return;
+        }
+
         textArea.Document.Replace(completionSegment, Text);
     }
 

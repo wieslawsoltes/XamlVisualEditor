@@ -11,6 +11,8 @@
     <Project Path="src/XamlVisualEditor.Language/XamlVisualEditor.Language.csproj" />
     <Project Path="src/XamlVisualEditor.CSharp.Language/XamlVisualEditor.CSharp.Language.csproj" />
     <Project Path="src/XamlVisualEditor.Xaml.Language/XamlVisualEditor.Xaml.Language.csproj" />
+    <Project Path="src/XamlVisualEditor.Xaml.LanguageServer/XamlVisualEditor.Xaml.LanguageServer.csproj" />
+    <Project Path="src/XamlVisualEditor.Lsp/XamlVisualEditor.Lsp.csproj" />
     <Project Path="src/XamlVisualEditor.Workspace/XamlVisualEditor.Workspace.csproj" />
     <Project Path="src/XamlVisualEditor.Designer.Core/XamlVisualEditor.Designer.Core.csproj" />
     <Project Path="src/XamlVisualEditor.Designer.Rendering/XamlVisualEditor.Designer.Rendering.csproj" />

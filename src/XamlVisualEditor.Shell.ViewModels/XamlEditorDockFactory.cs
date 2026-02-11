@@ -251,6 +251,29 @@ public sealed class DebugSettingsTool : Tool
 }
 
 /// <summary>
+/// Dock tool for the LSP settings panel.
+/// </summary>
+public sealed class LspSettingsTool : Tool
+{
+    [IgnoreDataMember]
+    [Reactive]
+    public LspSettingsViewModel? LspSettingsViewModel { get; set; }
+
+    public LspSettingsTool()
+    {
+        Id = "LspSettings";
+        Title = "LSP Settings";
+    }
+
+    public LspSettingsTool(LspSettingsViewModel lspSettingsViewModel)
+    {
+        LspSettingsViewModel = lspSettingsViewModel;
+        Id = "LspSettings";
+        Title = "LSP Settings";
+    }
+}
+
+/// <summary>
 /// Dock tool for the breakpoints panel.
 /// </summary>
 public sealed class BreakpointsTool : Tool
@@ -532,6 +555,7 @@ public sealed class XamlEditorDockFactory : Factory
         OutputTool outputTool = new(_mainVm.Output);
         AcpTool acpTool = new(_mainVm.Acp);
         DebugSettingsTool debugSettingsTool = new(_mainVm.DebugSettings);
+        LspSettingsTool lspSettingsTool = new(_mainVm.LspSettings);
         BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
         CallStackTool callStackTool = new(_mainVm.CallStack);
         LocalsTool localsTool = new(_mainVm.Locals);
@@ -574,6 +598,7 @@ public sealed class XamlEditorDockFactory : Factory
                 outputTool,
                 referencesTool,
                 debugSettingsTool,
+                lspSettingsTool,
                 breakpointsTool,
                 callStackTool,
                 localsTool,
@@ -686,6 +711,12 @@ public sealed class XamlEditorDockFactory : Factory
         if (debugSettingsTool is not null)
         {
             debugSettingsTool.DebugSettingsViewModel = _mainVm.DebugSettings;
+        }
+
+        LspSettingsTool? lspSettingsTool = FindDockable<LspSettingsTool>(rootDock, "LspSettings");
+        if (lspSettingsTool is not null)
+        {
+            lspSettingsTool.LspSettingsViewModel = _mainVm.LspSettings;
         }
 
         BreakpointsTool? breakpointsTool = FindDockable<BreakpointsTool>(rootDock, "Breakpoints");
@@ -1113,6 +1144,12 @@ public sealed class XamlEditorDockFactory : Factory
             FindDockable<DebugSettingsTool>(rootDock, "DebugSettings"),
             tool => tool.DebugSettingsViewModel,
             (tool, vm) => tool.DebugSettingsViewModel = vm,
+            restore);
+
+        DetachToolViewModel(
+            FindDockable<LspSettingsTool>(rootDock, "LspSettings"),
+            tool => tool.LspSettingsViewModel,
+            (tool, vm) => tool.LspSettingsViewModel = vm,
             restore);
 
         DetachToolViewModel(

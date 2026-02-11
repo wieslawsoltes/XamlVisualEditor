@@ -79,6 +79,14 @@
                 <MenuItem Header="Go To _Definition" Command="{CompiledBinding GoToDefinitionCommand}" InputGesture="F12" />
                 <MenuItem Header="Find _References" Command="{CompiledBinding FindReferencesCommand}" InputGesture="Shift+F12" />
                 <MenuItem Header="_Rename" Command="{CompiledBinding RenameSymbolCommand}" InputGesture="F2" />
+                <MenuItem Header="_Format Document" Command="{CompiledBinding FormatDocumentCommand}" />
+                <MenuItem Header="Code _Actions" Command="{CompiledBinding CodeActionsCommand}" />
+                <Separator />
+                <MenuItem Header="Document _Symbols" Command="{CompiledBinding DocumentSymbolsCommand}" />
+                <MenuItem Header="Workspace _Symbols" Command="{CompiledBinding WorkspaceSymbolsCommand}" />
+                <Separator />
+                <MenuItem Header="Navigate _Back" Command="{CompiledBinding NavigateBackCommand}" InputGesture="Alt+Left" />
+                <MenuItem Header="Navigate _Forward" Command="{CompiledBinding NavigateForwardCommand}" InputGesture="Alt+Right" />
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="_Toolbox" Command="{CompiledBinding ToggleToolboxCommand}" />

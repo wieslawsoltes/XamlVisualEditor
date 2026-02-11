@@ -170,6 +170,20 @@ public sealed class CSharpLanguageService : ILanguageIntellisenseService, IDispo
         return diagnostics;
     }
 
+    public Task<IReadOnlyList<LanguageSemanticToken>> GetSemanticTokensAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageSemanticToken>>(Array.Empty<LanguageSemanticToken>());
+    }
+
+    public Task<IReadOnlyList<TextEdit>> GetFormattingEditsAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<TextEdit>>(Array.Empty<TextEdit>());
+    }
+
     public async Task<LanguageHover?> GetHoverAsync(LanguagePositionContext context, CancellationToken ct = default)
     {
         try
@@ -410,6 +424,27 @@ public sealed class CSharpLanguageService : ILanguageIntellisenseService, IDispo
         CancellationToken ct = default)
     {
         return GetSignatureHelpCoreAsync(context, ct);
+    }
+
+    public Task<IReadOnlyList<LanguageCodeAction>> GetCodeActionsAsync(
+        LanguageCodeActionContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageCodeAction>>(Array.Empty<LanguageCodeAction>());
+    }
+
+    public Task<IReadOnlyList<LanguageSymbol>> GetDocumentSymbolsAsync(
+        LanguageDocumentContext context,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageSymbol>>(Array.Empty<LanguageSymbol>());
+    }
+
+    public Task<IReadOnlyList<LanguageSymbol>> GetWorkspaceSymbolsAsync(
+        LanguageSymbolQuery query,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<LanguageSymbol>>(Array.Empty<LanguageSymbol>());
     }
 
     private async Task<LanguageSignatureHelp?> GetSignatureHelpCoreAsync(

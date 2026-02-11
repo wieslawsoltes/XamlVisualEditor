@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Serialization\XamlVisualEditor.Xaml.Serialization.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Lsp\XamlVisualEditor.Lsp.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Sync\XamlVisualEditor.Sync.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.TreeView\XamlVisualEditor.TreeView.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
