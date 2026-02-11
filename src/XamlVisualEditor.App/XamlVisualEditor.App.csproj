@@ -33,6 +33,8 @@
     <ProjectReference Include="..\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.VscodeCompatExtension\XamlVisualEditor.VscodeCompatExtension.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Animation\XamlVisualEditor.Animation.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Parsing\XamlVisualEditor.Xaml.Parsing.csproj" />
@@ -73,6 +75,13 @@
       <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\XamlVisualEditor.Designer.PreviewerHost.deps.json" />
     </ItemGroup>
     <Copy SourceFiles="@(_PreviewerHost)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyVscodeCompatHost" AfterTargets="Build">
+    <ItemGroup>
+      <_VscodeCompatHost Include="..\..\tools\VscodeExtensionHost\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_VscodeCompatHost)" DestinationFolder="$(OutDir)vscode-compat-host\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

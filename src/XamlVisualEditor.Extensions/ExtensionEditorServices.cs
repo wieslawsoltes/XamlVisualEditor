@@ -11,6 +11,9 @@ public interface IEditorServices
     /// <summary>Gets the open editor documents.</summary>
     IReadOnlyList<IEditorDocument> GetOpenDocuments();
 
+    /// <summary>Opens a document in the editor.</summary>
+    Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct);
+
     /// <summary>Raised when the active document changes.</summary>
     event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
 }
@@ -27,6 +30,12 @@ public interface IEditorDocument
     /// <summary>Gets or sets the caret offset.</summary>
     int CaretOffset { get; set; }
 
+    /// <summary>Gets or sets the selection start offset.</summary>
+    int SelectionStart { get; set; }
+
+    /// <summary>Gets or sets the selection length.</summary>
+    int SelectionLength { get; set; }
+
     /// <summary>Gets the document text.</summary>
     Task<string> GetTextAsync(CancellationToken ct);
 
@@ -35,6 +44,9 @@ public interface IEditorDocument
 
     /// <summary>Raised when document text changes.</summary>
     event EventHandler<EditorDocumentChangedEventArgs>? Changed;
+
+    /// <summary>Raised when selection changes.</summary>
+    event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
 }
 
 /// <summary>Provides active document change data.</summary>
@@ -49,4 +61,17 @@ public sealed class EditorDocumentChangedEventArgs : EventArgs
 {
     /// <summary>Gets the document file path.</summary>
     public required string FilePath { get; init; }
+}
+
+/// <summary>Provides selection change data.</summary>
+public sealed class EditorSelectionChangedEventArgs : EventArgs
+{
+    /// <summary>Gets the document file path.</summary>
+    public required string FilePath { get; init; }
+
+    /// <summary>Gets the selection start offset.</summary>
+    public required int SelectionStart { get; init; }
+
+    /// <summary>Gets the selection length.</summary>
+    public required int SelectionLength { get; init; }
 }

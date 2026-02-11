@@ -10,6 +10,8 @@ using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.GitExtension;
 using XamlVisualEditor.GitExtension.Views;
+using XamlVisualEditor.IdeBridgeExtension;
+using XamlVisualEditor.IdeBridgeExtension.Views;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
@@ -103,6 +105,7 @@ public sealed class ViewLocator : IDataTemplate
             AnimationEditorViewModel => new AnimationEditorView(),
             TerminalViewModel => new TerminalView(),
             GitPanelViewModel => new GitPanelView(),
+            IdeBridgePanelViewModel => new IdeBridgePanelView(),
             ExtensionTreeViewModel => new ExtensionTreeView(),
             ExtensionWebviewViewModel => new ExtensionWebviewView(),
             ExtensionManagerViewModel => new ExtensionManagerView(),
@@ -137,6 +140,7 @@ public sealed class ViewLocator : IDataTemplate
             or AnimationEditorViewModel
             or TerminalViewModel
             or GitPanelViewModel
+            or IdeBridgePanelViewModel
             or ExtensionTreeViewModel
             or ExtensionWebviewViewModel
             or ExtensionManagerViewModel;

@@ -16,6 +16,8 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly IViews _views;
     private readonly IExtensionLanguageServices _languageServices;
     private readonly IEditorServices _editor;
+    private readonly IDiagnosticsService _diagnostics;
+    private readonly ITerminalBridge _terminal;
     private readonly ISettings _settings;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
@@ -30,6 +32,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         IViews views,
         IExtensionLanguageServices languageServices,
         IEditorServices editor,
+        IDiagnosticsService diagnostics,
+        ITerminalBridge terminal,
         ISettings settings)
     {
         _extensions = extensions;
@@ -41,6 +45,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         _views = views;
         _languageServices = languageServices;
         _editor = editor;
+        _diagnostics = diagnostics;
+        _terminal = terminal;
         _settings = settings;
     }
 
@@ -93,6 +99,8 @@ public sealed class BuiltInExtensionHost : IDisposable
             _views,
             _languageServices,
             _editor,
+            _diagnostics,
+            _terminal,
             _settings,
             storage,
             logger,

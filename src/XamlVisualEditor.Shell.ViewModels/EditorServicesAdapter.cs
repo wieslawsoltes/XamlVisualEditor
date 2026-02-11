@@ -50,6 +50,20 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         return results;
     }
 
+    /// <inheritdoc />
+    public async Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return null;
+        }
+
+        await _mainViewModel.OpenFileAsync(filePath).ConfigureAwait(false);
+        IEditorDocumentViewModel? document = _mainViewModel.Documents
+            .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        return document is null ? null : GetAdapter(document);
+    }
+
     public void Dispose()
     {
         _disposables.Dispose();
@@ -114,6 +128,7 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     private abstract class EditorDocumentAdapter : IEditorDocument, IDisposable
     {
         private readonly IDisposable _textChangedSubscription;
+        private readonly CompositeDisposable _selectionSubscriptions = new();
 
         protected EditorDocumentAdapter(AvaloniaTextDocument document, string filePath, string? languageId)
         {
@@ -138,7 +153,13 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
         public abstract int CaretOffset { get; set; }
 
+        public abstract int SelectionStart { get; set; }
+
+        public abstract int SelectionLength { get; set; }
+
         public event EventHandler<EditorDocumentChangedEventArgs>? Changed;
+
+        public event EventHandler<EditorSelectionChangedEventArgs>? SelectionChanged;
 
         public Task<string> GetTextAsync(CancellationToken ct)
         {
@@ -150,6 +171,22 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         public void Dispose()
         {
             _textChangedSubscription.Dispose();
+            _selectionSubscriptions.Dispose();
+        }
+
+        protected void RegisterSelectionSubscription(IDisposable subscription)
+        {
+            _selectionSubscriptions.Add(subscription);
+        }
+
+        protected void RaiseSelectionChanged()
+        {
+            SelectionChanged?.Invoke(this, new EditorSelectionChangedEventArgs
+            {
+                FilePath = FilePath,
+                SelectionStart = SelectionStart,
+                SelectionLength = SelectionLength
+            });
         }
 
         protected static void ApplyEdits(AvaloniaTextDocument document, IReadOnlyList<TextEdit> edits)
@@ -172,16 +209,22 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     {
         private readonly CodeEditorViewModel _editor;
 
-        public CodeEditorDocumentAdapter(CodeEditorViewModel editor)
-            : base(editor.Document, editor.FilePath, editor.LanguageId)
-        {
-            _editor = editor;
-        }
-
         public override int CaretOffset
         {
             get => _editor.CaretOffset;
             set => _editor.SetCaretOffset(value);
+        }
+
+        public override int SelectionStart
+        {
+            get => _editor.SelectionStart;
+            set => _editor.SelectionStart = value;
+        }
+
+        public override int SelectionLength
+        {
+            get => _editor.SelectionLength;
+            set => _editor.SelectionLength = value;
         }
 
         public override Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
@@ -190,17 +233,21 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             _editor.IsModified = true;
             return Task.CompletedTask;
         }
+
+        public CodeEditorDocumentAdapter(CodeEditorViewModel editor)
+            : base(editor.Document, editor.FilePath, editor.LanguageId)
+        {
+            _editor = editor;
+
+            IDisposable selectionSubscription = _editor.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
+                .Subscribe(_ => RaiseSelectionChanged());
+            RegisterSelectionSubscription(selectionSubscription);
+        }
     }
 
     private sealed class TextDocumentAdapter : EditorDocumentAdapter
     {
         private readonly TextDocumentViewModel _editor;
-
-        public TextDocumentAdapter(TextDocumentViewModel editor)
-            : base(editor.Document, editor.FilePath, editor.LanguageId)
-        {
-            _editor = editor;
-        }
 
         public override int CaretOffset
         {
@@ -208,10 +255,32 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
             set => _editor.SetCaretOffset(value);
         }
 
+        public override int SelectionStart
+        {
+            get => _editor.SelectionStart;
+            set => _editor.SelectionStart = value;
+        }
+
+        public override int SelectionLength
+        {
+            get => _editor.SelectionLength;
+            set => _editor.SelectionLength = value;
+        }
+
         public override Task ApplyEditsAsync(IReadOnlyList<TextEdit> edits, CancellationToken ct)
         {
             _editor.ApplyTextEdits(edits);
             return Task.CompletedTask;
+        }
+
+        public TextDocumentAdapter(TextDocumentViewModel editor)
+            : base(editor.Document, editor.FilePath, editor.LanguageId)
+        {
+            _editor = editor;
+
+            IDisposable selectionSubscription = _editor.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
+                .Subscribe(_ => RaiseSelectionChanged());
+            RegisterSelectionSubscription(selectionSubscription);
         }
     }
 }

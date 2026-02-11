@@ -1,0 +1,109 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             xmlns:vm="using:XamlVisualEditor.IdeBridgeExtension"
+             x:Class="XamlVisualEditor.IdeBridgeExtension.Views.IdeBridgePanelView"
+             x:DataType="vm:IdeBridgePanelViewModel">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#1B1E24" Padding="10" CornerRadius="8" Margin="8,8,8,6">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="IDE Bridge" FontWeight="SemiBold" FontSize="14" />
+          <Border Background="#2A2F39" CornerRadius="10" Padding="8,2">
+            <TextBlock Text="{CompiledBinding StatusText}" />
+          </Border>
+          <TextBlock Text="Endpoint:" Opacity="0.7" Margin="8,0,0,0" />
+          <TextBlock Text="{CompiledBinding EndpointText}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Button Content="Apply" Command="{CompiledBinding ApplySettingsCommand}" Padding="8,2" />
+          <Button Content="Restart" Command="{CompiledBinding RestartCommand}" Padding="8,2" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Margin="8" RowDefinitions="Auto,Auto,*,*" ColumnDefinitions="2*,3*" ColumnSpacing="12" RowSpacing="12">
+      <Border Grid.Row="0" Grid.Column="0" Background="#13161B" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Settings" FontWeight="SemiBold" />
+          <CheckBox Content="Enabled" IsChecked="{CompiledBinding IsEnabled, Mode=TwoWay}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Transport" Width="80" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{CompiledBinding TransportOptions}"
+                      SelectedItem="{CompiledBinding SelectedTransport, Mode=TwoWay}"
+                      Width="160" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="TCP Port" Width="80" VerticalAlignment="Center" />
+            <NumericUpDown Minimum="1" Maximum="65535" Value="{CompiledBinding TcpPort, Mode=TwoWay}" Width="120" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Unix Path" Width="80" VerticalAlignment="Center" />
+            <TextBox Text="{CompiledBinding UnixSocketPath, Mode=TwoWay}" Width="260" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="0" Grid.Column="1" Background="#13161B" CornerRadius="8" Padding="10">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Session" FontWeight="SemiBold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Workspace" Width="80" VerticalAlignment="Center" />
+            <TextBlock Text="{CompiledBinding WorkspaceId}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Token" Width="80" VerticalAlignment="Center" />
+            <TextBox Text="{CompiledBinding SessionToken}" IsReadOnly="True" Width="260" />
+            <Button Content="Copy" Command="{CompiledBinding CopyTokenCommand}" Padding="6,2" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Clients" Width="80" VerticalAlignment="Center" />
+            <TextBlock Text="{CompiledBinding ConnectionCount}" />
+            <TextBlock Text="Last" Opacity="0.6" Margin="12,0,0,0" />
+            <TextBlock Text="{CompiledBinding LastConnectionAt}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="1" Grid.ColumnSpan="2" Background="#13161B" CornerRadius="8" Padding="10">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Allowlist" FontWeight="SemiBold" />
+            <Button Content="Refresh" Command="{CompiledBinding RefreshPermissionsCommand}" Padding="6,2" />
+            <Button Content="Revoke" Command="{CompiledBinding RevokePermissionCommand}" Padding="6,2" />
+            <Button Content="Clear All" Command="{CompiledBinding ClearPermissionsCommand}" Padding="6,2" />
+          </StackPanel>
+          <dg:DataGrid ItemsSource="{CompiledBinding Permissions}"
+                       SelectedItem="{CompiledBinding SelectedPermission, Mode=TwoWay}"
+                       AutoGenerateColumns="False"
+                       GridLinesVisibility="None"
+                       IsReadOnly="True"
+                       Margin="0,8,0,0">
+            <dg:DataGrid.Columns>
+              <dg:DataGridTextColumn Header="Workspace" Width="2*" x:DataType="vm:IdeBridgePermissionEntryViewModel" Binding="{CompiledBinding WorkspaceId}" />
+              <dg:DataGridTextColumn Header="Capabilities" Width="2*" x:DataType="vm:IdeBridgePermissionEntryViewModel" Binding="{CompiledBinding Capabilities}" />
+              <dg:DataGridTextColumn Header="Granted" Width="*" x:DataType="vm:IdeBridgePermissionEntryViewModel" Binding="{CompiledBinding GrantedAt}" />
+              <dg:DataGridTextColumn Header="Token" Width="2*" x:DataType="vm:IdeBridgePermissionEntryViewModel" Binding="{CompiledBinding SessionToken}" />
+            </dg:DataGrid.Columns>
+          </dg:DataGrid>
+        </DockPanel>
+      </Border>
+
+      <Border Grid.Row="2" Grid.ColumnSpan="2" Background="#13161B" CornerRadius="8" Padding="10">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="Activity" FontWeight="SemiBold" />
+          <dg:DataGrid ItemsSource="{CompiledBinding ActivityLog}"
+                       AutoGenerateColumns="False"
+                       GridLinesVisibility="None"
+                       IsReadOnly="True"
+                       Margin="0,8,0,0">
+            <dg:DataGrid.Columns>
+              <dg:DataGridTextColumn Header="Event" Width="*" x:DataType="sys:String" Binding="{CompiledBinding}" />
+            </dg:DataGrid.Columns>
+          </dg:DataGrid>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</UserControl>

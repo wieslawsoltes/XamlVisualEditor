@@ -29,6 +29,7 @@ public sealed partial class TextFileView : UserControl
     private TextEditor? _textEditor;
     private CompositeDisposable? _vmSubscriptions;
     private bool _suppressCaretUpdate;
+    private bool _suppressSelectionUpdate;
     private CancellationTokenSource? _hoverCts;
     private readonly HoverRangeColorizer _hoverRangeColorizer = new();
 
@@ -60,6 +61,7 @@ public sealed partial class TextFileView : UserControl
             _textEditor.TextArea.TextEntered -= OnTextEntered;
             _textEditor.TextArea.TextEntering -= OnTextEntering;
             _textEditor.TextArea.TextView.PointerMoved -= OnPointerMoved;
+            _textEditor.TextArea.SelectionChanged -= OnSelectionChanged;
         }
 
         _vmSubscriptions?.Dispose();
@@ -91,6 +93,7 @@ public sealed partial class TextFileView : UserControl
         _textEditor.TextArea.TextEntered += OnTextEntered;
         _textEditor.TextArea.TextEntering += OnTextEntering;
         _textEditor.TextArea.TextView.PointerMoved += OnPointerMoved;
+        _textEditor.TextArea.SelectionChanged += OnSelectionChanged;
 
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(_hoverRangeColorizer))
         {
@@ -145,6 +148,18 @@ public sealed partial class TextFileView : UserControl
                 _suppressCaretUpdate = false;
             });
         _vmSubscriptions.Add(caretSubscription);
+
+        IDisposable selectionSubscription = vm.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength)
+            .Subscribe(selection =>
+            {
+                _suppressSelectionUpdate = true;
+                int start = Math.Clamp(selection.Item1, 0, _textEditor.Document.TextLength);
+                int length = Math.Clamp(selection.Item2, 0, _textEditor.Document.TextLength - start);
+                _textEditor.SelectionStart = start;
+                _textEditor.SelectionLength = length;
+                _suppressSelectionUpdate = false;
+            });
+        _vmSubscriptions.Add(selectionSubscription);
 
         if (!_textEditor.TextArea.TextView.LineTransformers.Contains(vm.DiagnosticColorizer))
         {
@@ -212,6 +227,20 @@ public sealed partial class TextFileView : UserControl
             vm.CaretOffset = caret.Offset;
             vm.CurrentLine = caret.Line;
             vm.CurrentColumn = caret.Column;
+        }
+    }
+
+    private void OnSelectionChanged(object? sender, EventArgs e)
+    {
+        if (_suppressSelectionUpdate || _textEditor is null)
+        {
+            return;
+        }
+
+        if (DataContext is TextDocumentViewModel vm)
+        {
+            vm.SelectionStart = _textEditor.SelectionStart;
+            vm.SelectionLength = _textEditor.SelectionLength;
         }
     }
 

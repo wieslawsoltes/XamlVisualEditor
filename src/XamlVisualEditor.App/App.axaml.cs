@@ -13,6 +13,8 @@ using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using AcpExtensionEntry = XamlVisualEditor.AcpExtension.AcpExtension;
 using GitExtensionEntry = XamlVisualEditor.GitExtension.GitExtension;
+using IdeBridgeExtensionEntry = XamlVisualEditor.IdeBridgeExtension.IdeBridgeExtension;
+using VscodeCompatExtensionEntry = XamlVisualEditor.VscodeCompatExtension.VscodeCompatExtension;
 using XamlVisualEditor.Language;
 using XamlVisualEditor.Acp;
 using XamlVisualEditor.App.Services;
@@ -140,6 +142,8 @@ public sealed class App : Application
         services.AddSingleton<IViews>(sp => sp.GetRequiredService<IExtensionViewRegistry>());
         services.AddSingleton<IExtensionLanguageServices>(sp => sp.GetRequiredService<ExtensionLanguageServiceRegistry>());
         services.AddSingleton<IEditorServices, EditorServicesAdapter>();
+        services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();
+        services.AddSingleton<ITerminalBridge, TerminalBridgeAdapter>();
         services.AddSingleton<ExtensionPackageLoader>();
         services.AddSingleton<IExtensionPackageStore>(sp => new ExtensionPackageStore(
             ExtensionPackagePaths.GetInstalledRoot(),
@@ -154,6 +158,8 @@ public sealed class App : Application
         services.AddSingleton<BuiltInExtensionHost>();
         services.AddSingleton<IXveExtension, AcpExtensionEntry>();
         services.AddSingleton<IXveExtension, GitExtensionEntry>();
+        services.AddSingleton<IXveExtension, IdeBridgeExtensionEntry>();
+        services.AddSingleton<IXveExtension, VscodeCompatExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
         services.AddSingleton<MainWindowViewModel>();

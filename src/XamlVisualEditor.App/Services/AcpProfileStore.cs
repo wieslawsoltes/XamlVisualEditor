@@ -21,7 +21,9 @@ public sealed class AcpProfileStore : IAcpProfileStore
         string path = GetProfilesPath();
         if (!File.Exists(path))
         {
-            return new List<AcpProfile> { AcpProfile.CreateCodexProfile() };
+            List<AcpProfile> defaults = new();
+            EnsureBuiltInProfiles(defaults);
+            return defaults;
         }
 
         try
@@ -30,12 +32,14 @@ public sealed class AcpProfileStore : IAcpProfileStore
             List<AcpProfile>? profiles = await JsonSerializer.DeserializeAsync<List<AcpProfile>>(stream, SerializerOptions, ct)
                 .ConfigureAwait(false);
             List<AcpProfile> result = profiles ?? new List<AcpProfile>();
-            EnsureCodexProfile(result);
+            EnsureBuiltInProfiles(result);
             return result;
         }
         catch
         {
-            return new List<AcpProfile> { AcpProfile.CreateCodexProfile() };
+            List<AcpProfile> fallback = new();
+            EnsureBuiltInProfiles(fallback);
+            return fallback;
         }
     }
 
@@ -43,20 +47,26 @@ public sealed class AcpProfileStore : IAcpProfileStore
     {
         string path = GetProfilesPath();
         List<AcpProfile> snapshot = profiles.Select(CloneProfile).ToList();
-        EnsureCodexProfile(snapshot);
+        EnsureBuiltInProfiles(snapshot);
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? string.Empty);
         await using FileStream stream = File.Create(path);
         await JsonSerializer.SerializeAsync(stream, snapshot, SerializerOptions, ct).ConfigureAwait(false);
     }
 
-    private static void EnsureCodexProfile(List<AcpProfile> profiles)
+    private static void EnsureBuiltInProfiles(List<AcpProfile> profiles)
     {
-        if (profiles.Any(profile => string.Equals(profile.Id, "codex", StringComparison.OrdinalIgnoreCase)))
+        EnsureProfile(profiles, "claude", AcpProfile.CreateClaudeProfile());
+        EnsureProfile(profiles, "codex", AcpProfile.CreateCodexProfile());
+    }
+
+    private static void EnsureProfile(List<AcpProfile> profiles, string id, AcpProfile profile)
+    {
+        if (profiles.Any(entry => string.Equals(entry.Id, id, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
 
-        profiles.Insert(0, AcpProfile.CreateCodexProfile());
+        profiles.Insert(0, profile);
     }
 
     private static string GetProfilesPath()

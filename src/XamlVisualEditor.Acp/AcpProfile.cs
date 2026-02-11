@@ -55,4 +55,20 @@ public sealed class AcpProfile
             IsBuiltIn = true
         };
     }
+
+    public static AcpProfile CreateClaudeProfile()
+    {
+        return new AcpProfile
+        {
+            Id = "claude",
+            Name = "Anthropic Claude",
+            Description = "Anthropic Claude ACP agent",
+            Command = "claude",
+            Arguments = new List<string> { "--stdio" },
+            ModelEnvVar = "ANTHROPIC_MODEL",
+            ApiKeyEnvVar = "ANTHROPIC_API_KEY",
+            UseKeychain = true,
+            IsBuiltIn = true
+        };
+    }
 }

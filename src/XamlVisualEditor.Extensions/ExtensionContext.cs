@@ -22,6 +22,8 @@ public sealed class ExtensionContext
         IViews views,
         IExtensionLanguageServices languageServices,
         IEditorServices editor,
+        IDiagnosticsService diagnostics,
+        ITerminalBridge terminal,
         ISettings settings,
         IExtensionStorage storage,
         IExtensionLogger logger,
@@ -37,6 +39,8 @@ public sealed class ExtensionContext
         Views = views;
         LanguageServices = languageServices;
         Editor = editor;
+        Diagnostics = diagnostics;
+        Terminal = terminal;
         Settings = settings;
         Storage = storage;
         Logger = logger;
@@ -72,6 +76,12 @@ public sealed class ExtensionContext
 
     /// <summary>Gets the editor services.</summary>
     public IEditorServices Editor { get; }
+
+    /// <summary>Gets the diagnostics service.</summary>
+    public IDiagnosticsService Diagnostics { get; }
+
+    /// <summary>Gets the terminal bridge service.</summary>
+    public ITerminalBridge Terminal { get; }
 
     /// <summary>Gets the settings service.</summary>
     public ISettings Settings { get; }

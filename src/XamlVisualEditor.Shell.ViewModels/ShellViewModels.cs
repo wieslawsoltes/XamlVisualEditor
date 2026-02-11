@@ -627,6 +627,12 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
     public int CaretOffset { get; set; }
 
     [Reactive]
+    public int SelectionStart { get; set; }
+
+    [Reactive]
+    public int SelectionLength { get; set; }
+
+    [Reactive]
     public int CurrentLine { get; set; } = 1;
 
     [Reactive]
@@ -4235,57 +4241,72 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
     }
 
-    private void CreateTerminalSession()
+    public TerminalViewModel CreateTerminalSession(TerminalSessionOptions options)
     {
         if (_terminalService is null)
         {
-            StatusText = "Terminal service unavailable.";
-            return;
+            throw new InvalidOperationException("Terminal service unavailable.");
         }
 
-        TerminalSessionOptions options = new()
+        TerminalSessionOptions resolved = new()
         {
-            Columns = 120,
-            Rows = 40,
-            ScrollbackLimit = 50000,
-            WorkingDirectory = string.IsNullOrWhiteSpace(_workspacePath)
-                ? Environment.CurrentDirectory
-                : System.IO.Path.GetDirectoryName(_workspacePath),
-            Environment = new Dictionary<string, string>
-            {
-                ["TERM"] = "xterm-256color",
-                ["COLORTERM"] = "truecolor"
-            }
+            Columns = options.Columns <= 0 ? 120 : options.Columns,
+            Rows = options.Rows <= 0 ? 40 : options.Rows,
+            ScrollbackLimit = options.ScrollbackLimit <= 0 ? 50000 : options.ScrollbackLimit,
+            WorkingDirectory = string.IsNullOrWhiteSpace(options.WorkingDirectory)
+                ? (string.IsNullOrWhiteSpace(_workspacePath)
+                    ? Environment.CurrentDirectory
+                    : System.IO.Path.GetDirectoryName(_workspacePath))
+                : options.WorkingDirectory,
+            Command = options.Command,
+            Arguments = options.Arguments ?? Array.Empty<string>(),
+            Environment = options.Environment is null || options.Environment.Count == 0
+                ? new Dictionary<string, string>
+                {
+                    ["TERM"] = "xterm-256color",
+                    ["COLORTERM"] = "truecolor"
+                }
+                : new Dictionary<string, string>(options.Environment)
         };
 
         string? logPath = Environment.GetEnvironmentVariable("XVE_TERMINAL_LOG");
         if (!string.IsNullOrWhiteSpace(logPath))
         {
-            options.EnableSequenceLog = true;
-            options.SequenceLogPath = logPath;
+            resolved.EnableSequenceLog = true;
+            resolved.SequenceLogPath = logPath;
         }
 
-        ITerminalSession session = _terminalService.CreateSession(options);
+        ITerminalSession session = _terminalService.CreateSession(resolved);
         TerminalViewModel terminalVm = new(session);
         terminalVm.Start();
         Terminals.Add(terminalVm);
 
-        if (DockLayout is null)
+        if (DockLayout is not null)
         {
-            StatusText = "Terminal started";
-            return;
-        }
-
-        TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
-        if (tool is not null)
-        {
-            _terminalTools[terminalVm.Id] = tool;
-            IDisposable titleSubscription = terminalVm.WhenAnyValue(x => x.Title)
-                .Subscribe(title => tool.Title = title);
-            _terminalTitleSubscriptions[terminalVm.Id] = titleSubscription;
+            TerminalTool? tool = DockFactory.AddTerminalTool(DockLayout, terminalVm);
+            if (tool is not null)
+            {
+                _terminalTools[terminalVm.Id] = tool;
+                IDisposable titleSubscription = terminalVm.WhenAnyValue(x => x.Title)
+                    .Subscribe(title => tool.Title = title);
+                _terminalTitleSubscriptions[terminalVm.Id] = titleSubscription;
+            }
         }
 
         StatusText = "Terminal started";
+        return terminalVm;
+    }
+
+    private void CreateTerminalSession()
+    {
+        try
+        {
+            CreateTerminalSession(new TerminalSessionOptions());
+        }
+        catch (InvalidOperationException)
+        {
+            StatusText = "Terminal service unavailable.";
+        }
     }
     private void OnDebugOutputReceived(DebugOutputEvent output)
     {
