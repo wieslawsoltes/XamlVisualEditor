@@ -3,19 +3,19 @@ using System.Collections.Generic;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-using Avalonia.Rendering.SceneGraph;
+using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using SkiaSharp;
-using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.Terminal.Avalonia.Controls;
 
-public sealed class TerminalControl : Control
+public sealed class TerminalControl : Control, ILogicalScrollable
 {
     private static readonly TimeSpan CaretBlinkInterval = TimeSpan.FromMilliseconds(600);
 
@@ -29,20 +29,33 @@ public sealed class TerminalControl : Control
             nameof(FontSize),
             13);
 
-    public static readonly DirectProperty<TerminalControl, TerminalViewModel?> TerminalViewModelProperty =
-        AvaloniaProperty.RegisterDirect<TerminalControl, TerminalViewModel?>(
+    public static readonly DirectProperty<TerminalControl, ITerminalViewModel?> TerminalViewModelProperty =
+        AvaloniaProperty.RegisterDirect<TerminalControl, ITerminalViewModel?>(
             nameof(TerminalViewModel),
             o => o.TerminalViewModel,
             (o, v) => o.TerminalViewModel = v);
 
-    private TerminalViewModel? _terminalViewModel;
+    private ITerminalViewModel? _terminalViewModel;
     private TerminalRenderState? _renderState;
-    private readonly DispatcherTimer _caretTimer;
+    private CompositionCustomVisual? _compositionVisual;
     private bool _isFocused;
-    private bool _isCaretVisible = true;
     private double _offsetY;
+    private Size _lastLayoutSize;
+    private int _lastColumns;
+    private int _lastRows;
+    private double _lastCellWidth;
+    private double _lastCellHeight;
+    private double _lastMetricsOffsetY;
+    private Size _extent;
+    private Size _viewport;
+    private Vector _logicalOffset;
+    private bool _canHorizontallyScroll;
+    private bool _canVerticallyScroll = true;
+    private EventHandler? _scrollInvalidated;
+    private Size _scrollSize = new(1, 1);
+    private Size _pageScrollSize = new(1, 1);
 
-    public TerminalViewModel? TerminalViewModel
+    public ITerminalViewModel? TerminalViewModel
     {
         get => _terminalViewModel;
         set
@@ -64,7 +77,8 @@ public sealed class TerminalControl : Control
             }
 
             UpdateRenderState();
-            InvalidateVisual();
+            InvalidateScrollable();
+            RequestRender();
         }
     }
 
@@ -84,33 +98,79 @@ public sealed class TerminalControl : Control
     {
         ClipToBounds = true;
         Focusable = true;
-        _caretTimer = new DispatcherTimer { Interval = CaretBlinkInterval };
-        _caretTimer.Tick += (_, _) => ToggleCaret();
+    }
+
+    Size IScrollable.Extent => _extent;
+
+    Vector IScrollable.Offset
+    {
+        get => _logicalOffset;
+        set => SetLogicalOffset(value);
+    }
+
+    Size IScrollable.Viewport => _viewport;
+
+    bool ILogicalScrollable.CanHorizontallyScroll
+    {
+        get => _canHorizontallyScroll;
+        set
+        {
+            if (_canHorizontallyScroll == value)
+            {
+                return;
+            }
+
+            _canHorizontallyScroll = value;
+            InvalidateScrollable();
+        }
+    }
+
+    bool ILogicalScrollable.CanVerticallyScroll
+    {
+        get => _canVerticallyScroll;
+        set
+        {
+            if (_canVerticallyScroll == value)
+            {
+                return;
+            }
+
+            _canVerticallyScroll = value;
+            InvalidateScrollable();
+        }
+    }
+
+    bool ILogicalScrollable.IsLogicalScrollEnabled => true;
+
+    event EventHandler? ILogicalScrollable.ScrollInvalidated
+    {
+        add => _scrollInvalidated += value;
+        remove => _scrollInvalidated -= value;
+    }
+
+    Size ILogicalScrollable.ScrollSize => _scrollSize;
+
+    Size ILogicalScrollable.PageScrollSize => _pageScrollSize;
+
+    bool ILogicalScrollable.BringIntoView(Control target, Rect targetRect)
+    {
+        return false;
+    }
+
+    Control? ILogicalScrollable.GetControlInDirection(NavigationDirection direction, Control? from)
+    {
+        return null;
+    }
+
+    void ILogicalScrollable.RaiseScrollInvalidated(EventArgs e)
+    {
+        _scrollInvalidated?.Invoke(this, e);
     }
 
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        if (_terminalViewModel is null)
-        {
-            return;
-        }
-
-        if (_renderState is null)
-        {
-            UpdateRenderState();
-        }
-
-        if (_renderState is null)
-        {
-            return;
-        }
-
-        bool showCaret = _isFocused
-            && (_terminalViewModel.Emulator.State.CursorBlink ? _isCaretVisible : true)
-            && _terminalViewModel.ScrollOffset == 0
-            && _terminalViewModel.Emulator.State.CursorVisible;
-        context.Custom(new TerminalDrawOperation(Bounds, _terminalViewModel, _renderState, showCaret, _offsetY));
+        context.FillRectangle(Brushes.Transparent, Bounds);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -120,49 +180,74 @@ public sealed class TerminalControl : Control
             change.Property == FontFamilyProperty ||
             change.Property == FontSizeProperty)
         {
-            UpdateRenderState();
-            InvalidateVisual();
+            _lastLayoutSize = Bounds.Size;
+            bool recreateRenderState = change.Property == FontFamilyProperty || change.Property == FontSizeProperty;
+            UpdateRenderState(recreateRenderState);
+            RequestRender();
         }
+    }
+
+    protected override void OnLoaded(RoutedEventArgs routedEventArgs)
+    {
+        base.OnLoaded(routedEventArgs);
+        _lastLayoutSize = Bounds.Size;
+        LayoutUpdated += OnLayoutUpdated;
+        EnsureCompositionVisual();
+        UpdateRenderState();
+        RequestRender();
+    }
+
+    protected override void OnUnloaded(RoutedEventArgs routedEventArgs)
+    {
+        base.OnUnloaded(routedEventArgs);
+        LayoutUpdated -= OnLayoutUpdated;
+        ReleaseCompositionVisual();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        _caretTimer.Stop();
-        _renderState?.Dispose();
-        _renderState = null;
+        LayoutUpdated -= OnLayoutUpdated;
+        ReleaseRenderStates();
+        ReleaseCompositionVisual();
+        InvalidateScrollable();
     }
 
     protected override void OnGotFocus(GotFocusEventArgs e)
     {
         base.OnGotFocus(e);
         _isFocused = true;
-        _isCaretVisible = true;
-        if (!_caretTimer.IsEnabled)
-        {
-            _caretTimer.Start();
-        }
-        InvalidateVisual();
+        RequestRender();
     }
 
     protected override void OnLostFocus(RoutedEventArgs e)
     {
         base.OnLostFocus(e);
         _isFocused = false;
-        _isCaretVisible = false;
-        _caretTimer.Stop();
-        InvalidateVisual();
+        RequestRender();
     }
 
-    private void UpdateRenderState()
+    private void UpdateRenderState(bool recreateRenderState = false)
     {
         if (_terminalViewModel is null)
         {
+            _renderState?.Dispose();
+            _renderState = null;
+            _offsetY = 0;
+            _lastColumns = 0;
+            _lastRows = 0;
+            _lastCellWidth = 0;
+            _lastCellHeight = 0;
+            _lastMetricsOffsetY = 0;
             return;
         }
 
-        Typeface typeface = new(FontFamily, FontStyle.Normal, FontWeight.Normal);
-        _renderState = TerminalRenderState.Create(typeface, FontSize);
+        if (_renderState is null || recreateRenderState)
+        {
+            Typeface typeface = new(FontFamily, FontStyle.Normal, FontWeight.Normal);
+            _renderState?.Dispose();
+            _renderState = TerminalRenderState.Create(typeface, FontSize);
+        }
 
         int cols = (int)Math.Floor(Bounds.Width / _renderState.CellSize.Width);
         int rows = (int)Math.Floor(Bounds.Height / _renderState.CellSize.Height);
@@ -171,88 +256,402 @@ public sealed class TerminalControl : Control
         _offsetY = MathF.Round((float)remainderOffset);
         if (cols > 0 && rows > 0)
         {
-            _terminalViewModel.SetMetrics(new TerminalMetrics(_renderState.CellSize.Width, _renderState.CellSize.Height, 0, _offsetY));
-            _terminalViewModel.Resize(cols, rows);
-        }
-
-        if (_isFocused)
-        {
-            _isCaretVisible = true;
-            if (!_caretTimer.IsEnabled)
+            if (NeedsMetricsUpdate(_renderState.CellSize.Width, _renderState.CellSize.Height, _offsetY))
             {
-                _caretTimer.Start();
+                _terminalViewModel.SetMetrics(new TerminalMetrics(_renderState.CellSize.Width, _renderState.CellSize.Height, 0, _offsetY));
+                _lastCellWidth = _renderState.CellSize.Width;
+                _lastCellHeight = _renderState.CellSize.Height;
+                _lastMetricsOffsetY = _offsetY;
+            }
+
+            if (cols != _lastColumns || rows != _lastRows)
+            {
+                _terminalViewModel.Resize(cols, rows);
+                _lastColumns = cols;
+                _lastRows = rows;
             }
         }
+        else
+        {
+            _lastColumns = 0;
+            _lastRows = 0;
+        }
+
+        InvalidateScrollable();
+    }
+
+    private void ReleaseRenderStates()
+    {
+        _renderState?.Dispose();
+        _renderState = null;
     }
 
     private void OnFrameInvalidated()
     {
-        _isCaretVisible = true;
-        if (_isFocused && !_caretTimer.IsEnabled)
+        Dispatcher.UIThread.Post(() =>
         {
-            _caretTimer.Start();
-        }
-        Dispatcher.UIThread.Post(InvalidateVisual);
+            InvalidateScrollable();
+            RequestRender();
+        });
     }
 
-    private void ToggleCaret()
+    private void SetLogicalOffset(Vector value)
     {
-        if (!_isFocused)
+        Vector coerced = CoerceOffset(value);
+        if (AreClose(_logicalOffset, coerced))
         {
             return;
         }
 
-        _isCaretVisible = !_isCaretVisible;
-        InvalidateVisual();
+        _logicalOffset = coerced;
+        ApplyLogicalOffsetToViewModel();
+        ((ILogicalScrollable)this).RaiseScrollInvalidated(EventArgs.Empty);
+        RequestRender();
     }
 
-    private sealed class TerminalDrawOperation : ICustomDrawOperation
+    private void ApplyLogicalOffsetToViewModel()
     {
-        private readonly Rect _bounds;
-        private readonly TerminalViewModel _viewModel;
-        private readonly TerminalRenderState _state;
-
-        private readonly bool _showCaret;
-
-        private readonly double _offsetY;
-
-        public TerminalDrawOperation(Rect bounds, TerminalViewModel viewModel, TerminalRenderState state, bool showCaret, double offsetY)
+        if (_terminalViewModel is null)
         {
-            _bounds = bounds;
-            _viewModel = viewModel;
-            _state = state;
-            _showCaret = showCaret;
-            _offsetY = offsetY;
+            return;
         }
 
-        public Rect Bounds => _bounds;
+        double maxY = Math.Max(_extent.Height - _viewport.Height, 0);
+        int targetOffset = (int)Math.Round(maxY - _logicalOffset.Y);
+        _terminalViewModel.SetScrollOffset(targetOffset);
+    }
 
-        public void Dispose()
+    private void InvalidateScrollable()
+    {
+        if (_terminalViewModel is null)
         {
+            _extent = default;
+            _viewport = default;
+            _logicalOffset = default;
+            _scrollSize = new Size(1, 1);
+            _pageScrollSize = new Size(1, 1);
+            ((ILogicalScrollable)this).RaiseScrollInvalidated(EventArgs.Empty);
+            return;
         }
 
-        public bool HitTest(Point p) => _bounds.Contains(p);
+        int columns = 1;
+        int rows = 1;
+        int scrollback = 0;
 
-        public void Render(ImmediateDrawingContext context)
+        _terminalViewModel.Emulator.Read((buffer, _) =>
         {
-            object? featureObj = context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature));
-            if (featureObj is not ISkiaSharpApiLeaseFeature feature)
+            columns = Math.Max(1, buffer.Columns);
+            rows = Math.Max(1, buffer.Rows);
+            scrollback = Math.Max(0, buffer.ScrollbackCount);
+        });
+
+        _viewport = new Size(columns, rows);
+        _extent = new Size(columns, rows + scrollback);
+        _scrollSize = new Size(1, 1);
+        _pageScrollSize = _viewport;
+
+        double maxY = Math.Max(_extent.Height - _viewport.Height, 0);
+        int clampedOffset = Math.Clamp(_terminalViewModel.ScrollOffset, 0, (int)Math.Round(maxY));
+        _logicalOffset = CoerceOffset(new Vector(0, maxY - clampedOffset));
+
+        ((ILogicalScrollable)this).RaiseScrollInvalidated(EventArgs.Empty);
+    }
+
+    private Vector CoerceOffset(Vector value)
+    {
+        double maxX = _canHorizontallyScroll ? Math.Max(_extent.Width - _viewport.Width, 0) : 0;
+        double maxY = _canVerticallyScroll ? Math.Max(_extent.Height - _viewport.Height, 0) : 0;
+        return new Vector(Clamp(value.X, 0, maxX), Clamp(value.Y, 0, maxY));
+    }
+
+    private static bool AreClose(Vector left, Vector right)
+    {
+        return Math.Abs(left.X - right.X) < 0.001 && Math.Abs(left.Y - right.Y) < 0.001;
+    }
+
+    private static bool AreClose(double left, double right)
+    {
+        return Math.Abs(left - right) < 0.001;
+    }
+
+    private bool NeedsMetricsUpdate(double cellWidth, double cellHeight, double offsetY)
+    {
+        return !AreClose(_lastCellWidth, cellWidth)
+            || !AreClose(_lastCellHeight, cellHeight)
+            || !AreClose(_lastMetricsOffsetY, offsetY);
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        return value < min ? min : value > max ? max : value;
+    }
+
+    private bool IsCaretVisible()
+    {
+        if (_terminalViewModel is null)
+        {
+            return false;
+        }
+
+        return _isFocused
+            && _terminalViewModel.ScrollOffset == 0
+            && _terminalViewModel.Emulator.State.CursorVisible;
+    }
+
+    private bool IsCaretBlinkEnabled()
+    {
+        return _terminalViewModel?.Emulator.State.CursorBlink ?? false;
+    }
+
+    private void RequestRender()
+    {
+        EnsureCompositionVisual();
+        UpdateCompositionVisual();
+    }
+
+    private void EnsureCompositionVisual()
+    {
+        if (_compositionVisual is not null)
+        {
+            return;
+        }
+
+        CompositionVisual? elementVisual = ElementComposition.GetElementVisual(this);
+        Compositor? compositor = elementVisual?.Compositor;
+        if (compositor is null)
+        {
+            return;
+        }
+
+        _compositionVisual = compositor.CreateCustomVisual(new TerminalCompositionCustomVisualHandler(() => _terminalViewModel));
+        ElementComposition.SetElementChildVisual(this, _compositionVisual);
+        UpdateCompositionVisual();
+    }
+
+    private void ReleaseCompositionVisual()
+    {
+        if (_compositionVisual is null)
+        {
+            return;
+        }
+
+        _compositionVisual.SendHandlerMessage(new TerminalVisualPayload(
+            TerminalVisualCommand.Dispose,
+            0,
+            false,
+            false,
+            string.Empty,
+            0));
+        _compositionVisual = null;
+    }
+
+    private void UpdateCompositionVisual()
+    {
+        if (_compositionVisual is null)
+        {
+            return;
+        }
+
+        _compositionVisual.Size = new System.Numerics.Vector2((float)Math.Max(0, Bounds.Width), (float)Math.Max(0, Bounds.Height));
+        _compositionVisual.SendHandlerMessage(new TerminalVisualPayload(
+            TerminalVisualCommand.Update,
+            _offsetY,
+            IsCaretVisible(),
+            IsCaretBlinkEnabled(),
+            FontFamily.Name,
+            FontSize));
+    }
+
+    private void OnLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (_lastLayoutSize == Bounds.Size)
+        {
+            return;
+        }
+
+        _lastLayoutSize = Bounds.Size;
+        UpdateRenderState();
+        RequestRender();
+    }
+
+    private enum TerminalVisualCommand
+    {
+        Update,
+        Dispose
+    }
+
+    private readonly record struct TerminalVisualPayload(
+        TerminalVisualCommand Command,
+        double OffsetY,
+        bool CaretVisible,
+        bool CaretBlink,
+        string FontFamilyName,
+        double FontSize);
+
+    private sealed class TerminalCompositionCustomVisualHandler : CompositionCustomVisualHandler
+    {
+        private readonly Func<ITerminalViewModel?> _getViewModel;
+        private TerminalRenderState? _renderState;
+        private readonly List<TerminalRenderState> _retiredRenderStates = new();
+        private double _offsetY;
+        private bool _caretVisible;
+        private bool _caretBlink;
+        private bool _caretBlinkState = true;
+        private TimeSpan? _lastBlinkToggle;
+        private bool _running;
+        private string _fontFamilyName = string.Empty;
+        private double _fontSize;
+
+        public TerminalCompositionCustomVisualHandler(Func<ITerminalViewModel?> getViewModel)
+        {
+            _getViewModel = getViewModel;
+        }
+
+        public override void OnMessage(object message)
+        {
+            if (message is not TerminalVisualPayload payload)
             {
                 return;
             }
 
-            using ISkiaSharpApiLease lease = feature.Lease();
-            SKCanvas canvas = lease.SkCanvas;
-            TerminalRenderer.Render(canvas, _bounds, _viewModel, _state, _showCaret, _offsetY);
+            switch (payload.Command)
+            {
+                case TerminalVisualCommand.Update:
+                    bool resetBlinkState = _caretVisible != payload.CaretVisible || _caretBlink != payload.CaretBlink;
+                    _offsetY = payload.OffsetY;
+                    _caretVisible = payload.CaretVisible;
+                    _caretBlink = payload.CaretBlink;
+                    UpdateRenderState(payload.FontFamilyName, payload.FontSize);
+                    UpdateAnimationState(resetBlinkState);
+                    Invalidate();
+                    RegisterForNextAnimationFrameUpdate();
+                    break;
+
+                case TerminalVisualCommand.Dispose:
+                    _running = false;
+                    _caretVisible = false;
+                    _caretBlink = false;
+                    _caretBlinkState = true;
+                    _lastBlinkToggle = null;
+                    _offsetY = 0;
+                    DisposeRenderState();
+                    DisposeRetiredRenderStates();
+                    _fontFamilyName = string.Empty;
+                    _fontSize = 0;
+                    break;
+            }
         }
 
-        public bool Equals(ICustomDrawOperation? other)
+        public override void OnAnimationFrameUpdate()
         {
-            return other is TerminalDrawOperation op
-                && op._viewModel == _viewModel
-                && op._bounds == _bounds
-                && op._showCaret == _showCaret
-                && Math.Abs(op._offsetY - _offsetY) < 0.5;
+            if (!_running)
+            {
+                return;
+            }
+
+            TimeSpan now = CompositionNow;
+            if (_lastBlinkToggle is null)
+            {
+                _lastBlinkToggle = now;
+            }
+            else
+            {
+                TimeSpan elapsed = now - _lastBlinkToggle.Value;
+                if (elapsed >= CaretBlinkInterval)
+                {
+                    long tickSteps = elapsed.Ticks / CaretBlinkInterval.Ticks;
+                    if ((tickSteps & 1L) == 1L)
+                    {
+                        _caretBlinkState = !_caretBlinkState;
+                    }
+
+                    _lastBlinkToggle = _lastBlinkToggle.Value + TimeSpan.FromTicks(tickSteps * CaretBlinkInterval.Ticks);
+                    Invalidate();
+                }
+            }
+
+            RegisterForNextAnimationFrameUpdate();
+        }
+
+        public override void OnRender(ImmediateDrawingContext context)
+        {
+            if (_retiredRenderStates.Count > 0)
+            {
+                DisposeRetiredRenderStates();
+            }
+
+            ITerminalViewModel? viewModel = _getViewModel();
+            if (viewModel is null || _renderState is null)
+            {
+                return;
+            }
+
+            object? featureObj = context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature));
+            if (featureObj is not ISkiaSharpApiLeaseFeature leaseFeature)
+            {
+                return;
+            }
+
+            using ISkiaSharpApiLease lease = leaseFeature.Lease();
+            SKCanvas canvas = lease.SkCanvas;
+            Rect bounds = new(GetRenderBounds().Size);
+            bool showCaret = _caretVisible && (!_caretBlink || _caretBlinkState);
+            TerminalRenderer.Render(canvas, bounds, viewModel, _renderState, showCaret, _offsetY);
+        }
+
+        private void UpdateRenderState(string fontFamilyName, double fontSize)
+        {
+            if (_renderState is not null
+                && string.Equals(_fontFamilyName, fontFamilyName, StringComparison.Ordinal)
+                && Math.Abs(_fontSize - fontSize) < 0.01)
+            {
+                return;
+            }
+
+            if (_renderState is not null)
+            {
+                _retiredRenderStates.Add(_renderState);
+            }
+
+            Typeface typeface = new(new FontFamily(fontFamilyName), FontStyle.Normal, FontWeight.Normal);
+            _renderState = TerminalRenderState.Create(typeface, fontSize);
+            _fontFamilyName = fontFamilyName;
+            _fontSize = fontSize;
+        }
+
+        private void UpdateAnimationState(bool resetBlinkState)
+        {
+            bool shouldAnimate = _caretVisible && _caretBlink;
+            if (!shouldAnimate)
+            {
+                _running = false;
+                _caretBlinkState = true;
+                _lastBlinkToggle = null;
+                return;
+            }
+
+            if (!_running || resetBlinkState)
+            {
+                _running = true;
+                _caretBlinkState = true;
+                _lastBlinkToggle = null;
+            }
+        }
+
+        private void DisposeRenderState()
+        {
+            _renderState?.Dispose();
+            _renderState = null;
+        }
+
+        private void DisposeRetiredRenderStates()
+        {
+            for (int i = 0; i < _retiredRenderStates.Count; i++)
+            {
+                _retiredRenderStates[i].Dispose();
+            }
+
+            _retiredRenderStates.Clear();
         }
     }
 
@@ -510,9 +909,9 @@ public sealed class TerminalControl : Control
 
     private static class TerminalRenderer
     {
-        public static void Render(SKCanvas canvas, Rect bounds, TerminalViewModel viewModel, TerminalRenderState state, bool showCaret, double offsetY)
+        public static void Render(SKCanvas canvas, Rect bounds, ITerminalViewModel viewModel, TerminalRenderState state, bool showCaret, double offsetY)
         {
-            TerminalEmulator emulator = viewModel.Emulator;
+            ITerminalEmulator emulator = viewModel.Emulator;
             TerminalTheme theme = viewModel.Theme;
 
             float cellWidth = state.CellSize.Width;

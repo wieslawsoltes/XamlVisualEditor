@@ -5,7 +5,7 @@ namespace XamlVisualEditor.Terminal;
 
 public interface ITerminalSession : IDisposable
 {
-    TerminalEmulator Emulator { get; }
+    ITerminalEmulator Emulator { get; }
     event Action? ScreenUpdated;
     event Action<string>? TitleChanged;
     void Start();

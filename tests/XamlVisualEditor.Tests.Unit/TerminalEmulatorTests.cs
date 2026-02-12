@@ -208,6 +208,19 @@ public sealed class TerminalEmulatorTests
         Assert.Equal(TerminalColor.FromIndex(1), cell.Attributes.Foreground);
     }
 
+    [Fact]
+    public void VerticalGrowKeepsTopAnchoredPromptAfterInitialShrink()
+    {
+        TerminalEmulator emulator = new(120, 40);
+        emulator.Resize(120, 12);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("PROMPT"));
+
+        emulator.Resize(120, 30);
+
+        TerminalLine top = emulator.ActiveBuffer.GetLine(0);
+        Assert.Equal('P', (char)top.Cells[0].Rune.Value);
+    }
+
     public static IEnumerable<object[]> NrcCharsetCases => new[]
     {
         new object[] { 'A', "£@[\\]^_`{|}~" },

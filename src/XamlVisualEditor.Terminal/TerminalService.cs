@@ -10,11 +10,16 @@ public interface ITerminalService
 public sealed class TerminalService : ITerminalService
 {
     private readonly IPtyProvider _ptyProvider;
+    private readonly ITerminalEmulatorFactory _emulatorFactory;
     private readonly ILoggerFactory? _loggerFactory;
 
-    public TerminalService(IPtyProvider ptyProvider, ILoggerFactory? loggerFactory = null)
+    public TerminalService(
+        IPtyProvider ptyProvider,
+        ITerminalEmulatorFactory emulatorFactory,
+        ILoggerFactory? loggerFactory = null)
     {
         _ptyProvider = ptyProvider;
+        _emulatorFactory = emulatorFactory;
         _loggerFactory = loggerFactory;
     }
 
@@ -23,6 +28,7 @@ public sealed class TerminalService : ITerminalService
         return new TerminalSession(
             options,
             _ptyProvider,
+            _emulatorFactory,
             _loggerFactory?.CreateLogger<TerminalSession>());
     }
 }

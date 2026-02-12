@@ -11,6 +11,7 @@ public sealed class TerminalSession : ITerminalSession
 {
     private readonly TerminalSessionOptions _options;
     private readonly IPtyProvider _ptyProvider;
+    private readonly ITerminalEmulatorFactory _emulatorFactory;
     private readonly ILogger<TerminalSession> _logger;
     private readonly Dictionary<string, int> _unhandledCounts = new(StringComparer.Ordinal);
     private readonly TerminalSequenceLogger? _sequenceLogger;
@@ -18,23 +19,25 @@ public sealed class TerminalSession : ITerminalSession
     private CancellationTokenSource? _cts;
     private Task? _readLoop;
 
-    public TerminalEmulator Emulator { get; }
+    public ITerminalEmulator Emulator { get; }
     public event Action? ScreenUpdated;
     public event Action<string>? TitleChanged;
 
     public TerminalSession(
         TerminalSessionOptions options,
         IPtyProvider ptyProvider,
+        ITerminalEmulatorFactory emulatorFactory,
         ILogger<TerminalSession>? logger = null)
     {
         _options = options;
         _ptyProvider = ptyProvider;
+        _emulatorFactory = emulatorFactory;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<TerminalSession>.Instance;
         if (_options.EnableSequenceLog && !string.IsNullOrWhiteSpace(_options.SequenceLogPath))
         {
             _sequenceLogger = new TerminalSequenceLogger(_options.SequenceLogPath);
         }
-        Emulator = new TerminalEmulator(options.Columns, options.Rows);
+        Emulator = _emulatorFactory.Create(options.Columns, options.Rows);
         Emulator.SetScrollbackLimit(options.ScrollbackLimit);
         Emulator.ScreenUpdated += () => ScreenUpdated?.Invoke();
         Emulator.TitleChanged += title => TitleChanged?.Invoke(title);

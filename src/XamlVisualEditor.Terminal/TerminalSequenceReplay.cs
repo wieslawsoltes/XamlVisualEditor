@@ -44,7 +44,7 @@ public static class TerminalSequenceReplay
         return entries;
     }
 
-    public static void ReplayOutput(TerminalEmulator emulator, IReadOnlyList<Entry> entries)
+    public static void ReplayOutput(ITerminalEmulator emulator, IReadOnlyList<Entry> entries)
     {
         foreach (Entry entry in entries)
         {

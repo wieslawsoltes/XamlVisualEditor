@@ -8,7 +8,7 @@ using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class TerminalViewModel : ReactiveObject, IDisposable
+public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDisposable
 {
     private readonly ITerminalSession _session;
     private TerminalMetrics _metrics;
@@ -26,7 +26,7 @@ public sealed class TerminalViewModel : ReactiveObject, IDisposable
 
     public TerminalTheme Theme { get; } = TerminalTheme.DefaultDark;
 
-    public TerminalEmulator Emulator => _session.Emulator;
+    public ITerminalEmulator Emulator => _session.Emulator;
 
     public TerminalSelection Selection { get; private set; }
 
@@ -254,13 +254,18 @@ public sealed class TerminalViewModel : ReactiveObject, IDisposable
 
     public void ScrollByLines(int delta)
     {
-        int scrollback = Emulator.ActiveBuffer.Scrollback.Count;
-        if (scrollback <= 0)
+        if (delta == 0)
         {
             return;
         }
 
-        int next = Math.Clamp(_scrollOffset + delta, 0, scrollback);
+        SetScrollOffset(_scrollOffset + delta);
+    }
+
+    public void SetScrollOffset(int offset)
+    {
+        int scrollback = Emulator.ActiveBuffer.ScrollbackCount;
+        int next = Math.Clamp(offset, 0, scrollback);
         if (next == _scrollOffset)
         {
             return;
@@ -272,13 +277,7 @@ public sealed class TerminalViewModel : ReactiveObject, IDisposable
 
     public void ResetScrollback()
     {
-        if (_scrollOffset == 0)
-        {
-            return;
-        }
-
-        _scrollOffset = 0;
-        FrameInvalidated?.Invoke();
+        SetScrollOffset(0);
     }
 
     public string GetSelectedText()
@@ -362,80 +361,5 @@ public sealed class TerminalViewModel : ReactiveObject, IDisposable
         _session.ScreenUpdated -= OnScreenUpdated;
         Emulator.ClipboardCopyRequested -= _clipboardHandler;
         _session.Dispose();
-    }
-}
-
-public readonly struct TerminalMetrics
-{
-    public double CellWidth { get; }
-    public double CellHeight { get; }
-    public double OffsetX { get; }
-    public double OffsetY { get; }
-
-    public TerminalMetrics(double cellWidth, double cellHeight, double offsetX, double offsetY)
-    {
-        CellWidth = cellWidth;
-        CellHeight = cellHeight;
-        OffsetX = offsetX;
-        OffsetY = offsetY;
-    }
-}
-
-public readonly struct TerminalSelection
-{
-    public static TerminalSelection Empty => new(false, 0, 0, 0, 0);
-
-    public bool IsActive { get; }
-    public int StartRow { get; }
-    public int StartColumn { get; }
-    public int EndRow { get; }
-    public int EndColumn { get; }
-
-    private TerminalSelection(bool active, int startRow, int startColumn, int endRow, int endColumn)
-    {
-        IsActive = active;
-        StartRow = startRow;
-        StartColumn = startColumn;
-        EndRow = endRow;
-        EndColumn = endColumn;
-    }
-
-    public static TerminalSelection Start(int row, int col)
-    {
-        return new TerminalSelection(true, row, col, row, col);
-    }
-
-    public TerminalSelection WithEnd(int row, int col)
-    {
-        return new TerminalSelection(IsActive, StartRow, StartColumn, row, col);
-    }
-
-    public TerminalSelection Normalize()
-    {
-        if (StartRow < EndRow || (StartRow == EndRow && StartColumn <= EndColumn))
-        {
-            return this;
-        }
-
-        return new TerminalSelection(IsActive, EndRow, EndColumn, StartRow, StartColumn);
-    }
-
-    public TerminalSelection ShiftForScrollback(int oldScrollbackCount, int delta, int totalLines)
-    {
-        if (!IsActive || delta == 0)
-        {
-            return this;
-        }
-
-        int startRow = ShiftRow(StartRow, oldScrollbackCount, delta, totalLines);
-        int endRow = ShiftRow(EndRow, oldScrollbackCount, delta, totalLines);
-        return new TerminalSelection(IsActive, startRow, StartColumn, endRow, EndColumn);
-    }
-
-    private static int ShiftRow(int row, int oldScrollbackCount, int delta, int totalLines)
-    {
-        int shifted = row >= oldScrollbackCount ? row + delta : row;
-        int maxRow = Math.Max(0, totalLines - 1);
-        return Math.Clamp(shifted, 0, maxRow);
     }
 }

@@ -369,6 +369,21 @@ public sealed class TerminalBuffer
                 reflowed.Add(target);
             }
 
+            // If resize history contains only synthetic empty scrollback and the live buffer starts with
+            // visible content, drop that empty prefix so vertical growth keeps content anchored at the top.
+            if (ShouldTrimSyntheticEmptyScrollback(attributes))
+            {
+                int trimCount = Math.Min(_scrollback.Count, Math.Max(0, reflowed.Count - 1));
+                if (trimCount > 0)
+                {
+                    reflowed.RemoveRange(0, trimCount);
+                    for (int i = 0; i < positionCount; i++)
+                    {
+                        mappedRows[i] = Math.Max(0, mappedRows[i] - trimCount);
+                    }
+                }
+            }
+
             int splitIndex = Math.Max(0, reflowed.Count - rows);
             int scrollbackStart = Math.Max(0, splitIndex - ScrollbackLimit);
             _scrollback.Clear();
@@ -599,5 +614,33 @@ public sealed class TerminalBuffer
             && cell.Rune.Value == ' '
             && cell.HyperlinkId is null
             && cell.Attributes.Equals(attributes);
+    }
+
+    private bool ShouldTrimSyntheticEmptyScrollback(TerminalAttributes attributes)
+    {
+        if (_scrollback.Count == 0 || _lines.Length == 0)
+        {
+            return false;
+        }
+
+        if (!LineHasContent(_lines[0], attributes))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < _scrollback.Count; i++)
+        {
+            if (LineHasContent(_scrollback[i], attributes))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool LineHasContent(TerminalLine line, TerminalAttributes attributes)
+    {
+        return line.IsWrapped || GetTrimmedLength(line, attributes) > 0;
     }
 }

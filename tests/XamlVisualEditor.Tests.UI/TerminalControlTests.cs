@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -75,6 +76,33 @@ public sealed class TerminalControlTests
     }
 
     [AvaloniaFact]
+    public async Task TerminalControl_MouseFocus_KeyDown_Enter_SendsCarriageReturn()
+    {
+        TestTerminalSession session = new();
+        TerminalViewModel vm = new(session);
+        TerminalView view = new() { DataContext = vm };
+
+        Window window = await ShowInWindowAsync(view);
+        try
+        {
+            TerminalControl control = GetTerminalControl(view);
+            Point center = new(control.Bounds.Width / 2, control.Bounds.Height / 2);
+            window.MouseDown(center, MouseButton.Left, RawInputModifiers.LeftMouseButton);
+            window.MouseUp(center, MouseButton.Left, RawInputModifiers.None);
+            await Dispatcher.UIThread.InvokeAsync(() => { });
+
+            PressKey(window, Key.Enter);
+            await Dispatcher.UIThread.InvokeAsync(() => { });
+
+            Assert.Contains("\r", session.GetWrittenText());
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TerminalControl_Resize_UpdatesSession()
     {
         TestTerminalSession session = new();
@@ -90,6 +118,64 @@ public sealed class TerminalControlTests
             (int Columns, int Rows) last = session.ResizeCalls[^1];
             Assert.True(last.Columns > 0);
             Assert.True(last.Rows > 0);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TerminalControl_LogicalScrollable_ExtentReflectsScrollback()
+    {
+        TestTerminalSession session = new();
+        TerminalViewModel vm = new(session);
+        TerminalView view = new() { DataContext = vm };
+
+        Window window = await ShowInWindowAsync(view, width: 640, height: 320);
+        try
+        {
+            AppendLines(session.Emulator, 300);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            TerminalControl control = GetTerminalControl(view);
+            IScrollable scrollable = control;
+
+            Assert.True(scrollable.Extent.Height > scrollable.Viewport.Height);
+            double maxOffset = scrollable.Extent.Height - scrollable.Viewport.Height;
+            Assert.True(Math.Abs(scrollable.Offset.Y - maxOffset) < 0.001);
+            Assert.Equal(0, vm.ScrollOffset);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TerminalControl_LogicalScrollable_OffsetSetterUpdatesViewModel()
+    {
+        TestTerminalSession session = new();
+        TerminalViewModel vm = new(session);
+        TerminalView view = new() { DataContext = vm };
+
+        Window window = await ShowInWindowAsync(view, width: 640, height: 320);
+        try
+        {
+            AppendLines(session.Emulator, 300);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            TerminalControl control = GetTerminalControl(view);
+            IScrollable scrollable = control;
+            double maxOffset = scrollable.Extent.Height - scrollable.Viewport.Height;
+
+            scrollable.Offset = new Vector(0, 0);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            Assert.Equal((int)Math.Round(maxOffset), vm.ScrollOffset);
+
+            scrollable.Offset = new Vector(0, maxOffset);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            Assert.Equal(0, vm.ScrollOffset);
         }
         finally
         {
@@ -135,6 +221,18 @@ public sealed class TerminalControlTests
         return window;
     }
 
+    private static void AppendLines(ITerminalEmulator emulator, int lineCount)
+    {
+        StringBuilder builder = new();
+        for (int i = 0; i < lineCount; i++)
+        {
+            builder.Append("line ").Append(i).Append('\n');
+        }
+
+        byte[] data = Encoding.UTF8.GetBytes(builder.ToString());
+        emulator.ProcessInput(data);
+    }
+
     private static void PressKey(TopLevel window, Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
         window.KeyPress(key, modifiers, MapPhysicalKey(key), string.Empty);
@@ -154,7 +252,7 @@ public sealed class TerminalControlTests
 
     private sealed class TestTerminalSession : ITerminalSession
     {
-        public TerminalEmulator Emulator { get; }
+        public ITerminalEmulator Emulator { get; }
         public List<(int Columns, int Rows)> ResizeCalls { get; } = new();
         private readonly List<byte[]> _writes = new();
 

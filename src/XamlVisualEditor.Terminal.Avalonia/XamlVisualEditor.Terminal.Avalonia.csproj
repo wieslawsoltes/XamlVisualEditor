@@ -9,6 +9,5 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
-    <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
   </ItemGroup>
 </Project>

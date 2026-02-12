@@ -110,7 +110,7 @@ public sealed class TerminalGoldenRenderTests
 
     private sealed class TestTerminalSession : ITerminalSession
     {
-        public TerminalEmulator Emulator { get; }
+        public ITerminalEmulator Emulator { get; }
 
         public event Action? ScreenUpdated;
         public event Action<string>? TitleChanged;

@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace XamlVisualEditor.Terminal;
 
-public sealed class TerminalEmulator
+public sealed class TerminalEmulator : ITerminalEmulator
 {
     private readonly object _sync = new();
     private readonly TerminalParser _parser = new();

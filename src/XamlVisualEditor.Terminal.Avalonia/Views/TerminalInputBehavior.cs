@@ -7,7 +7,6 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
-using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.Terminal.Avalonia.Views;
@@ -17,27 +16,27 @@ public sealed class TerminalInputBehavior
     private static readonly ConditionalWeakTable<Control, SpaceInputState> s_spaceState = new();
     private static readonly ConditionalWeakTable<Control, ClipboardSubscription> s_clipboardSubscriptions = new();
 
-    public static readonly AttachedProperty<TerminalViewModel?> ViewModelProperty =
-        AvaloniaProperty.RegisterAttached<TerminalInputBehavior, Control, TerminalViewModel?>("ViewModel");
+    public static readonly AttachedProperty<ITerminalViewModel?> ViewModelProperty =
+        AvaloniaProperty.RegisterAttached<TerminalInputBehavior, Control, ITerminalViewModel?>("ViewModel");
 
     static TerminalInputBehavior()
     {
         ViewModelProperty.Changed.AddClassHandler<Control>(OnViewModelChanged);
     }
 
-    public static TerminalViewModel? GetViewModel(Control control)
+    public static ITerminalViewModel? GetViewModel(Control control)
     {
         return control.GetValue(ViewModelProperty);
     }
 
-    public static void SetViewModel(Control control, TerminalViewModel? value)
+    public static void SetViewModel(Control control, ITerminalViewModel? value)
     {
         control.SetValue(ViewModelProperty, value);
     }
 
     private static void OnViewModelChanged(Control control, AvaloniaPropertyChangedEventArgs e)
     {
-        if (e.NewValue is TerminalViewModel && e.OldValue is null)
+        if (e.NewValue is ITerminalViewModel && e.OldValue is null)
         {
             control.Focusable = true;
             control.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -47,9 +46,9 @@ public sealed class TerminalInputBehavior
             control.AddHandler(InputElement.PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
             control.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
             control.Focus();
-            AttachClipboard(control, (TerminalViewModel)e.NewValue);
+            AttachClipboard(control, (ITerminalViewModel)e.NewValue);
         }
-        else if (e.NewValue is null && e.OldValue is TerminalViewModel)
+        else if (e.NewValue is null && e.OldValue is ITerminalViewModel)
         {
             control.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
             control.RemoveHandler(InputElement.TextInputEvent, OnTextInput);
@@ -75,7 +74,7 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        TerminalViewModel? vm = GetViewModel(control);
+        ITerminalViewModel? vm = GetViewModel(control);
         if (vm is null)
         {
             return;
@@ -97,7 +96,7 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        TerminalViewModel? vm = GetViewModel(control);
+        ITerminalViewModel? vm = GetViewModel(control);
         if (vm is null)
         {
             return;
@@ -129,7 +128,7 @@ public sealed class TerminalInputBehavior
 
         if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None)
         {
-            TerminalViewModel? vmSpace = GetViewModel(control);
+            ITerminalViewModel? vmSpace = GetViewModel(control);
             if (vmSpace is not null)
             {
                 SpaceInputState state = s_spaceState.GetOrCreateValue(control);
@@ -163,7 +162,7 @@ public sealed class TerminalInputBehavior
         }
 
         control.Focus();
-        TerminalViewModel? vm = GetViewModel(control);
+        ITerminalViewModel? vm = GetViewModel(control);
         if (vm is null)
         {
             return;
@@ -200,7 +199,7 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        TerminalViewModel? vm = GetViewModel(control);
+        ITerminalViewModel? vm = GetViewModel(control);
         if (vm is null)
         {
             return;
@@ -231,7 +230,7 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        TerminalViewModel? vm = GetViewModel(control);
+        ITerminalViewModel? vm = GetViewModel(control);
         if (vm is null)
         {
             return;
@@ -256,7 +255,7 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        TerminalViewModel? vm = GetViewModel(control);
+        ITerminalViewModel? vm = GetViewModel(control);
         if (vm is null)
         {
             return;
@@ -272,6 +271,14 @@ public sealed class TerminalInputBehavior
                 vm.SendMouseReport(row, col, TerminalMouseButton.None, TerminalMouseAction.Release);
                 e.Handled = true;
             }
+
+            return;
+        }
+
+        if (control.FindAncestorOfType<ScrollViewer>() is not null)
+        {
+            // Let ScrollViewer drive the terminal's logical scroll implementation.
+            return;
         }
 
         int delta = e.Delta.Y > 0 ? 3 : -3;
@@ -372,7 +379,7 @@ public sealed class TerminalInputBehavior
         }
     }
 
-    private static void AttachClipboard(Control control, TerminalViewModel viewModel)
+    private static void AttachClipboard(Control control, ITerminalViewModel viewModel)
     {
         ClipboardSubscription subscription = s_clipboardSubscriptions.GetOrCreateValue(control);
         subscription.Attach(viewModel, text => _ = SetClipboardAsync(control, text));
@@ -404,10 +411,10 @@ public sealed class TerminalInputBehavior
 
     private sealed class ClipboardSubscription
     {
-        private TerminalViewModel? _viewModel;
+        private ITerminalViewModel? _viewModel;
         private Action<string>? _handler;
 
-        public void Attach(TerminalViewModel viewModel, Action<string> handler)
+        public void Attach(ITerminalViewModel viewModel, Action<string> handler)
         {
             Detach();
             _viewModel = viewModel;
