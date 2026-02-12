@@ -533,6 +533,7 @@ public sealed class InfiniteCanvasDocument : Document
 public sealed class XamlEditorDockFactory : Factory
 {
     private static readonly bool LogLayoutWarnings = false;
+    private const string SolutionExplorerViewId = "solutionExplorer.panel";
     private readonly MainWindowViewModel _mainVm;
     private readonly ILogger<XamlEditorDockFactory> _logger;
     private static readonly DockSerializer s_serializer = new(typeof(ObservableCollection<>));
@@ -553,8 +554,7 @@ public sealed class XamlEditorDockFactory : Factory
     /// </summary>
     public IRootDock CreateDefaultLayout()
     {
-        // Left tools: Solution Explorer, Toolbox
-        SolutionExplorerTool solutionExplorerTool = new(_mainVm.SolutionExplorer);
+        // Left tools: Toolbox
         ToolboxTool toolboxTool = new(_mainVm.Toolbox);
 
         // Right tools: Properties, Visual Tree, Logical Tree
@@ -581,8 +581,8 @@ public sealed class XamlEditorDockFactory : Factory
             Id = "LeftToolDock",
             Title = "Left Tools",
             Proportion = 0.2,
-            ActiveDockable = solutionExplorerTool,
-            VisibleDockables = CreateList<IDockable>(solutionExplorerTool, toolboxTool),
+            ActiveDockable = toolboxTool,
+            VisibleDockables = CreateList<IDockable>(toolboxTool),
             Alignment = Alignment.Left
         };
 
@@ -910,11 +910,22 @@ public sealed class XamlEditorDockFactory : Factory
                             solutionIndex = i;
                             break;
                         }
+
+                        if (dockables[i] is ExtensionTool extensionTool
+                            && string.Equals(extensionTool.ViewId, SolutionExplorerViewId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            solutionIndex = i;
+                            break;
+                        }
                     }
 
                     if (solutionIndex >= 0 && solutionIndex <= dockables.Count)
                     {
                         insertIndex = Math.Min(solutionIndex + 1, dockables.Count);
+                    }
+                    else
+                    {
+                        insertIndex = 0;
                     }
                 }
 
@@ -924,7 +935,7 @@ public sealed class XamlEditorDockFactory : Factory
             {
                 AddDockable(toolDock, tool);
             }
-            if (toolDock.ActiveDockable is null)
+            if (toolDock.ActiveDockable is null || viewModel.ActivateByDefault)
             {
                 SetActiveDockable(tool);
                 SetFocusedDockable(toolDock, tool);

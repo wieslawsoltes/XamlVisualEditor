@@ -2152,7 +2152,7 @@ internal sealed class WorkspaceAssemblySet
 /// <summary>
 /// Main window ViewModel orchestrating the docking layout and document management.
 /// </summary>
-public sealed class MainWindowViewModel : ReactiveObject, IDisposable
+public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspaceCommands
 {
     private const int RecentFilesLimit = 10;
     private readonly CompositeDisposable _disposables = new();
@@ -2604,12 +2604,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     // Help Commands
     public ReactiveCommand<Unit, Unit> AboutCommand { get; }
 
-    // Workspace Commands
-    public ReactiveCommand<Unit, Unit> RestoreWorkspaceCommand { get; }
-    public ReactiveCommand<Unit, Unit> BuildWorkspaceCommand { get; }
-    public ReactiveCommand<Unit, Unit> RebuildWorkspaceCommand { get; }
-    public ReactiveCommand<Unit, Unit> CleanWorkspaceCommand { get; }
-
     // Previewer Commands
     public ReactiveCommand<Unit, Unit> StartPreviewerCommand { get; }
 
@@ -3001,18 +2995,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         });
 
         IObservable<bool> hasWorkspace = this.WhenAnyValue(x => x.HasWorkspace);
-        RestoreWorkspaceCommand = ReactiveCommand.CreateFromTask(
-            () => RunWorkspaceCommandAsync("restore"),
-            hasWorkspace);
-        BuildWorkspaceCommand = ReactiveCommand.CreateFromTask(
-            () => RunWorkspaceCommandAsync("build"),
-            hasWorkspace);
-        RebuildWorkspaceCommand = ReactiveCommand.CreateFromTask(
-            () => RunWorkspaceCommandAsync("build -t:Rebuild"),
-            hasWorkspace);
-        CleanWorkspaceCommand = ReactiveCommand.CreateFromTask(
-            () => RunWorkspaceCommandAsync("clean"),
-            hasWorkspace);
 
         StartPreviewerCommand = ReactiveCommand.CreateFromTask(
             StartPreviewerForActiveDocumentAsync,
@@ -6126,6 +6108,74 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
                 Length = 1
             }, error.FilePath);
         }, DispatcherPriority.Background);
+    }
+
+    Task IWorkspaceCommands.LoadWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(_workspacePath))
+        {
+            StatusText = "No workspace loaded";
+            return Task.CompletedTask;
+        }
+
+        if (System.IO.Directory.Exists(_workspacePath))
+        {
+            StatusText = "Workspace reload requires a solution or project file";
+            return Task.CompletedTask;
+        }
+
+        if (!System.IO.File.Exists(_workspacePath))
+        {
+            StatusText = $"Workspace file not found: {System.IO.Path.GetFileName(_workspacePath)}";
+            return Task.CompletedTask;
+        }
+
+        return LoadWorkspaceAsync(_workspacePath);
+    }
+
+    Task IWorkspaceCommands.RestoreWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+        }
+
+        return RunWorkspaceCommandAsync("restore");
+    }
+
+    Task IWorkspaceCommands.BuildWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+        }
+
+        return RunWorkspaceCommandAsync("build");
+    }
+
+    Task IWorkspaceCommands.RebuildWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+        }
+
+        return RunWorkspaceCommandAsync("build -t:Rebuild");
+    }
+
+    Task IWorkspaceCommands.CleanWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+        }
+
+        return RunWorkspaceCommandAsync("clean");
     }
 
     private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(string command)

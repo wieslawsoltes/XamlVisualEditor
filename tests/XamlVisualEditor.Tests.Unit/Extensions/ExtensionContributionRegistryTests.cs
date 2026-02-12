@@ -16,7 +16,7 @@ public sealed class ExtensionContributionRegistryTests
 
         using (registry.RegisterMenuItems("ext", new[]
         {
-            new ExtensionMenuContribution("cmd.hello", "Hello", "group")
+            new ExtensionMenuContribution("cmd.hello", "Hello", ExtensionMenuLocations.Extensions, "group")
         }))
         {
             Assert.Single(registry.MenuItems);

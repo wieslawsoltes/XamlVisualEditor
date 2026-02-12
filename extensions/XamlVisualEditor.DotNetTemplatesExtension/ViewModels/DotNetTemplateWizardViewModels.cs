@@ -146,6 +146,10 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         SearchText = string.Empty;
         ProjectName = mode == DotNetTemplateWizardMode.File ? "MyFile" : "MyProject";
         SolutionName = ProjectName;
+        if (mode == DotNetTemplateWizardMode.File)
+        {
+            _autoFileName = ProjectName;
+        }
         Location = GetInitialLocation();
         CreateProjectDirectory = mode != DotNetTemplateWizardMode.File;
         CreateSolutionDirectory = true;
@@ -508,9 +512,24 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
             Templates.Add(item);
         }
 
-        if (SelectedTemplate is null || !Templates.Contains(SelectedTemplate))
+        if (Templates.Count == 0)
+        {
+            return;
+        }
+
+        if (SelectedTemplate is null)
         {
             SelectedTemplate = Templates.FirstOrDefault();
+            return;
+        }
+
+        if (!Templates.Contains(SelectedTemplate))
+        {
+            DotNetTemplateListItemViewModel? match = Templates.FirstOrDefault(item =>
+                string.Equals(item.Template.ShortName, SelectedTemplate.Template.ShortName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(item.Template.Name, SelectedTemplate.Template.Name, StringComparison.OrdinalIgnoreCase));
+
+            SelectedTemplate = match ?? Templates.FirstOrDefault();
         }
     }
 

@@ -167,19 +167,13 @@
                 <Separator />
                 <MenuItem Header="_Collaboration" Command="{CompiledBinding ToggleCollaborationCommand}" />
                 <Separator />
-                <MenuItem Header="_Workspace">
-                    <MenuItem Header="_Restore" Command="{CompiledBinding RestoreWorkspaceCommand}" />
-                    <MenuItem Header="_Build" Command="{CompiledBinding BuildWorkspaceCommand}" />
-                    <MenuItem Header="Re_build" Command="{CompiledBinding RebuildWorkspaceCommand}" />
-                    <MenuItem Header="_Clean" Command="{CompiledBinding CleanWorkspaceCommand}" />
-                    <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding WorkspaceMenuItems}">
-                        <MenuItem.ItemTemplate>
-                            <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                                <MenuItem Header="{CompiledBinding Title}"
-                                          Command="{CompiledBinding Command}" />
-                            </DataTemplate>
-                        </MenuItem.ItemTemplate>
-                    </MenuItem>
+                <MenuItem Header="_Workspace" ItemsSource="{CompiledBinding WorkspaceMenuItems}">
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}" />
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
                 </MenuItem>
                 <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ToolsMenuItems}">
                     <MenuItem.ItemTemplate>

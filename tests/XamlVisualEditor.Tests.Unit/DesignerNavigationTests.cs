@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Avalonia.Threading;
+using Avalonia.Headless.XUnit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell.ViewModels;
@@ -15,7 +15,7 @@ namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class DesignerNavigationTests
 {
-    [Fact]
+    [AvaloniaFact]
     public async Task NavigateToDefinitionAsync_OpensMatchingXamlFile()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -27,18 +27,18 @@ public sealed class DesignerNavigationTests
             string controlPath = Path.Combine(tempDir, "CustomControl.axaml");
 
             File.WriteAllText(mainPath, """
-                <UserControl xmlns=\"https://github.com/avaloniaui\"
-                             xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"
-                             xmlns:views=\"clr-namespace:MyApp.Views\"
-                             x:Class=\"MyApp.Views.MainView\">
+                <UserControl xmlns="https://github.com/avaloniaui"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                             xmlns:views="clr-namespace:MyApp.Views"
+                             x:Class="MyApp.Views.MainView">
                     <views:CustomControl />
                 </UserControl>
                 """);
 
             File.WriteAllText(controlPath, """
-                <UserControl xmlns=\"https://github.com/avaloniaui\"
-                             xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\"
-                             x:Class=\"MyApp.Views.CustomControl\" />
+                <UserControl xmlns="https://github.com/avaloniaui"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                             x:Class="MyApp.Views.CustomControl" />
                 """);
 
             WorkspaceModel workspace = new()
@@ -81,23 +81,20 @@ public sealed class DesignerNavigationTests
                 AssemblyName = "MyApp"
             };
 
-            await Dispatcher.UIThread.InvokeAsync(async () =>
-            {
-                DesignerDocumentViewModel doc = new(
-                    mainPath,
-                    new StubMetadataService(customControl),
-                    () => workspace,
-                    openFileAsync);
+            DesignerDocumentViewModel doc = new(
+                mainPath,
+                new StubMetadataService(customControl),
+                () => workspace,
+                openFileAsync);
 
-                await doc.LoadAsync();
+            await doc.LoadAsync();
 
-                MutableAstDocument? document = doc.SyncEngine.CurrentDocument;
-                MutableAstObjectNode? node = FindObjectNode(document?.Root, "CustomControl");
-                Assert.NotNull(node);
+            MutableAstDocument? document = doc.SyncEngine.CurrentDocument;
+            MutableAstObjectNode? node = FindObjectNode(document?.Root, "CustomControl");
+            Assert.NotNull(node);
 
-                doc.SetSelectedNode(node!.Id, SyncSource.DesignSurface);
-                await doc.NavigateToDefinitionAsync();
-            });
+            doc.SetSelectedNode(node!.Id, SyncSource.DesignSurface);
+            await doc.NavigateToDefinitionAsync();
 
             Assert.Equal(controlPath, openedPath);
         }

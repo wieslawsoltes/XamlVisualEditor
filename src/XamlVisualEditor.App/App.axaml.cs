@@ -33,6 +33,8 @@ using XamlVisualEditor.Terminal;
 using System.Threading;
 using DotNetTemplatesExtensionEntry = XamlVisualEditor.DotNetTemplatesExtension.DotNetTemplatesExtension;
 using FileExplorerExtensionEntry = XamlVisualEditor.FileExplorerExtension.FileExplorerExtension;
+using SolutionExplorerExtensionEntry = XamlVisualEditor.SolutionExplorerExtension.SolutionExplorerExtension;
+using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
 
 namespace XamlVisualEditor.App;
 
@@ -130,6 +132,7 @@ public sealed class App : Application
         services.AddSingleton<IWorkspace, InMemoryWorkspace>();
         services.AddSingleton<IWindow, AppWindow>();
         services.AddSingleton<ISettings, InMemorySettingsStore>();
+        services.AddSingleton<IWorkspaceCommands>(sp => sp.GetRequiredService<MainWindowViewModel>());
         services.AddSingleton<MainWindowProvider>();
         services.AddSingleton<IFolderPicker, AppFolderPicker>();
         services.AddSingleton<IDialogHost, AppDialogHost>();
@@ -183,6 +186,8 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, VscodeCompatExtensionEntry>();
         services.AddSingleton<IXveExtension, DotNetTemplatesExtensionEntry>();
         services.AddSingleton<IXveExtension, FileExplorerExtensionEntry>();
+        services.AddSingleton<IXveExtension, SolutionExplorerExtensionEntry>();
+        services.AddSingleton<IXveExtension, WorkspaceExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
         services.AddSingleton<MainWindowViewModel>();

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using Xunit;
@@ -12,7 +13,8 @@ public sealed class ExtensionManagerTests
         FakeStore store = new();
         FakeStateStore stateStore = new();
         FakeUpdateService updates = new();
-        ExtensionManager manager = new(store, stateStore, updates, Array.Empty<IXveExtension>());
+        ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        ExtensionManager manager = new(store, stateStore, updates, services);
 
         await manager.InstallAsync("path.nupkg", CancellationToken.None);
         await manager.SetEnabledAsync("example.sample", true, CancellationToken.None);

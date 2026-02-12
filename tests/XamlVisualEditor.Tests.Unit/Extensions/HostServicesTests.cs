@@ -56,12 +56,12 @@ public sealed class HostServicesTests
         var storage = new InMemoryExtensionStorage();
 
         await storage.SetAsync("key", 42, CancellationToken.None);
-        int? value = await storage.GetAsync<int>("key", CancellationToken.None);
+        int? value = await storage.GetAsync<int?>("key", CancellationToken.None);
 
         Assert.Equal(42, value);
 
         await storage.RemoveAsync("key", CancellationToken.None);
-        value = await storage.GetAsync<int>("key", CancellationToken.None);
+        value = await storage.GetAsync<int?>("key", CancellationToken.None);
 
         Assert.Null(value);
     }

@@ -86,6 +86,7 @@ public sealed class ViewLocator : IDataTemplate
         return param switch
         {
             DesignerDocumentViewModel => new DesignerDocumentView(),
+            SolutionExplorerViewModel => new SolutionExplorerView(),
             ToolboxViewModel => new ToolboxView(),
             OutputViewModel => new OutputView(),
             AcpToolViewModel => new AcpToolView(),
@@ -122,6 +123,7 @@ public sealed class ViewLocator : IDataTemplate
         // Match known ViewModel types
         return data is IDockable
             or DesignerDocumentViewModel
+            or SolutionExplorerViewModel
             or ToolboxViewModel
             or OutputViewModel
             or AcpToolViewModel

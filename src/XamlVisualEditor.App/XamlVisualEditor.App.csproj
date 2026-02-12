@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>XamlVisualEditor.App</RootNamespace>
     <Description>Avalonia application entry point, composition root, views, and resource dictionaries</Description>
   </PropertyGroup>
@@ -36,6 +37,8 @@
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.DotNetTemplatesExtension\XamlVisualEditor.DotNetTemplatesExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.FileExplorerExtension\XamlVisualEditor.FileExplorerExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.SolutionExplorerExtension\XamlVisualEditor.SolutionExplorerExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.WorkspaceExtension\XamlVisualEditor.WorkspaceExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.McpExtension\XamlVisualEditor.McpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.VscodeCompatExtension\XamlVisualEditor.VscodeCompatExtension.csproj" />

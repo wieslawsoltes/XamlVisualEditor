@@ -178,6 +178,7 @@ public abstract class ExtensionViewModel : ReactiveObject
         ViewType = contribution.Type;
         Location = contribution.Location;
         Priority = contribution.Priority;
+        ActivateByDefault = contribution.ActivateByDefault;
     }
 
     public string ViewId { get; }
@@ -189,6 +190,8 @@ public abstract class ExtensionViewModel : ReactiveObject
     public ExtensionViewLocation Location { get; }
 
     public int Priority { get; }
+
+    public bool ActivateByDefault { get; }
 }
 
 public sealed class ExtensionWebviewViewModel : ExtensionViewModel

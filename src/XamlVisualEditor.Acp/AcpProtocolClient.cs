@@ -9,6 +9,7 @@ namespace XamlVisualEditor.Acp;
 
 public sealed class AcpProtocolClient : IAsyncDisposable
 {
+    private int _disposed;
     private readonly AcpMessageReader _reader;
     private readonly AcpMessageWriter _writer;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pending = new();
@@ -306,6 +307,11 @@ public sealed class AcpProtocolClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
         if (_loopCts is not null)
         {
             _loopCts.Cancel();

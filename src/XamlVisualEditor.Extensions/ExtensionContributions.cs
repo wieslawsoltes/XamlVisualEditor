@@ -39,7 +39,8 @@ public sealed record ExtensionViewContribution(
     string Title,
     ExtensionViewType Type,
     ExtensionViewLocation Location,
-    int Priority);
+    int Priority,
+    bool ActivateByDefault = false);
 
 /// <summary>Known menu locations for extensions.</summary>
 public static class ExtensionMenuLocations

@@ -15,8 +15,8 @@ public sealed class VscodeCompatSessionTests
     {
         using var inputServer = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.None);
         using var inputClient = new AnonymousPipeClientStream(PipeDirection.In, inputServer.ClientSafePipeHandle);
-        using var outputServer = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.None);
-        using var outputClient = new AnonymousPipeClientStream(PipeDirection.Out, outputServer.ClientSafePipeHandle);
+        using var outputServer = new AnonymousPipeServerStream(PipeDirection.Out, HandleInheritability.None);
+        using var outputClient = new AnonymousPipeClientStream(PipeDirection.In, outputServer.ClientSafePipeHandle);
 
         var connection = new IdeBridgeJsonRpcConnection(inputClient, outputServer);
         var commands = new CommandRegistry();

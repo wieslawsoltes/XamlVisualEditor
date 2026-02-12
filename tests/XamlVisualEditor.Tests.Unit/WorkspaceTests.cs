@@ -163,13 +163,14 @@ public sealed class WorkspaceTests
     private static (object? Result, bool HasAnyOutputs, bool HasMissingOutputs)
         InvokeCollectWorkspaceAssemblies(WorkspaceModel workspace)
     {
+        using MainWindowViewModel viewModel = new();
         MethodInfo? method = typeof(MainWindowViewModel).GetMethod(
             "CollectWorkspaceAssemblies",
-            BindingFlags.NonPublic | BindingFlags.Static);
+            BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(method);
 
         object?[] args = { workspace, null, null };
-        object? result = method!.Invoke(null, args);
+        object? result = method!.Invoke(viewModel, args);
         bool hasAnyOutputs = args[1] is bool any && any;
         bool hasMissingOutputs = args[2] is bool missing && missing;
         return (result, hasAnyOutputs, hasMissingOutputs);

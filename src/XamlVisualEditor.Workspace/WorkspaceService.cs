@@ -396,6 +396,11 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
+        if (solutionPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
+        {
+            return ParseSolutionFoldersFromSlnx(solutionPath);
+        }
+
         const string solutionFolderGuid = "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}";
         string solutionDir = System.IO.Path.GetDirectoryName(solutionPath) ?? string.Empty;
         Dictionary<string, string> projectPaths = new(StringComparer.OrdinalIgnoreCase);
@@ -482,6 +487,111 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
 
         return result;
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseSolutionFoldersFromSlnx(string solutionPath)
+    {
+        Dictionary<string, string> result = new(StringComparer.OrdinalIgnoreCase);
+        string solutionDir = System.IO.Path.GetDirectoryName(solutionPath) ?? string.Empty;
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Load(solutionPath);
+        }
+        catch
+        {
+            return result;
+        }
+
+        XElement? root = doc.Root;
+        if (root is null)
+        {
+            return result;
+        }
+
+        foreach (XElement project in root.Elements("Project"))
+        {
+            string? projectPath = (string?)project.Attribute("Path");
+            if (string.IsNullOrWhiteSpace(projectPath))
+            {
+                continue;
+            }
+
+            string? folder = NormalizeSolutionFolderName((string?)project.Attribute("Folder"));
+            if (string.IsNullOrWhiteSpace(folder))
+            {
+                continue;
+            }
+
+            string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(solutionDir, projectPath));
+            result[fullPath] = folder;
+        }
+
+        foreach (XElement folder in root.Elements("Folder"))
+        {
+            VisitSlnxFolder(folder, solutionDir, string.Empty, result);
+        }
+
+        return result;
+    }
+
+    private static void VisitSlnxFolder(
+        XElement folder,
+        string solutionDir,
+        string parentPath,
+        Dictionary<string, string> result)
+    {
+        string? name = NormalizeSolutionFolderName((string?)folder.Attribute("Name"));
+        string currentPath = CombineSolutionFolderPath(parentPath, name);
+
+        foreach (XElement project in folder.Elements("Project"))
+        {
+            string? projectPath = (string?)project.Attribute("Path");
+            if (string.IsNullOrWhiteSpace(projectPath))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(currentPath))
+            {
+                continue;
+            }
+
+            string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(solutionDir, projectPath));
+            result[fullPath] = currentPath;
+        }
+
+        foreach (XElement childFolder in folder.Elements("Folder"))
+        {
+            VisitSlnxFolder(childFolder, solutionDir, currentPath, result);
+        }
+    }
+
+    private static string? NormalizeSolutionFolderName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        string trimmed = name.Replace('\\', '/').Trim().Trim('/');
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static string CombineSolutionFolderPath(string parent, string? child)
+    {
+        if (string.IsNullOrWhiteSpace(child))
+        {
+            return parent;
+        }
+
+        if (string.IsNullOrWhiteSpace(parent))
+        {
+            return child;
+        }
+
+        return parent + "/" + child;
     }
 
     private static bool TryParseProjectLine(
