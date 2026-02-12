@@ -1,7 +1,9 @@
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:dg="using:Avalonia.Controls"
-        xmlns:vm="using:XamlVisualEditor.DotNetTemplatesExtension.ViewModels"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:dg="using:Avalonia.Controls"
+  xmlns:i="using:Avalonia.Xaml.Interactivity"
+  xmlns:ia="using:Avalonia.Xaml.Interactions.Core"
+  xmlns:vm="using:XamlVisualEditor.DotNetTemplatesExtension.ViewModels"
         x:Class="XamlVisualEditor.DotNetTemplatesExtension.Views.NewDotNetWizardDialog"
         x:DataType="vm:DotNetTemplateWizardViewModel"
         Width="960"
@@ -77,6 +79,11 @@
                     HeadersVisibility="All"
                     GridLinesVisibility="None"
                     IsReadOnly="True">
+          <i:Interaction.Behaviors>
+            <ia:EventTriggerBehavior EventName="DoubleTapped">
+              <ia:InvokeCommandAction Command="{CompiledBinding NextCommand}" />
+            </ia:EventTriggerBehavior>
+          </i:Interaction.Behaviors>
           <dg:DataGrid.Columns>
             <dg:DataGridTextColumn Header="Name" Binding="{CompiledBinding Name}" Width="2*" />
             <dg:DataGridTextColumn Header="Short Name" Binding="{CompiledBinding ShortName}" Width="*" />
@@ -89,8 +96,8 @@
 
       <ScrollViewer IsVisible="{CompiledBinding IsConfigureStep}">
         <StackPanel Spacing="10">
-          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Project name" VerticalAlignment="Center" />
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{CompiledBinding PrimaryNameLabel}" VerticalAlignment="Center" />
             <TextBox Grid.Row="0" Grid.Column="1" Text="{CompiledBinding ProjectName, Mode=TwoWay}" />
 
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Location" VerticalAlignment="Center" />
@@ -99,26 +106,33 @@
               <Button Content="Browse" Command="{CompiledBinding BrowseLocationCommand}" />
             </StackPanel>
 
-            <CheckBox Grid.Row="2" Grid.Column="1"
-                      Content="Create project directory"
-                      IsChecked="{CompiledBinding CreateProjectDirectory, Mode=TwoWay}" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Language" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="2"
+                      Grid.Column="1"
+                      ItemsSource="{CompiledBinding Languages}"
+                      SelectedItem="{CompiledBinding SelectedLanguage, Mode=TwoWay}" />
 
             <CheckBox Grid.Row="3" Grid.Column="1"
+                      Content="Create project directory"
+                      IsChecked="{CompiledBinding CreateProjectDirectory, Mode=TwoWay}"
+                      IsVisible="{CompiledBinding ShowProjectDirectoryOption}" />
+
+            <CheckBox Grid.Row="4" Grid.Column="1"
                       Content="Create solution"
                       IsChecked="{CompiledBinding CreateSolution, Mode=TwoWay}"
                       IsVisible="{CompiledBinding CanToggleSolution}" />
 
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="Solution name" VerticalAlignment="Center"
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Solution name" VerticalAlignment="Center"
                        IsVisible="{CompiledBinding IsSolutionSetup}" />
-            <TextBox Grid.Row="4" Grid.Column="1" Text="{CompiledBinding SolutionName, Mode=TwoWay}"
+            <TextBox Grid.Row="5" Grid.Column="1" Text="{CompiledBinding SolutionName, Mode=TwoWay}"
                      IsVisible="{CompiledBinding IsSolutionSetup}" />
 
-            <CheckBox Grid.Row="5" Grid.Column="1"
+            <CheckBox Grid.Row="6" Grid.Column="1"
                       Content="Create solution directory"
                       IsChecked="{CompiledBinding CreateSolutionDirectory, Mode=TwoWay}"
                       IsVisible="{CompiledBinding IsSolutionSetup}" />
 
-            <CheckBox Grid.Row="6" Grid.Column="1"
+            <CheckBox Grid.Row="7" Grid.Column="1"
                       Content="Add project to solution"
                       IsChecked="{CompiledBinding AddProjectToSolution, Mode=TwoWay}"
                       IsVisible="{CompiledBinding IsSolutionSetup}" />
@@ -144,7 +158,7 @@
           </StackPanel>
 
           <StackPanel Spacing="4">
-            <TextBlock Text="Project path preview" FontWeight="SemiBold" />
+            <TextBlock Text="{CompiledBinding PrimaryPathPreviewLabel}" FontWeight="SemiBold" />
             <TextBlock Text="{CompiledBinding ProjectPathPreview}" />
             <TextBlock Text="Solution path preview" FontWeight="SemiBold"
                        IsVisible="{CompiledBinding IsSolutionSetup}" />

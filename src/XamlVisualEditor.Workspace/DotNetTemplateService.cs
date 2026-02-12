@@ -33,13 +33,19 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
             }
         }
 
-        DotNetCliResult textResult = await _cli.RunAsync(new[] { "new", "--list" }, null, ct);
+        DotNetCliResult textResult = await _cli.RunAsync(new[] { "new", "list", "--columns-all" }, null, ct);
         if (!textResult.Success)
         {
-            string error = string.IsNullOrWhiteSpace(textResult.StandardError)
-                ? "dotnet new --list failed"
-                : textResult.StandardError.Trim();
-            throw new InvalidOperationException(error);
+            DotNetCliResult fallbackResult = await _cli.RunAsync(new[] { "new", "list" }, null, ct);
+            if (!fallbackResult.Success)
+            {
+                string error = string.IsNullOrWhiteSpace(fallbackResult.StandardError)
+                    ? "dotnet new list failed"
+                    : fallbackResult.StandardError.Trim();
+                throw new InvalidOperationException(error);
+            }
+
+            textResult = fallbackResult;
         }
 
         IReadOnlyList<DotNetTemplateInfo> parsed = ParseTemplatesFromText(textResult.StandardOutput);
@@ -85,6 +91,8 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
 
         Directory.CreateDirectory(outputDir);
 
+        HashSet<string> beforeFiles = SnapshotFiles(outputDir);
+
         List<string> args = BuildNewArgs(request.TemplateShortName, request.ProjectName, outputDir, request.Parameters);
         DotNetCliResult result = await _cli.RunAsync(args, outputDir, ct);
         if (!result.Success)
@@ -100,6 +108,10 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
         }
 
         string? projectPath = FindProjectFile(outputDir);
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            projectPath = FindNewFile(outputDir, beforeFiles, request.ProjectName);
+        }
         return new DotNetNewResult
         {
             Success = true,
@@ -253,6 +265,68 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
         return null;
     }
 
+    private static HashSet<string> SnapshotFiles(string root)
+    {
+        HashSet<string> files = new(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            return files;
+        }
+
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                files.Add(file);
+            }
+        }
+        catch
+        {
+        }
+
+        return files;
+    }
+
+    private static string? FindNewFile(string root, HashSet<string> beforeFiles, string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            return null;
+        }
+
+        List<string> candidates = new();
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                if (!beforeFiles.Contains(file))
+                {
+                    candidates.Add(file);
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        string? nameMatch = candidates.FirstOrDefault(file =>
+            string.Equals(Path.GetFileNameWithoutExtension(file), projectName, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(nameMatch))
+        {
+            return nameMatch;
+        }
+
+        return candidates
+            .OrderByDescending(file => File.GetLastWriteTimeUtc(file))
+            .FirstOrDefault();
+    }
+
     private IReadOnlyList<DotNetTemplateInfo> ParseTemplatesFromJson(string json)
     {
         try
@@ -311,7 +385,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
                 result.Add(new DotNetTemplateInfo
                 {
                     Name = name,
-                    ShortName = shortName,
+                    ShortName = NormalizeShortName(shortName),
                     Language = language,
                     Type = type,
                     Author = author,
@@ -348,6 +422,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
         string header = lines[headerIndex];
         int shortNameIndex = header.IndexOf("Short Name", StringComparison.OrdinalIgnoreCase);
         int languageIndex = header.IndexOf("Language", StringComparison.OrdinalIgnoreCase);
+        int typeIndex = header.IndexOf("Type", StringComparison.OrdinalIgnoreCase);
         int tagsIndex = header.IndexOf("Tags", StringComparison.OrdinalIgnoreCase);
 
         if (shortNameIndex < 0)
@@ -365,10 +440,19 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
             }
 
             string name = SliceColumn(line, 0, shortNameIndex).Trim();
-            string shortName = SliceColumn(line, shortNameIndex, languageIndex > 0 ? languageIndex : line.Length).Trim();
+            int shortNameEnd = GetNextColumnIndex(shortNameIndex, languageIndex, typeIndex, tagsIndex, line.Length);
+            string shortName = NormalizeShortName(SliceColumn(line, shortNameIndex, shortNameEnd).Trim());
+
+            int languageEnd = GetNextColumnIndex(languageIndex, typeIndex, tagsIndex, -1, line.Length);
             string language = languageIndex > 0
-                ? SliceColumn(line, languageIndex, tagsIndex > 0 ? tagsIndex : line.Length).Trim()
+                ? SliceColumn(line, languageIndex, languageEnd).Trim()
                 : string.Empty;
+
+            int typeEnd = GetNextColumnIndex(typeIndex, tagsIndex, -1, -1, line.Length);
+            string type = typeIndex > 0
+                ? SliceColumn(line, typeIndex, typeEnd).Trim()
+                : string.Empty;
+
             string tags = tagsIndex > 0
                 ? SliceColumn(line, tagsIndex, line.Length).Trim()
                 : string.Empty;
@@ -383,7 +467,7 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
                 Name = name,
                 ShortName = shortName,
                 Language = language,
-                Type = null,
+                Type = string.IsNullOrWhiteSpace(type) ? null : type,
                 Description = null,
                 Tags = new Dictionary<string, string> { { "tags", tags } }
             });
@@ -410,6 +494,48 @@ public sealed class DotNetTemplateService : IDotNetTemplateService
         }
 
         return line.Substring(start, end - start);
+    }
+
+    private static string NormalizeShortName(string shortName)
+    {
+        if (string.IsNullOrWhiteSpace(shortName))
+        {
+            return shortName;
+        }
+
+        string[] parts = shortName.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return shortName.Trim();
+        }
+
+        return parts[0].Trim();
+    }
+
+    private static int GetNextColumnIndex(int current, int next1, int next2, int next3, int fallback)
+    {
+        int next = fallback;
+        if (current <= 0)
+        {
+            return fallback;
+        }
+
+        if (next1 > current)
+        {
+            next = Math.Min(next, next1);
+        }
+
+        if (next2 > current)
+        {
+            next = Math.Min(next, next2);
+        }
+
+        if (next3 > current)
+        {
+            next = Math.Min(next, next3);
+        }
+
+        return next;
     }
 
     private static string? GetString(JsonElement element, string property)

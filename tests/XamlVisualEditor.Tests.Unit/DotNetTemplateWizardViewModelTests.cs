@@ -59,9 +59,49 @@ public sealed class DotNetTemplateWizardViewModelTests
         Assert.Equal("AppTwo", service.LastSolutionRequest.Projects[1].ProjectName);
     }
 
+    [Fact]
+    public async Task FileWizard_DoesNotCreateProjectDirectory()
+    {
+        FakeTemplateService service = new();
+        DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.File)
+        {
+            Location = "/tmp",
+            ProjectName = "Snippet",
+            SelectedTemplate = new DotNetTemplateListItemViewModel(new DotNetTemplateInfo
+            {
+                Name = "Text File",
+                ShortName = "item"
+            }),
+            Step = DotNetTemplateWizardStep.Configure
+        };
+
+        await viewModel.CreateCommand.Execute().ToTask();
+
+        Assert.NotNull(service.LastProjectRequest);
+        Assert.False(service.LastProjectRequest!.CreateProjectDirectory);
+        Assert.Equal("Snippet", service.LastProjectRequest.ProjectName);
+    }
+
+    [Fact]
+    public void FileWizard_SuggestsBetterNamesForClassTemplate()
+    {
+        FakeTemplateService service = new();
+        DotNetTemplateWizardViewModel viewModel = new(service, DotNetTemplateWizardMode.File)
+        {
+            SelectedTemplate = new DotNetTemplateListItemViewModel(new DotNetTemplateInfo
+            {
+                Name = "Class",
+                ShortName = "class"
+            })
+        };
+
+        Assert.Equal("Class1", viewModel.ProjectName);
+    }
+
     private sealed class FakeTemplateService : IDotNetTemplateService
     {
         public DotNetNewSolutionRequest? LastSolutionRequest { get; private set; }
+        public DotNetNewProjectRequest? LastProjectRequest { get; private set; }
 
         public Task<IReadOnlyList<DotNetTemplateInfo>> ListTemplatesAsync(CancellationToken ct = default)
         {
@@ -80,6 +120,7 @@ public sealed class DotNetTemplateWizardViewModelTests
 
         public Task<DotNetNewResult> CreateProjectAsync(DotNetNewProjectRequest request, CancellationToken ct = default)
         {
+            LastProjectRequest = request;
             DotNetNewResult result = new()
             {
                 Success = true,

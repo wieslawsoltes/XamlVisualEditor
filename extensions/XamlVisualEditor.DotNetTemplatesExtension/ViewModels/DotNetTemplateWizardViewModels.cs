@@ -12,13 +12,15 @@ using Avalonia.Threading;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Core.Interfaces;
+using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.DotNetTemplatesExtension.ViewModels;
 
 public enum DotNetTemplateWizardMode
 {
     Project,
-    Solution
+    Solution,
+    File
 }
 
 public enum DotNetTemplateWizardStep
@@ -119,27 +121,36 @@ public sealed class DotNetProjectRowViewModel : ReactiveObject
 
 public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 {
+    private const string LastLocationKey = "dotnetTemplates.lastLocation";
     private readonly IDotNetTemplateService _templateService;
+    private readonly ISettings? _settings;
     private readonly ObservableCollection<DotNetTemplateListItemViewModel> _allTemplates = new();
     private bool _isLoadingTemplates;
     private bool _suppressPrimaryProjectSync;
     private IDisposable? _primaryRowSubscription;
+    private bool _suppressAutoFileName;
+    private bool _useAutoFileName = true;
+    private string? _autoFileName;
 
-    public DotNetTemplateWizardViewModel(IDotNetTemplateService templateService, DotNetTemplateWizardMode mode)
+    public DotNetTemplateWizardViewModel(
+        IDotNetTemplateService templateService,
+        DotNetTemplateWizardMode mode,
+        ISettings? settings = null)
     {
         _templateService = templateService;
+        _settings = settings;
         Mode = mode;
 
         UpdateTitle();
 
         SearchText = string.Empty;
-        ProjectName = "MyProject";
+        ProjectName = mode == DotNetTemplateWizardMode.File ? "MyFile" : "MyProject";
         SolutionName = ProjectName;
-        Location = GetDefaultLocation();
-        CreateProjectDirectory = true;
+        Location = GetInitialLocation();
+        CreateProjectDirectory = mode != DotNetTemplateWizardMode.File;
         CreateSolutionDirectory = true;
         CreateSolution = mode == DotNetTemplateWizardMode.Solution;
-        AddProjectToSolution = true;
+        AddProjectToSolution = mode == DotNetTemplateWizardMode.Solution;
 
         ProjectRows = new ObservableCollection<DotNetProjectRowViewModel>
         {
@@ -255,7 +266,16 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
                 {
                     SolutionName = name;
                 }
+
+                if (IsFileWizard && !_suppressAutoFileName)
+                {
+                    _useAutoFileName = string.Equals(name, _autoFileName, StringComparison.Ordinal);
+                }
             });
+
+        this.WhenAnyValue(x => x.SelectedTemplate)
+            .Where(_ => IsFileWizard)
+            .Subscribe(template => ApplySuggestedFileName(template));
 
         this.WhenAnyValue(x => x.CreateProjectDirectory)
             .Subscribe(value =>
@@ -264,6 +284,19 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
                 {
                     ProjectRows[0].CreateProjectDirectory = value;
                 }
+            });
+
+        this.WhenAnyValue(x => x.Location)
+            .Throttle(TimeSpan.FromMilliseconds(200))
+            .ObserveOn(RxApp.TaskpoolScheduler)
+            .Subscribe(path =>
+            {
+                if (_settings is null || string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                _ = _settings.UpdateAsync(LastLocationKey, path, SettingsTarget.User, CancellationToken.None);
             });
 
         this.WhenAnyValue(
@@ -354,6 +387,14 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
     public bool IsSolutionSetup => CreateSolution || Mode == DotNetTemplateWizardMode.Solution;
 
+    public bool IsFileWizard => Mode == DotNetTemplateWizardMode.File;
+
+    public bool ShowProjectDirectoryOption => !IsFileWizard;
+
+    public string PrimaryNameLabel => IsFileWizard ? "File name" : "Project name";
+
+    public string PrimaryPathPreviewLabel => IsFileWizard ? "File path preview" : "Project path preview";
+
     public string ProjectCountDisplay => $"Projects: {ProjectRows.Count}";
 
     public string ProjectPathPreview => _projectPathPreview.Value;
@@ -416,7 +457,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
                 Languages.Clear();
                 Languages.Add("All");
-                foreach (string language in items
+                foreach (string language in GetTemplatesForMode(_allTemplates)
                              .SelectMany(item => GetTemplateLanguages(item.Template))
                              .Distinct(StringComparer.OrdinalIgnoreCase)
                              .OrderBy(lang => lang, StringComparer.OrdinalIgnoreCase))
@@ -444,7 +485,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         Templates.Clear();
         string? language = SelectedLanguage;
         string search = SearchText?.Trim() ?? string.Empty;
-        IEnumerable<DotNetTemplateListItemViewModel> filtered = _allTemplates;
+        IEnumerable<DotNetTemplateListItemViewModel> filtered = GetTemplatesForMode(_allTemplates);
 
         if (!string.IsNullOrWhiteSpace(language) && !string.Equals(language, "All", StringComparison.OrdinalIgnoreCase))
         {
@@ -531,7 +572,9 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
         IsBusy = true;
         ErrorMessage = null;
-        StatusMessage = "Creating project...";
+        StatusMessage = Mode == DotNetTemplateWizardMode.File
+            ? "Creating file..."
+            : "Creating project...";
 
         try
         {
@@ -585,7 +628,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
             TemplateShortName = SelectedTemplate?.Template.ShortName ?? string.Empty,
             ProjectName = projectName,
             Location = Location,
-            CreateProjectDirectory = CreateProjectDirectory,
+            CreateProjectDirectory = Mode != DotNetTemplateWizardMode.File && CreateProjectDirectory,
             Parameters = BuildTemplateParameters()
         };
     }
@@ -633,6 +676,11 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
     private IReadOnlyDictionary<string, string> BuildTemplateParameters()
     {
         Dictionary<string, string> parameters = new(StringComparer.OrdinalIgnoreCase);
+
+        if (IsFileWizard)
+        {
+            parameters["force"] = string.Empty;
+        }
 
         string? selectedLanguage = SelectedLanguage;
         if (!string.IsNullOrWhiteSpace(selectedLanguage)
@@ -691,6 +739,11 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
     private string BuildProjectPathPreview()
     {
+        if (Mode == DotNetTemplateWizardMode.File)
+        {
+            return Path.Combine(Location, ProjectName);
+        }
+
         if (!IsSolutionSetup)
         {
             return CreateProjectDirectory
@@ -808,8 +861,17 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         return name.IndexOfAny(invalid) < 0;
     }
 
-    private static string GetDefaultLocation()
+    private string GetInitialLocation()
     {
+        if (_settings is not null)
+        {
+            string? stored = _settings.Get<string>(LastLocationKey);
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                return stored;
+            }
+        }
+
         string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         if (!string.IsNullOrWhiteSpace(documents))
         {
@@ -819,11 +881,102 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         return Environment.CurrentDirectory;
     }
 
+    private IEnumerable<DotNetTemplateListItemViewModel> GetTemplatesForMode(
+        IEnumerable<DotNetTemplateListItemViewModel> templates)
+    {
+        return templates;
+    }
+
+    private static bool IsItemTemplate(DotNetTemplateInfo template)
+    {
+        string? type = template.Type;
+        if (string.IsNullOrWhiteSpace(type) && template.Tags.TryGetValue("type", out string? tagType))
+        {
+            type = tagType;
+        }
+
+        if (string.IsNullOrWhiteSpace(type) && template.Tags.TryGetValue("tags", out string? tagList))
+        {
+            if (tagList.Contains("item", StringComparison.OrdinalIgnoreCase))
+            {
+                type = "item";
+            }
+        }
+
+        return string.Equals(type, "item", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ApplySuggestedFileName(DotNetTemplateListItemViewModel? template)
+    {
+        if (template is null)
+        {
+            return;
+        }
+
+        string suggestion = GetSuggestedFileBaseName(template.Template);
+        if (!_useAutoFileName && !string.IsNullOrWhiteSpace(ProjectName))
+        {
+            _autoFileName = suggestion;
+            return;
+        }
+
+        _suppressAutoFileName = true;
+        ProjectName = suggestion;
+        _autoFileName = suggestion;
+        _useAutoFileName = true;
+        _suppressAutoFileName = false;
+    }
+
+    private static string GetSuggestedFileBaseName(DotNetTemplateInfo template)
+    {
+        string source = string.Join(" ", template.ShortName, template.Name).ToLowerInvariant();
+
+        if (source.Contains("interface", StringComparison.Ordinal))
+        {
+            return "IInterface1";
+        }
+
+        if (source.Contains("record", StringComparison.Ordinal))
+        {
+            return "Record1";
+        }
+
+        if (source.Contains("struct", StringComparison.Ordinal))
+        {
+            return "Struct1";
+        }
+
+        if (source.Contains("enum", StringComparison.Ordinal))
+        {
+            return "Enum1";
+        }
+
+        if (source.Contains("delegate", StringComparison.Ordinal))
+        {
+            return "Delegate1";
+        }
+
+        if (source.Contains("component", StringComparison.Ordinal))
+        {
+            return "Component1";
+        }
+
+        if (source.Contains("class", StringComparison.Ordinal))
+        {
+            return "Class1";
+        }
+
+        return "MyFile";
+    }
+
     private void UpdateTitle()
     {
-        string baseTitle = Mode == DotNetTemplateWizardMode.Solution
-            ? "New Solution"
-            : "New Project";
+        string baseTitle = Mode switch
+        {
+            DotNetTemplateWizardMode.Solution => "New Solution",
+            DotNetTemplateWizardMode.File => "New File",
+            _ => "New Project"
+        };
 
         string stepTitle = Step == DotNetTemplateWizardStep.Template
             ? "Select Template"

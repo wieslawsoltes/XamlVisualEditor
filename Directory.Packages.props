@@ -51,5 +51,8 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <!-- System.Reactive -->
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
+    <!-- Xaml.Behaviors -->
+    <PackageVersion Include="Xaml.Behaviors" Version="11.3.9.5" />
+    <PackageVersion Include="Xaml.Behaviors.Avalonia" Version="11.3.9.5" />
   </ItemGroup>
 </Project>
