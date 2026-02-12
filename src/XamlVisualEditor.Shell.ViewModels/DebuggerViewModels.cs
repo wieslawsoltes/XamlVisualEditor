@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
-using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
@@ -290,6 +290,12 @@ public sealed class CallStackViewModel : ReactiveObject
 
         SelectedFrame = Frames.FirstOrDefault();
     }
+
+    public void Clear()
+    {
+        Frames.Clear();
+        SelectedFrame = null;
+    }
 }
 
 public sealed class VariableViewModel : ReactiveObject
@@ -324,6 +330,11 @@ public sealed class LocalsViewModel : ReactiveObject
                 Items.Add(new VariableViewModel(scope, variable));
             }
         }
+    }
+
+    public void Clear()
+    {
+        Items.Clear();
     }
 }
 
@@ -388,24 +399,41 @@ public sealed class WatchesViewModel : ReactiveObject
     {
         Items.Remove(watch);
     }
+
+    public void ClearResults()
+    {
+        foreach (WatchExpressionViewModel watch in Items)
+        {
+            watch.Result = null;
+            watch.TypeName = null;
+        }
+    }
 }
 
 public sealed class DebuggerViewModel : ReactiveObject, IDisposable
 {
-    private readonly IDebuggerService _debuggerService;
+    private readonly IDebuggerServiceRegistry _debuggerRegistry;
     private CompositeDisposable _sessionDisposables = new();
+    private readonly IDisposable _registrySubscription;
     private IDebugSession? _session;
     private int? _activeThreadId;
+    private readonly HashSet<string> _lastBreakpointFiles = new(StringComparer.OrdinalIgnoreCase);
 
-    public DebuggerViewModel(IDebuggerService debuggerService)
+    public DebuggerViewModel(IDebuggerServiceRegistry debuggerRegistry)
     {
-        _debuggerService = debuggerService;
+        _debuggerRegistry = debuggerRegistry;
         Breakpoints = new BreakpointsViewModel();
         CallStack = new CallStackViewModel();
         Locals = new LocalsViewModel();
         Watches = new WatchesViewModel();
 
         Breakpoints.BreakpointsChanged += OnBreakpointsChanged;
+        _registrySubscription = Observable.FromEvent<EventHandler, EventArgs>(
+                handler => (_, _) => handler(EventArgs.Empty),
+                h => _debuggerRegistry.Changed += h,
+                h => _debuggerRegistry.Changed -= h)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(_ => this.RaisePropertyChanged(nameof(HasDebuggerService)));
     }
 
     public BreakpointsViewModel Breakpoints { get; }
@@ -416,6 +444,8 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
     [Reactive]
     public DebugSessionState State { get; private set; } = DebugSessionState.Created;
 
+    public bool HasDebuggerService => _debuggerRegistry.GetActiveService() is not null;
+
     public event Action<DebugOutputEvent>? DebugOutputReceived;
     public event Action<DebugStoppedEvent>? DebugStopped;
     public event Action<DebugContinuedEvent>? DebugContinued;
@@ -423,31 +453,16 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
     public async Task StartAsync(DebugLaunchOptions options, CancellationToken ct = default)
     {
         await StopAsync(ct).ConfigureAwait(false);
-        _session = await _debuggerService.LaunchAsync(options, ct).ConfigureAwait(false);
+        IDebuggerService service = ResolveService();
+        _session = await service.LaunchAsync(options, ct).ConfigureAwait(false);
+        _lastBreakpointFiles.Clear();
         WireSession(_session);
         await UpdateAllBreakpointsAsync(ct).ConfigureAwait(false);
     }
 
     public async Task StopAsync(CancellationToken ct = default)
     {
-        if (_session is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _session.DisconnectAsync(true, ct).ConfigureAwait(false);
-        }
-        catch
-        {
-        }
-
-        await _session.DisposeAsync().ConfigureAwait(false);
-        _session = null;
-        State = DebugSessionState.Terminated;
-        _sessionDisposables.Dispose();
-        _sessionDisposables = new CompositeDisposable();
+        await EndSessionAsync(sendDisconnect: true, terminateDebuggee: true, ct).ConfigureAwait(false);
     }
 
     public Task ContinueAsync(CancellationToken ct = default)
@@ -524,6 +539,9 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
                 break;
             case DebugContinuedEvent continued:
                 DebugContinued?.Invoke(continued);
+                break;
+            case DebugTerminatedEvent:
+                _ = EndSessionAsync(sendDisconnect: false, terminateDebuggee: false, CancellationToken.None);
                 break;
         }
     }
@@ -611,6 +629,14 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
         }
 
         IReadOnlyDictionary<string, IReadOnlyList<SourceBreakpoint>> map = Breakpoints.BuildBreakpointMap();
+        HashSet<string> currentFiles = new(map.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (string removed in _lastBreakpointFiles.Except(currentFiles))
+        {
+            await _session.SetBreakpointsAsync(removed, Array.Empty<SourceBreakpoint>(), ct)
+                .ConfigureAwait(false);
+        }
+
         foreach ((string filePath, IReadOnlyList<SourceBreakpoint> breakpoints) in map)
         {
             IReadOnlyList<BreakpointInfo> results = await _session
@@ -618,11 +644,79 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
                 .ConfigureAwait(false);
             Breakpoints.ApplyResults(filePath, results);
         }
+
+        _lastBreakpointFiles.Clear();
+        foreach (string filePath in currentFiles)
+        {
+            _lastBreakpointFiles.Add(filePath);
+        }
     }
 
     public void Dispose()
     {
+        if (_session is not null)
+        {
+            try
+            {
+                EndSessionAsync(sendDisconnect: true, terminateDebuggee: true, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch
+            {
+            }
+        }
+
         Breakpoints.BreakpointsChanged -= OnBreakpointsChanged;
+        _registrySubscription.Dispose();
         _sessionDisposables.Dispose();
+    }
+
+    private async Task EndSessionAsync(bool sendDisconnect, bool terminateDebuggee, CancellationToken ct)
+    {
+        if (_session is null)
+        {
+            ClearSessionState();
+            State = DebugSessionState.Terminated;
+            return;
+        }
+
+        if (sendDisconnect)
+        {
+            try
+            {
+                await _session.DisconnectAsync(terminateDebuggee, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+        }
+
+        await _session.DisposeAsync().ConfigureAwait(false);
+        _session = null;
+        State = DebugSessionState.Terminated;
+        _sessionDisposables.Dispose();
+        _sessionDisposables = new CompositeDisposable();
+        _lastBreakpointFiles.Clear();
+        ClearSessionState();
+    }
+
+    private void ClearSessionState()
+    {
+        _activeThreadId = null;
+        CallStack.Clear();
+        Locals.Clear();
+        Watches.ClearResults();
+    }
+
+    private IDebuggerService ResolveService()
+    {
+        IDebuggerService? service = _debuggerRegistry.GetActiveService();
+        if (service is null)
+        {
+            throw new InvalidOperationException("No debugger service is configured.");
+        }
+
+        return service;
     }
 }

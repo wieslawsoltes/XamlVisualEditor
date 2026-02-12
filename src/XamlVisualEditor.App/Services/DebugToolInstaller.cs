@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Formats.Tar;
-using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.App.Services;
 

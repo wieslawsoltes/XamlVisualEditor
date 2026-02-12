@@ -1,12 +1,21 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.Debugging.Dap;
 
 public sealed class DapDebuggerService : IDebuggerService
 {
+    private readonly string _adapterId;
+    private readonly string _clientId;
+
+    public DapDebuggerService(string adapterId = "netcoredbg", string clientId = "XamlVisualEditor")
+    {
+        _adapterId = adapterId;
+        _clientId = clientId;
+    }
+
     public async Task<IDebugSession> LaunchAsync(DebugLaunchOptions options, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(options.AdapterPath))
@@ -15,7 +24,7 @@ public sealed class DapDebuggerService : IDebuggerService
         }
 
         DapDebugAdapterHost host = await DapDebugAdapterHost.StartAsync(options.AdapterPath, ct).ConfigureAwait(false);
-        DapDebugSession session = new(host);
+        DapDebugSession session = new(host, _adapterId, _clientId);
         await session.InitializeAsync(ct).ConfigureAwait(false);
         await session.LaunchAsync(options, ct).ConfigureAwait(false);
         return session;
@@ -29,7 +38,7 @@ public sealed class DapDebuggerService : IDebuggerService
         }
 
         DapDebugAdapterHost host = await DapDebugAdapterHost.StartAsync(options.AdapterPath, ct).ConfigureAwait(false);
-        DapDebugSession session = new(host);
+        DapDebugSession session = new(host, _adapterId, _clientId);
         await session.InitializeAsync(ct).ConfigureAwait(false);
         await session.AttachAsync(options, ct).ConfigureAwait(false);
         return session;

@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <RootNamespace>XamlVisualEditor.Debugging.Dap</RootNamespace>
+    <RootNamespace>XamlVisualEditor.Debugging.DapExtension</RootNamespace>
     <Description>DAP-backed .NET debugger integration using netcoredbg</Description>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
   </ItemGroup>
 </Project>

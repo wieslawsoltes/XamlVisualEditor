@@ -196,7 +196,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                 XamlFiles = xamlFiles.Values.ToList(),
                 Files = files.Values.ToList(),
                 References = references,
-                OutputAssemblyPath = project.OutputFilePath
+                OutputAssemblyPath = project.OutputFilePath,
+                TargetFramework = TryGetTargetFrameworkFromOutputPath(project.OutputFilePath),
+                IsExecutable = IsExecutableProject(project)
             });
         }
 
@@ -278,7 +280,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             XamlFiles = xamlFiles.Values.ToList(),
             Files = files.Values.ToList(),
             References = references,
-            OutputAssemblyPath = project.OutputFilePath
+            OutputAssemblyPath = project.OutputFilePath,
+            TargetFramework = TryGetTargetFrameworkFromOutputPath(project.OutputFilePath),
+            IsExecutable = IsExecutableProject(project)
         };
 
         return new WorkspaceModel
@@ -306,7 +310,9 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
                     RelativePath = fileName
                 }
             },
-            References = Array.Empty<AssemblyReference>()
+            References = Array.Empty<AssemblyReference>(),
+            TargetFramework = null,
+            IsExecutable = false
         };
 
         return new WorkspaceModel
@@ -319,6 +325,43 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
     public void Dispose()
     {
         _workspace?.Dispose();
+    }
+
+    private static bool IsExecutableProject(Project project)
+    {
+        OutputKind? outputKind = project.CompilationOptions?.OutputKind;
+        return outputKind == OutputKind.ConsoleApplication
+               || outputKind == OutputKind.WindowsApplication
+               || outputKind == OutputKind.WindowsRuntimeApplication;
+    }
+
+    private static string? TryGetTargetFrameworkFromOutputPath(string? outputFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(outputFilePath))
+        {
+            return null;
+        }
+
+        string normalized = outputFilePath.Replace('\\', '/');
+        string[] parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < parts.Length - 2; i++)
+        {
+            if (!string.Equals(parts[i], "bin", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.Equals(parts[i + 1], "Debug", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(parts[i + 1], "Release", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string tfm = parts[i + 2];
+            return string.IsNullOrWhiteSpace(tfm) ? null : tfm;
+        }
+
+        return null;
     }
 
     private static void AddXamlFile(

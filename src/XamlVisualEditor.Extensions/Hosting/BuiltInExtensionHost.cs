@@ -10,6 +10,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly IEnumerable<IXveExtension> _extensions;
     private readonly ICommands _commands;
     private readonly IExtensionContributionRegistry _contributions;
+    private readonly Debugging.IDebuggerServiceRegistry _debuggerRegistry;
     private readonly IWorkspace _workspace;
     private readonly IWorkspaceInfo _workspaceInfo;
     private readonly IWindow _window;
@@ -28,6 +29,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         IEnumerable<IXveExtension> extensions,
         ICommands commands,
         IExtensionContributionRegistry contributions,
+        Debugging.IDebuggerServiceRegistry debuggerRegistry,
         IWorkspace workspace,
         IWorkspaceInfo workspaceInfo,
         IWindow window,
@@ -43,6 +45,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _extensions = extensions;
         _commands = commands;
         _contributions = contributions;
+        _debuggerRegistry = debuggerRegistry;
         _workspace = workspace;
         _workspaceInfo = workspaceInfo;
         _window = window;
@@ -99,6 +102,7 @@ public sealed class BuiltInExtensionHost : IDisposable
             extensionPath,
             _commands,
             _contributions,
+            _debuggerRegistry,
             _workspace,
             _workspaceInfo,
             _window,

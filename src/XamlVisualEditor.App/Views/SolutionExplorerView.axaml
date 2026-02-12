@@ -24,15 +24,14 @@
                 CanUserSortColumns="True"
                 IsReadOnly="True"
                 v:SolutionExplorerDragBehavior.IsEnabled="True"
-                v:SolutionExplorerOpenBehavior.IsEnabled="True">
+                v:SolutionExplorerOpenBehavior.IsEnabled="True"
+                v:DataGridContextSelectionBehavior.IsEnabled="True">
       <dg:DataGrid.ContextMenu>
-        <ContextMenu>
+        <ContextMenu x:DataType="vm:SolutionExplorerViewModel">
           <MenuItem Header="Open"
-                    Command="{CompiledBinding SelectedNode.OpenCommand}"
-                    IsEnabled="{CompiledBinding SelectedNode.Kind, Converter={x:Static v:SolutionExplorerConverters.IsOpenableFile}}" />
+                    Command="{CompiledBinding OpenSelectedCommand}" />
           <MenuItem Header="Set as Startup Project"
-                    Command="{CompiledBinding SetStartupProjectCommand}"
-                    IsEnabled="{CompiledBinding SelectedNode.Kind, Converter={x:Static v:SolutionExplorerConverters.IsProject}}" />
+                    Command="{CompiledBinding SetStartupProjectCommand}" />
         </ContextMenu>
       </dg:DataGrid.ContextMenu>
       <dg:DataGrid.DataTemplates>
@@ -42,6 +41,11 @@
               <TextBlock Text="▶"
                          Foreground="#2E8B57"
                          IsVisible="{CompiledBinding IsStartupProject}" />
+              <TextBlock Text="RUN"
+                         Foreground="#3C7A3C"
+                         FontSize="10"
+                         FontWeight="SemiBold"
+                         IsVisible="{CompiledBinding IsRunnableButNotStartup}" />
               <TextBlock Text="{CompiledBinding Icon}" />
               <TextBlock Text="{CompiledBinding Name}" />
             </StackPanel>

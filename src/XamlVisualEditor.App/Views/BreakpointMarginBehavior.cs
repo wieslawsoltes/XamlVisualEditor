@@ -6,6 +6,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using AvaloniaEdit;
 using AvaloniaEdit.Rendering;
@@ -180,6 +181,8 @@ public sealed class BreakpointMarginBehavior
         {
             IsHitTestVisible = true;
             Focusable = false;
+            Width = 18;
+            MinWidth = 18;
         }
 
         public void UpdateSource(BreakpointsViewModel breakpoints, string filePath, int? executionLine)
@@ -260,6 +263,10 @@ public sealed class BreakpointMarginBehavior
             {
                 return;
             }
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                return;
+            }
 
             Point position = e.GetPosition(this);
             VisualLine? line = _textView.GetVisualLineFromVisualTop(position.Y + _textView.ScrollOffset.Y);
@@ -283,14 +290,18 @@ public sealed class BreakpointMarginBehavior
             DetachEditor();
             _editor = editor;
             _textAreaPointerHandler = OnTextAreaPointerPressed;
-            _editor.TextArea.PointerPressed += _textAreaPointerHandler;
+            _editor.TextArea.AddHandler(
+                InputElement.PointerPressedEvent,
+                _textAreaPointerHandler,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+                handledEventsToo: true);
         }
 
         public void DetachEditor()
         {
             if (_editor is not null && _textAreaPointerHandler is not null)
             {
-                _editor.TextArea.PointerPressed -= _textAreaPointerHandler;
+                _editor.TextArea.RemoveHandler(InputElement.PointerPressedEvent, _textAreaPointerHandler);
             }
 
             _editor = null;
@@ -299,7 +310,15 @@ public sealed class BreakpointMarginBehavior
 
         private void OnTextAreaPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (e.Handled || _textView is null || _breakpoints is null || _editor is null || string.IsNullOrWhiteSpace(_filePath))
+            if (_textView is null || _breakpoints is null || _editor is null || string.IsNullOrWhiteSpace(_filePath))
+            {
+                return;
+            }
+            if (e.Handled && ReferenceEquals(e.Source, this))
+            {
+                return;
+            }
+            if (!e.GetCurrentPoint(_editor.TextArea).Properties.IsLeftButtonPressed)
             {
                 return;
             }

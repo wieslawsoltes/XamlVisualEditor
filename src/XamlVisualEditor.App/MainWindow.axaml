@@ -28,12 +28,12 @@
                     <MenuItem.ItemsSource>
                         <CompiledBinding Path="FileNewMenuEntries" />
                     </MenuItem.ItemsSource>
-                    <MenuItem.Styles>
-                        <Style Selector="MenuItem">
-                            <Setter Property="Header" Value="{Binding Title}" />
-                            <Setter Property="Command" Value="{Binding Command}" />
-                        </Style>
-                    </MenuItem.Styles>
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}" />
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
                 </MenuItem>
                 <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
                 <MenuItem Header="Open _Recent">

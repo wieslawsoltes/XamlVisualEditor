@@ -16,6 +16,7 @@ public sealed class ExtensionContext
         string extensionPath,
         ICommands commands,
         IExtensionContributionRegistry contributions,
+        Debugging.IDebuggerServiceRegistry debuggerRegistry,
         IWorkspace workspace,
         IWorkspaceInfo workspaceInfo,
         IWindow window,
@@ -35,6 +36,7 @@ public sealed class ExtensionContext
         ExtensionPath = extensionPath;
         Commands = commands;
         Contributions = contributions;
+        DebuggerRegistry = debuggerRegistry;
         Workspace = workspace;
         WorkspaceInfo = workspaceInfo;
         Window = window;
@@ -62,6 +64,9 @@ public sealed class ExtensionContext
 
     /// <summary>Gets the contribution registry.</summary>
     public IExtensionContributionRegistry Contributions { get; }
+
+    /// <summary>Gets the debugger registry.</summary>
+    public Debugging.IDebuggerServiceRegistry DebuggerRegistry { get; }
 
     /// <summary>Gets the workspace service.</summary>
     public IWorkspace Workspace { get; }

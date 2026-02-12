@@ -213,7 +213,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         launchInfo = default!;
         error = string.Empty;
 
-        ProjectModel? project = FindProjectForFile(workspace, xamlFilePath);
+        ProjectModel? project = ProjectSelection.FindProjectForFile(workspace, xamlFilePath);
         if (project is null)
         {
             error = "No project found for XAML file.";
@@ -222,7 +222,7 @@ internal sealed class PreviewerLaunchService : IDisposable
 
         string? projectDir = Path.GetDirectoryName(project.ProjectPath);
 
-        string? targetAssemblyPath = ResolveTargetAssemblyPath(project);
+        string? targetAssemblyPath = ProjectSelection.ResolveTargetAssemblyPath(project);
         if (string.IsNullOrWhiteSpace(targetAssemblyPath) || !File.Exists(targetAssemblyPath))
         {
             error = "Project output assembly not found. Build the project first.";
@@ -323,74 +323,6 @@ internal sealed class PreviewerLaunchService : IDisposable
         session.ErrorReceived += error => PreviewerErrorReceived?.Invoke(error);
         _sessions[xamlFilePath] = session;
         return session;
-    }
-
-    private static ProjectModel? FindProjectForFile(WorkspaceModel workspace, string filePath)
-    {
-        foreach (ProjectModel project in workspace.Projects)
-        {
-            foreach (XamlFileModel file in project.XamlFiles)
-            {
-                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return project;
-                }
-            }
-
-            foreach (ProjectFileModel file in project.Files)
-            {
-                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return project;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static string? ResolveTargetAssemblyPath(ProjectModel project)
-    {
-        if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
-        {
-            return project.OutputAssemblyPath;
-        }
-
-        string? projectDir = Path.GetDirectoryName(project.ProjectPath);
-        if (string.IsNullOrWhiteSpace(projectDir))
-        {
-            return null;
-        }
-
-        string[] searchRoots =
-        {
-            Path.Combine(projectDir, "bin", "Debug"),
-            Path.Combine(projectDir, "bin", "Release")
-        };
-
-        string targetName = project.Name + ".dll";
-        foreach (string root in searchRoots)
-        {
-            if (!Directory.Exists(root))
-            {
-                continue;
-            }
-
-            try
-            {
-                string? match = Directory.EnumerateFiles(root, targetName, SearchOption.AllDirectories)
-                    .FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(match))
-                {
-                    return match;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
     }
 
     private static string BuildXamlProjectPath(string xamlFilePath, string? projectDir)

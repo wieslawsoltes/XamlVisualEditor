@@ -41,26 +41,26 @@
                 GridLinesVisibility="None"
                 CanUserSortColumns="True"
                 IsReadOnly="True"
-                v:ExtensionTreeOpenBehavior.IsEnabled="True">
-      <dg:DataGrid.Styles>
-        <Style Selector="DataGridRow" x:DataType="dh:HierarchicalNode">
-          <Setter Property="ContextMenu">
-            <ContextMenu x:DataType="vm:ExtensionTreeNodeViewModel"
-                         DataContext="{CompiledBinding Item}">
-              <MenuItem Header="Open" Command="{CompiledBinding OpenCommand}" />
-              <MenuItem Header="Open Workspace"
-                        Command="{CompiledBinding OpenWorkspaceCommand}"
-                        IsVisible="{CompiledBinding CanOpenWorkspace}" />
-              <Separator />
-              <MenuItem Header="New File" Command="{CompiledBinding NewFileCommand}" />
-              <MenuItem Header="New Folder" Command="{CompiledBinding NewFolderCommand}" />
-              <Separator />
-              <MenuItem Header="Rename" Command="{CompiledBinding RenameCommand}" />
-              <MenuItem Header="Delete" Command="{CompiledBinding DeleteCommand}" />
-            </ContextMenu>
-          </Setter>
-        </Style>
-      </dg:DataGrid.Styles>
+                v:ExtensionTreeOpenBehavior.IsEnabled="True"
+                v:DataGridContextSelectionBehavior.IsEnabled="True">
+      <dg:DataGrid.ContextMenu>
+        <ContextMenu x:DataType="vm:ExtensionTreeViewModel">
+          <MenuItem Header="Open"
+                    Command="{CompiledBinding OpenSelectedCommand}" />
+          <MenuItem Header="Open Workspace"
+                    Command="{CompiledBinding OpenWorkspaceSelectedCommand}" />
+          <Separator />
+          <MenuItem Header="New File"
+                    Command="{CompiledBinding NewFileCommand}" />
+          <MenuItem Header="New Folder"
+                    Command="{CompiledBinding NewFolderCommand}" />
+          <Separator />
+          <MenuItem Header="Rename"
+                    Command="{CompiledBinding RenameSelectedCommand}" />
+          <MenuItem Header="Delete"
+                    Command="{CompiledBinding DeleteSelectedCommand}" />
+        </ContextMenu>
+      </dg:DataGrid.ContextMenu>
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:ExtensionTreeNodeViewModel" x:DataType="vm:ExtensionTreeNodeViewModel">
           <StackPanel Orientation="Horizontal" Spacing="6">

@@ -8,17 +8,29 @@
       <TextBlock Text="Debug Settings" FontWeight="SemiBold" FontSize="14" />
 
       <StackPanel Spacing="4">
+        <TextBlock Text="Debugger service" />
+        <ComboBox ItemsSource="{CompiledBinding DebuggerServices}"
+                  SelectedItem="{CompiledBinding SelectedDebuggerService, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DebuggerServiceOption">
+              <TextBlock Text="{CompiledBinding DisplayName}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <StackPanel Spacing="4">
         <TextBlock Text="Debugger adapter path" />
         <TextBox Text="{CompiledBinding AdapterPath, Mode=TwoWay}" />
       </StackPanel>
 
       <CheckBox Content="Auto-download netcoredbg"
-                IsChecked="{CompiledBinding AutoDownloadTools, Mode=TwoWay}" />
+                IsChecked="{CompiledBinding AutoDownloadTools, Mode=TwoWay}"
+                IsEnabled="{CompiledBinding IsNetcoredbgSelected}" />
 
       <StackPanel Orientation="Horizontal" Spacing="6">
         <Button Content="Download netcoredbg"
-                Command="{CompiledBinding DownloadNetcoredbgCommand}"
-                IsEnabled="{CompiledBinding IsBusy, Converter={x:Static BoolConverters.Not}}" />
+                Command="{CompiledBinding DownloadNetcoredbgCommand}" />
         <TextBlock Text="{CompiledBinding StatusText}" VerticalAlignment="Center" />
       </StackPanel>
     </StackPanel>

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace XamlVisualEditor.Core.Debugging;
+namespace XamlVisualEditor.Extensions.Debugging;
 
 public enum DebugSessionState
 {

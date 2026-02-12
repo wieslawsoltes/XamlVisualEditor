@@ -49,7 +49,7 @@ using XamlVisualEditor.Workspace;
 using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Shell;
-using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Core.Logging;
 using XamlVisualEditor.Terminal;
 
@@ -487,7 +487,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
             return;
         }
 
-        ProjectModel? project = FindProjectForFile(workspace, FilePath);
+        ProjectModel? project = ProjectSelection.FindProjectForFile(workspace, FilePath);
         if (project is null)
         {
             return;
@@ -500,30 +500,6 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         }
 
         await _openFileAsync(targetPath);
-    }
-
-    private static ProjectModel? FindProjectForFile(WorkspaceModel workspace, string filePath)
-    {
-        foreach (ProjectModel project in workspace.Projects)
-        {
-            foreach (XamlFileModel file in project.XamlFiles)
-            {
-                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return project;
-                }
-            }
-
-            foreach (ProjectFileModel file in project.Files)
-            {
-                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return project;
-                }
-            }
-        }
-
-        return null;
     }
 
     private string? FindXamlFileForType(ProjectModel project, string fullTypeName)
@@ -2165,7 +2141,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private readonly ITypeMetadataService? _metadataService;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
-    private readonly IDebuggerService _debuggerService;
+    private readonly IDebuggerServiceRegistry _debuggerRegistry;
+    private const string NetcoredbgServiceId = "debugger.netcoredbg";
+    private readonly Dictionary<string, string?> _adapterPathsByService = new(StringComparer.OrdinalIgnoreCase);
+    private string? _activeDebuggerServiceId;
     private readonly IDebugToolInstaller? _debugToolInstaller;
     private readonly IOutputLogSinkAccessor? _outputLogSinkAccessor;
     private readonly ILogger<MainWindowViewModel> _logger;
@@ -2637,7 +2616,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         ITypeMetadataService? metadataService = null,
         ILanguageIntellisenseRegistry? languageRegistry = null,
         IAnimationPreviewService? animationPreviewService = null,
-        IDebuggerService? debuggerService = null,
+        IDebuggerServiceRegistry? debuggerRegistry = null,
         IDebugToolInstaller? debugToolInstaller = null,
         IOutputLogSinkAccessor? outputLogSinkAccessor = null,
         XamlVisualEditor.Terminal.ITerminalService? terminalService = null,
@@ -2653,7 +2632,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         _workspaceInfoUpdater = workspaceInfoUpdater;
         _metadataService = metadataService;
         _languageRegistry = languageRegistry;
-        _debuggerService = debuggerService ?? new NullDebuggerService();
+        _debuggerRegistry = debuggerRegistry ?? new DebuggerServiceRegistry();
+        InitializeDebuggerServices();
         _debugToolInstaller = debugToolInstaller;
         _outputLogSinkAccessor = outputLogSinkAccessor;
         _terminalService = terminalService;
@@ -2700,11 +2680,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         });
 
         AnimationEditor = new AnimationEditorViewModel(this, animationPreviewService);
-        Debugger = new DebuggerViewModel(_debuggerService);
+        Debugger = new DebuggerViewModel(_debuggerRegistry);
         DebugSettings = new DebugSettingsViewModel(
+            _debuggerRegistry,
             _debugToolInstaller,
             () => DebuggerAdapterPath,
             path => DebuggerAdapterPath = path,
+            this.WhenAnyValue(x => x.DebuggerAdapterPath),
             () => AutoDownloadTools,
             value => AutoDownloadTools = value,
             ConfirmDebugToolConsentAsync);
@@ -2995,20 +2977,33 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         });
 
         IObservable<bool> hasWorkspace = this.WhenAnyValue(x => x.HasWorkspace);
+        IObservable<DebugSessionState> debugState = this.WhenAnyValue(x => x.Debugger.State);
+        IObservable<bool> hasDebuggerService = this.WhenAnyValue(x => x.Debugger.HasDebuggerService);
+        IObservable<bool> canStartDebug = hasWorkspace
+            .CombineLatest(hasDebuggerService, debugState, this.WhenAnyValue(x => x.IsRunActive),
+                (hasWs, hasService, state, isRunActive) =>
+                    hasWs && hasService && !isRunActive && IsDebugIdle(state));
+        IObservable<bool> canStopDebug = debugState.Select(state =>
+            state == DebugSessionState.Initializing || state == DebugSessionState.Running || state == DebugSessionState.Paused);
+        IObservable<bool> canContinue = debugState.Select(state => state == DebugSessionState.Paused);
+        IObservable<bool> canStep = canContinue;
+        IObservable<bool> canPause = debugState.Select(state => state == DebugSessionState.Running);
+        IObservable<bool> canStartRun = hasWorkspace
+            .CombineLatest(debugState, (hasWs, state) => hasWs && IsDebugIdle(state));
 
         StartPreviewerCommand = ReactiveCommand.CreateFromTask(
             StartPreviewerForActiveDocumentAsync,
             hasDesignerDoc.CombineLatest(hasWorkspace, (hasDoc, hasWs) => hasDoc && hasWs));
 
-        StartDebugCommand = ReactiveCommand.CreateFromTask(StartDebuggingAsync, hasWorkspace);
-        StopDebugCommand = ReactiveCommand.CreateFromTask(StopDebuggingAsync);
-        ContinueDebugCommand = ReactiveCommand.CreateFromTask(() => Debugger.ContinueAsync());
-        StepOverCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepOverAsync());
-        StepInCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepInAsync());
-        StepOutCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepOutAsync());
-        PauseDebugCommand = ReactiveCommand.CreateFromTask(() => Debugger.PauseAsync());
-        ToggleBreakpointCommand = ReactiveCommand.Create(ToggleBreakpointAtCaret);
-        StartRunCommand = ReactiveCommand.CreateFromTask(StartRunAsync, hasWorkspace);
+        StartDebugCommand = ReactiveCommand.CreateFromTask(StartDebuggingAsync, canStartDebug);
+        StopDebugCommand = ReactiveCommand.CreateFromTask(StopDebuggingAsync, canStopDebug);
+        ContinueDebugCommand = ReactiveCommand.CreateFromTask(() => Debugger.ContinueAsync(), canContinue);
+        StepOverCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepOverAsync(), canStep);
+        StepInCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepInAsync(), canStep);
+        StepOutCommand = ReactiveCommand.CreateFromTask(() => Debugger.StepOutAsync(), canStep);
+        PauseDebugCommand = ReactiveCommand.CreateFromTask(() => Debugger.PauseAsync(), canPause);
+        ToggleBreakpointCommand = ReactiveCommand.Create(ToggleBreakpointAtCaret, hasActiveDoc);
+        StartRunCommand = ReactiveCommand.CreateFromTask(StartRunAsync, canStartRun);
         StopRunCommand = ReactiveCommand.CreateFromTask(StopRunAsync, this.WhenAnyValue(x => x.IsRunActive));
         SetStartupProjectCommand = ReactiveCommand.Create<ProjectModel>(SetActiveProject);
 
@@ -3202,7 +3197,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         _disposables.Add(collaborationStatusSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFromSolutionExplorerAsync(path); };
-        SolutionExplorer.StartupProjectSelected += path => SetActiveProjectByPath(path);
+        SolutionExplorer.StartupProjectSelected += project => SetActiveProject(project);
 
         IDisposable activeDocumentTypeSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Subscribe(doc =>
@@ -4480,11 +4475,91 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         Breakpoints.ToggleBreakpoint(filePath, line, ActiveDocument.CurrentColumn);
     }
 
+    private void InitializeDebuggerServices()
+    {
+        _adapterPathsByService[NetcoredbgServiceId] = DebuggerAdapterPath;
+        _activeDebuggerServiceId = _debuggerRegistry.ActiveServiceId;
+        UpdateAdapterPathForActiveService();
+
+        _debuggerRegistry.Changed += OnDebuggerRegistryChanged;
+        _disposables.Add(Disposable.Create(() => _debuggerRegistry.Changed -= OnDebuggerRegistryChanged));
+
+        IDisposable adapterPathSubscription = this.WhenAnyValue(x => x.DebuggerAdapterPath)
+            .Skip(1)
+            .Subscribe(StoreAdapterPathForActiveService);
+        _disposables.Add(adapterPathSubscription);
+    }
+
+    private void OnDebuggerRegistryChanged(object? sender, EventArgs e)
+    {
+        string? currentId = _debuggerRegistry.ActiveServiceId;
+        if (!string.Equals(_activeDebuggerServiceId, currentId, StringComparison.Ordinal))
+        {
+            _activeDebuggerServiceId = currentId;
+            UpdateAdapterPathForActiveService();
+        }
+    }
+
+    private void UpdateAdapterPathForActiveService()
+    {
+        string? resolved = GetAdapterPathForService(_activeDebuggerServiceId);
+        string nextValue = resolved ?? string.Empty;
+        if (!string.Equals(DebuggerAdapterPath, nextValue, StringComparison.Ordinal))
+        {
+            DebuggerAdapterPath = nextValue;
+        }
+    }
+
+    private string? GetAdapterPathForService(string? serviceId)
+    {
+        if (!string.IsNullOrWhiteSpace(serviceId)
+            && _adapterPathsByService.TryGetValue(serviceId, out string? stored)
+            && !string.IsNullOrWhiteSpace(stored))
+        {
+            return stored;
+        }
+
+        DebuggerServiceRegistration? registration = _debuggerRegistry.Services
+            .FirstOrDefault(service => string.Equals(service.Id, serviceId, StringComparison.Ordinal));
+        string? resolved = registration?.AdapterLocator?.ResolveAdapterPath();
+        if (!string.IsNullOrWhiteSpace(resolved) && !string.IsNullOrWhiteSpace(serviceId))
+        {
+            _adapterPathsByService[serviceId] = resolved;
+        }
+
+        return resolved;
+    }
+
+    private void StoreAdapterPathForActiveService(string? path)
+    {
+        string? serviceId = _activeDebuggerServiceId ?? _debuggerRegistry.ActiveServiceId;
+        if (string.IsNullOrWhiteSpace(serviceId))
+        {
+            return;
+        }
+
+        _adapterPathsByService[serviceId] = string.IsNullOrWhiteSpace(path) ? null : path;
+    }
+
+    private static bool IsDebugIdle(DebugSessionState state)
+    {
+        return state == DebugSessionState.Created
+            || state == DebugSessionState.Terminated
+            || state == DebugSessionState.Failed
+            || state == DebugSessionState.Stopped;
+    }
+
     private async System.Threading.Tasks.Task StartDebuggingAsync()
     {
         if (_workspace is null)
         {
             StatusText = "Debugging requires a loaded workspace.";
+            return;
+        }
+
+        if (!Debugger.HasDebuggerService)
+        {
+            StatusText = "No debugger service is configured.";
             return;
         }
 
@@ -4496,6 +4571,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
 
         SetActiveProject(project);
+        if (!project.IsExecutable)
+        {
+            StatusText = "Debug start failed: selected project is not executable.";
+            LogOutput("Error", $"Debug start failed: {project.Name} is not an executable project.");
+            return;
+        }
+
         LogOutput("Info", $"Debug start requested: {project.Name} ({project.ProjectPath})");
         await EnsureProjectBuiltAsync(project, suppressWarnings: false);
 
@@ -4506,10 +4588,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return;
         }
 
-        if (IsUnsupportedDebugTarget(assemblyPath))
+        if (!TryValidateDebugTarget(assemblyPath, out string? failureReason))
         {
             StatusText = "Debug start failed: selected output is not runnable.";
-            LogOutput("Error", $"Debug start failed: '{assemblyPath}' targets netstandard or .NET Framework. Select an executable startup project or a net6+ target.");
+            LogOutput("Error", failureReason ?? $"Debug start failed: '{assemblyPath}' is not runnable.");
             return;
         }
 
@@ -4517,10 +4599,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         string? adapterPath = await ResolveDebuggerAdapterPathAsync();
         if (string.IsNullOrWhiteSpace(adapterPath))
         {
-            StatusText = "Debug start failed: netcoredbg not found.";
-            LogOutput("Error", AutoDownloadTools
-                ? "Debug start failed: netcoredbg not found. Download was not completed."
-                : "Debug start failed: netcoredbg not found. Set DebuggerAdapterPath or enable auto-download.");
+            DebuggerServiceRegistration? activeRegistration = _debuggerRegistry.GetActiveRegistration();
+            string serviceName = activeRegistration?.DisplayName ?? "debugger adapter";
+            StatusText = $"Debug start failed: {serviceName} not found.";
+            if (string.Equals(activeRegistration?.Id, NetcoredbgServiceId, StringComparison.Ordinal))
+            {
+                LogOutput("Error", AutoDownloadTools
+                    ? $"Debug start failed: {serviceName} not found. Download was not completed."
+                    : $"Debug start failed: {serviceName} not found. Set DebuggerAdapterPath or enable auto-download.");
+            }
+            else
+            {
+                LogOutput("Error", $"Debug start failed: {serviceName} not found. Set DebuggerAdapterPath or install the adapter.");
+            }
             return;
         }
 
@@ -4620,6 +4711,20 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return adapterPath;
         }
 
+        DebuggerServiceRegistration? activeRegistration = _debuggerRegistry.GetActiveRegistration();
+        string? resolved = activeRegistration?.AdapterLocator?.ResolveAdapterPath();
+        adapterPath = string.IsNullOrWhiteSpace(resolved) ? null : ResolveDebuggerAdapterPath(resolved);
+        if (!string.IsNullOrWhiteSpace(adapterPath))
+        {
+            DebuggerAdapterPath = adapterPath;
+            return adapterPath;
+        }
+
+        if (activeRegistration?.Id != NetcoredbgServiceId)
+        {
+            return null;
+        }
+
         if (!AutoDownloadTools || _debugToolInstaller is null)
         {
             return null;
@@ -4648,15 +4753,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private ProjectModel? ResolveActiveProject()
     {
-        if (SolutionExplorer.SelectedNode?.Kind == SolutionExplorerNodeKind.Project &&
-            !string.IsNullOrWhiteSpace(SolutionExplorer.SelectedNode.FullPath))
-        {
-            SetActiveProjectByPath(SolutionExplorer.SelectedNode.FullPath);
-        }
-
         if (ActiveProject is not null)
         {
             return ActiveProject;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ActiveProjectPath) &&
+            _projectLookup.TryGetValue(ActiveProjectPath, out ProjectModel? activeByPath))
+        {
+            return activeByPath;
+        }
+
+        if (SolutionExplorer.SelectedNode?.Kind == SolutionExplorerNodeKind.Project &&
+            SolutionExplorer.SelectedNode.Project is not null)
+        {
+            SetActiveProject(SolutionExplorer.SelectedNode.Project);
         }
 
         if (_workspace is null)
@@ -4666,7 +4777,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         if (ActiveDocument is not null)
         {
-            ProjectModel? docProject = FindProjectForFile(_workspace, ActiveDocument.FilePath);
+            ProjectModel? docProject = ProjectSelection.FindProjectForFile(_workspace, ActiveDocument.FilePath);
             if (docProject is not null)
             {
                 return docProject;
@@ -4675,7 +4786,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         if (WorkspaceProjects.Count > 0)
         {
-            return WorkspaceProjects[0];
+            return ProjectSelection.SelectPreferredProject(WorkspaceProjects);
         }
 
         return _workspace.Projects.FirstOrDefault();
@@ -4683,21 +4794,40 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void SetActiveProject(ProjectModel? project)
     {
+        ProjectModel? previous = ActiveProject;
+
         if (project is null)
         {
             ActiveProject = null;
             ActiveProjectPath = null;
             this.RaisePropertyChanged(nameof(ActiveProjectName));
-            SolutionExplorer.SetStartupProjectPath(null);
+            SolutionExplorer.SetStartupProject(null);
+            if (previous is not null)
+            {
+                StatusText = "Startup project cleared";
+                LogOutput("Info", $"Startup project cleared (was {previous.Name}).");
+            }
             return;
         }
+
+        bool changed = previous is null
+                       || !string.Equals(previous.ProjectPath, project.ProjectPath, StringComparison.OrdinalIgnoreCase)
+                       || !string.Equals(previous.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase);
 
         ActiveProject = project;
         ActiveProjectPath = project.ProjectPath;
         this.RaisePropertyChanged(nameof(ActiveProjectName));
         StatusText = $"Startup project: {project.Name}";
-        LogOutput("Info", $"Startup project set: {project.Name} ({project.ProjectPath})");
-        SolutionExplorer.SetStartupProjectPath(project.ProjectPath);
+        if (changed)
+        {
+            string previousName = previous?.Name ?? "(none)";
+            string previousTfm = previous?.TargetFramework ?? "unknown";
+            string currentTfm = project.TargetFramework ?? "unknown";
+            LogOutput(
+                "Info",
+                $"Startup project changed: {previousName} ({previousTfm}) -> {project.Name} ({currentTfm}) [{project.ProjectPath}]");
+        }
+        SolutionExplorer.SetStartupProject(project);
     }
 
     private void SetActiveProjectByPath(string projectPath)
@@ -4708,7 +4838,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
 
         ActiveProjectPath = projectPath;
-        SolutionExplorer.SetStartupProjectPath(projectPath);
 
         if (_projectLookup.TryGetValue(projectPath, out ProjectModel? project))
         {
@@ -4728,14 +4857,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
                 match = match is null
                     ? candidate
-                    : ChoosePreferredProject(match, candidate);
+                    : ProjectSelection.ChoosePreferredProject(match, candidate);
             }
 
             if (match is not null)
             {
                 SetActiveProject(match);
+                return;
             }
         }
+
+        SolutionExplorer.SetStartupProjectPath(projectPath);
     }
 
     private async System.Threading.Tasks.Task EnsureProjectBuiltAsync(ProjectModel project, bool suppressWarnings)
@@ -4790,8 +4922,29 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
 
         SetActiveProject(project);
+        if (!project.IsExecutable)
+        {
+            StatusText = "Run failed: selected project is not executable.";
+            LogOutput("Error", $"Run failed: {project.Name} is not an executable project.");
+            return;
+        }
+
         LogOutput("Info", $"Run requested: {project.Name} ({project.ProjectPath})");
         await EnsureProjectBuiltAsync(project, suppressWarnings: false);
+
+        string? runAssemblyPath = ResolveTargetAssemblyPath(project);
+        if (string.IsNullOrWhiteSpace(runAssemblyPath))
+        {
+            StatusText = "Unable to resolve the output assembly for run.";
+            return;
+        }
+
+        if (!TryValidateDebugTarget(runAssemblyPath, out string? runFailure))
+        {
+            StatusText = "Run failed: selected output is not runnable.";
+            LogOutput("Error", runFailure ?? "Run failed: selected output is not runnable.");
+            return;
+        }
 
         string? workingDirectory = System.IO.Path.GetDirectoryName(project.ProjectPath);
         if (string.IsNullOrWhiteSpace(workingDirectory))
@@ -4889,180 +5042,36 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         return $"run --project \"{projectPath}\" -- {programArguments}";
     }
 
-    private static ProjectModel? FindProjectForFile(WorkspaceModel workspace, string filePath)
+    internal static string? ResolveTargetAssemblyPath(ProjectModel project)
     {
-        foreach (ProjectModel project in workspace.Projects)
-        {
-            foreach (XamlFileModel file in project.XamlFiles)
-            {
-                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return project;
-                }
-            }
-
-            foreach (ProjectFileModel file in project.Files)
-            {
-                if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return project;
-                }
-            }
-        }
-
-        return null;
+        return ProjectSelection.ResolveTargetAssemblyPath(project);
     }
 
-    private static string? ResolveTargetAssemblyPath(ProjectModel project)
+    internal static bool TryValidateDebugTarget(string assemblyPath, out string? failureReason)
     {
-        string? preferred = FindPreferredOutputAssemblyPath(project);
-        if (!string.IsNullOrWhiteSpace(preferred))
+        if (IsUnsupportedFrameworkTarget(assemblyPath))
         {
-            return preferred;
+            failureReason = $"Debug start failed: '{assemblyPath}' targets netstandard or .NET Framework. Select an executable startup project or a net6+ target.";
+            return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
+        string runtimeConfigPath = System.IO.Path.ChangeExtension(assemblyPath, ".runtimeconfig.json");
+        if (!System.IO.File.Exists(runtimeConfigPath))
         {
-            return project.OutputAssemblyPath;
+            failureReason = $"Debug start failed: '{assemblyPath}' has no runtimeconfig.json. Select a runnable startup project (Exe output).";
+            return false;
         }
 
-        string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
-        if (string.IsNullOrWhiteSpace(projectDir))
-        {
-            return null;
-        }
-
-        string[] searchRoots =
-        {
-            System.IO.Path.Combine(projectDir, "bin", "Debug"),
-            System.IO.Path.Combine(projectDir, "bin", "Release")
-        };
-
-        string targetName = project.Name + ".dll";
-        foreach (string root in searchRoots)
-        {
-            if (!System.IO.Directory.Exists(root))
-            {
-                continue;
-            }
-
-            try
-            {
-                string? match = System.IO.Directory.EnumerateFiles(root, targetName, System.IO.SearchOption.AllDirectories)
-                    .FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(match))
-                {
-                    return match;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
+        failureReason = null;
+        return true;
     }
 
-    private static string? FindPreferredOutputAssemblyPath(ProjectModel project)
-    {
-        string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
-        if (string.IsNullOrWhiteSpace(projectDir))
-        {
-            return null;
-        }
-
-        string targetName = project.Name + ".dll";
-        string debugRoot = System.IO.Path.Combine(projectDir, "bin", "Debug");
-        if (System.IO.Directory.Exists(debugRoot))
-        {
-            foreach (string tfm in PreferredFrameworks)
-            {
-                string candidate = System.IO.Path.Combine(debugRoot, tfm, targetName);
-                if (System.IO.File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsUnsupportedDebugTarget(string assemblyPath)
+    private static bool IsUnsupportedFrameworkTarget(string assemblyPath)
     {
         string normalized = assemblyPath.Replace('\\', '/').ToLowerInvariant();
         return normalized.Contains("/netstandard") || normalized.Contains("/net4");
     }
 
-    private static readonly string[] PreferredFrameworks =
-    {
-        "net10.0",
-        "net9.0",
-        "net8.0",
-        "net7.0",
-        "net6.0",
-        "net5.0",
-        "netcoreapp3.1",
-        "netcoreapp3.0"
-    };
-
-    private ProjectModel ChoosePreferredProject(ProjectModel existing, ProjectModel candidate)
-    {
-        string? existingAssembly = ResolveTargetAssemblyPath(existing);
-        string? candidateAssembly = ResolveTargetAssemblyPath(candidate);
-
-        bool existingSupported = !string.IsNullOrWhiteSpace(existingAssembly) &&
-            !IsUnsupportedDebugTarget(existingAssembly);
-        bool candidateSupported = !string.IsNullOrWhiteSpace(candidateAssembly) &&
-            !IsUnsupportedDebugTarget(candidateAssembly);
-
-        if (candidateSupported && !existingSupported)
-        {
-            return candidate;
-        }
-
-        if (existingSupported && !candidateSupported)
-        {
-            return existing;
-        }
-
-        int existingRank = GetFrameworkRank(existingAssembly);
-        int candidateRank = GetFrameworkRank(candidateAssembly);
-
-        return candidateRank < existingRank ? candidate : existing;
-    }
-
-    private static int GetFrameworkRank(string? assemblyPath)
-    {
-        if (string.IsNullOrWhiteSpace(assemblyPath))
-        {
-            return int.MaxValue;
-        }
-
-        string normalized = assemblyPath.Replace('\\', '/').ToLowerInvariant();
-        for (int i = 0; i < PreferredFrameworks.Length; i++)
-        {
-            if (normalized.Contains("/" + PreferredFrameworks[i]))
-            {
-                return i;
-            }
-        }
-
-        return int.MaxValue;
-    }
-
-    private sealed class NullDebuggerService : IDebuggerService
-    {
-        public Task<IDebugSession> LaunchAsync(DebugLaunchOptions options, System.Threading.CancellationToken ct = default)
-        {
-            throw new InvalidOperationException("No debugger service is configured.");
-        }
-
-        public Task<IDebugSession> AttachAsync(DebugAttachOptions options, System.Threading.CancellationToken ct = default)
-        {
-            throw new InvalidOperationException("No debugger service is configured.");
-        }
-    }
 
     private void EnsureCanvasDocument()
     {
@@ -5733,19 +5742,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         WorkspaceProjects.Clear();
         _projectLookup.Clear();
 
-        foreach (ProjectModel project in workspace.Projects)
+        IReadOnlyList<ProjectModel> preferredProjects = ProjectSelection.DeduplicateProjectsByPath(workspace.Projects);
+        foreach (ProjectModel project in preferredProjects)
         {
             WorkspaceProjects.Add(project);
             if (!string.IsNullOrWhiteSpace(project.ProjectPath))
             {
-                if (_projectLookup.TryGetValue(project.ProjectPath, out ProjectModel? existing))
-                {
-                    _projectLookup[project.ProjectPath] = ChoosePreferredProject(existing, project);
-                }
-                else
-                {
-                    _projectLookup[project.ProjectPath] = project;
-                }
+                _projectLookup[project.ProjectPath] = project;
             }
         }
 
@@ -5763,11 +5766,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
         else if (ActiveDocument is not null)
         {
-            selected = FindProjectForFile(workspace, ActiveDocument.FilePath);
+            selected = ProjectSelection.FindProjectForFile(workspace, ActiveDocument.FilePath);
         }
         else if (WorkspaceProjects.Count > 0)
         {
-            selected = WorkspaceProjects[0];
+            selected = ProjectSelection.SelectPreferredProject(WorkspaceProjects);
         }
 
         SetActiveProject(selected);
@@ -6509,6 +6512,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 /// </summary>
 public sealed class SolutionExplorerNodeViewModel : ReactiveObject
 {
+    private bool _isStartupProject;
     /// <summary>Gets the display name.</summary>
     public string Name { get; }
 
@@ -6517,6 +6521,9 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
 
     /// <summary>Gets the full path (for files) or project path (for projects).</summary>
     public string? FullPath { get; }
+
+    /// <summary>Gets the project model (for project nodes).</summary>
+    public ProjectModel? Project { get; }
 
     /// <summary>Gets the node kind.</summary>
     public SolutionExplorerNodeKind Kind { get; }
@@ -6533,8 +6540,23 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
     public bool IsSelected { get; set; }
 
     /// <summary>Gets or sets whether this project is the startup project.</summary>
-    [Reactive]
-    public bool IsStartupProject { get; set; }
+    public bool IsStartupProject
+    {
+        get => _isStartupProject;
+        set
+        {
+            if (this.RaiseAndSetIfChanged(ref _isStartupProject, value))
+            {
+                this.RaisePropertyChanged(nameof(IsRunnableButNotStartup));
+            }
+        }
+    }
+
+    /// <summary>Gets whether this project is runnable.</summary>
+    public bool IsRunnableProject => Project?.IsExecutable == true;
+
+    /// <summary>Gets whether this project is runnable but not selected as startup.</summary>
+    public bool IsRunnableButNotStartup => IsRunnableProject && !IsStartupProject;
 
     /// <summary>Raised when a file node is double-clicked (opened).</summary>
     public event Action<string>? FileOpened;
@@ -6544,12 +6566,18 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
     /// </summary>
     public ReactiveCommand<Unit, Unit>? OpenCommand { get; }
 
-    public SolutionExplorerNodeViewModel(string name, string icon, SolutionExplorerNodeKind kind, string? fullPath = null)
+    public SolutionExplorerNodeViewModel(
+        string name,
+        string icon,
+        SolutionExplorerNodeKind kind,
+        string? fullPath = null,
+        ProjectModel? project = null)
     {
         Name = name;
         Icon = icon;
         Kind = kind;
         FullPath = fullPath;
+        Project = project;
 
         if ((kind == SolutionExplorerNodeKind.XamlFile || kind == SolutionExplorerNodeKind.File) && fullPath is not null)
         {
@@ -6569,10 +6597,11 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
         Dictionary<string, SolutionExplorerNodeViewModel> folderNodes =
             new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (ProjectModel project in workspace.Projects)
+        IReadOnlyList<ProjectModel> projects = ProjectSelection.DeduplicateProjectsByPath(workspace.Projects);
+        foreach (ProjectModel project in projects)
         {
             SolutionExplorerNodeViewModel projectNode = new(
-                project.Name, "📦", SolutionExplorerNodeKind.Project, project.ProjectPath);
+                project.Name, "📦", SolutionExplorerNodeKind.Project, project.ProjectPath, project);
 
             SolutionExplorerNodeViewModel projectParent = root;
             if (workspace.ProjectFolders.TryGetValue(project.ProjectPath, out string? folderPath) &&
@@ -6742,7 +6771,7 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
     public SearchModel SearchModel { get; }
 
     [Reactive]
-    public HierarchicalNode? SelectedRow { get; set; }
+    public object? SelectedRow { get; set; }
 
     [Reactive]
     public SolutionExplorerNodeViewModel? SelectedNode { get; private set; }
@@ -6759,7 +6788,9 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
     public event Action<string>? FileOpenRequested;
 
     /// <summary>Raised when a project is marked as startup.</summary>
-    public event Action<string>? StartupProjectSelected;
+    public event Action<ProjectModel?>? StartupProjectSelected;
+
+    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
 
     public ReactiveCommand<Unit, Unit> SetStartupProjectCommand { get; }
 
@@ -6788,24 +6819,45 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
         Model.SetRoots(RootItems);
 
         this.WhenAnyValue(x => x.SelectedRow)
-            .Subscribe(row => SelectedNode = row?.Item as SolutionExplorerNodeViewModel);
+            .Subscribe(row => SelectedNode = row switch
+            {
+                HierarchicalNode<SolutionExplorerNodeViewModel> node => node.Item,
+                HierarchicalNode node => node.Item as SolutionExplorerNodeViewModel,
+                SolutionExplorerNodeViewModel node => node,
+                _ => null
+            });
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
+        IObservable<bool> canOpen = this.WhenAnyValue(x => x.SelectedNode)
+            .Select(node => node is not null
+                            && (node.Kind == SolutionExplorerNodeKind.File || node.Kind == SolutionExplorerNodeKind.XamlFile)
+                            && !string.IsNullOrWhiteSpace(node.FullPath));
+        IObservable<bool> canSetStartup = this.WhenAnyValue(x => x.SelectedNode)
+            .Select(node => node?.Kind == SolutionExplorerNodeKind.Project && node.Project is not null);
+
+        OpenSelectedCommand = ReactiveCommand.Create(() =>
+        {
+            if (SelectedNode?.FullPath is { } filePath)
+            {
+                FileOpenRequested?.Invoke(filePath);
+            }
+        }, canOpen);
+
         SetStartupProjectCommand = ReactiveCommand.Create(() =>
         {
             if (SelectedNode?.Kind == SolutionExplorerNodeKind.Project &&
-                !string.IsNullOrWhiteSpace(SelectedNode.FullPath))
+                SelectedNode.Project is not null)
             {
-                StartupProjectSelected?.Invoke(SelectedNode.FullPath);
+                StartupProjectSelected?.Invoke(SelectedNode.Project);
             }
-        });
+        }, canSetStartup);
     }
 
-    public void SetStartupProjectPath(string? projectPath)
+    public void SetStartupProject(ProjectModel? project)
     {
         if (Root is null)
         {
@@ -6815,17 +6867,40 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
         foreach (SolutionExplorerNodeViewModel node in EnumerateNodes(Root))
         {
             if (node.Kind == SolutionExplorerNodeKind.Project &&
-                !string.IsNullOrWhiteSpace(node.FullPath) &&
-                !string.IsNullOrWhiteSpace(projectPath) &&
-                string.Equals(node.FullPath, projectPath, StringComparison.OrdinalIgnoreCase))
+                node.Project is not null)
             {
-                node.IsStartupProject = true;
+                bool matches = project is not null &&
+                               (ReferenceEquals(node.Project, project)
+                                || (string.Equals(node.Project.ProjectPath, project.ProjectPath, StringComparison.OrdinalIgnoreCase)
+                                    && (string.IsNullOrWhiteSpace(project.TargetFramework)
+                                        || string.Equals(node.Project.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase))));
+                node.IsStartupProject = matches;
             }
             else
             {
                 node.IsStartupProject = false;
             }
         }
+    }
+
+    public void SetStartupProjectPath(string? projectPath)
+    {
+        if (Root is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            SetStartupProject(null);
+            return;
+        }
+
+        ProjectModel? match = EnumerateNodes(Root)
+            .Select(node => node.Project)
+            .FirstOrDefault(project => project is not null &&
+                                       string.Equals(project.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase));
+        SetStartupProject(match);
     }
 
     private static IEnumerable<SolutionExplorerNodeViewModel> EnumerateNodes(SolutionExplorerNodeViewModel root)

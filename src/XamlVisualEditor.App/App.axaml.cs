@@ -6,9 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using XamlVisualEditor.Core.Interfaces;
-using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Core.Logging;
-using XamlVisualEditor.Debugging.Dap;
 using XamlVisualEditor.CSharp.Language;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
@@ -32,6 +31,8 @@ using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Terminal;
 using System.Threading;
 using DotNetTemplatesExtensionEntry = XamlVisualEditor.DotNetTemplatesExtension.DotNetTemplatesExtension;
+using DapDebuggingExtensionEntry = XamlVisualEditor.Debugging.DapExtension.DapDebuggingExtension;
+using DotNetSdkDebuggingExtensionEntry = XamlVisualEditor.Debugging.DotNetSdkExtension.DotNetSdkDebuggingExtension;
 using FileExplorerExtensionEntry = XamlVisualEditor.FileExplorerExtension.FileExplorerExtension;
 using SolutionExplorerExtensionEntry = XamlVisualEditor.SolutionExplorerExtension.SolutionExplorerExtension;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
@@ -115,9 +116,9 @@ public sealed class App : Application
         services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();
         services.AddSingleton<IGitService, GitService>();
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
-        services.AddSingleton<IDebuggerService, DapDebuggerService>();
         services.AddSingleton<IDebugToolInstaller, DebugToolInstaller>();
         services.AddSingleton<IPtyProvider>(_ => PtyProviderFactory.CreateDefault());
+        services.AddSingleton<ITerminalEmulatorFactory, ManagedTerminalEmulatorFactory>();
         services.AddSingleton<ITerminalService, TerminalService>();
         services.AddSingleton<IAcpAgentHostFactory, AcpAgentHostFactory>();
         services.AddSingleton<IAcpSettings, AcpSettings>();
@@ -125,6 +126,7 @@ public sealed class App : Application
         services.AddSingleton<IAcpProfileStore, AcpProfileStore>();
         services.AddSingleton<ISecretStore, OsSecretStore>();
         services.AddSingleton<IAcpOAuthDeviceFlowService, AcpOAuthDeviceFlowService>();
+        services.AddSingleton<IDebuggerServiceRegistry, DebuggerServiceRegistry>();
 
         services.AddSingleton<WorkspaceInfoService>();
         services.AddSingleton<IWorkspaceInfo>(sp => sp.GetRequiredService<WorkspaceInfoService>());
@@ -188,6 +190,8 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, FileExplorerExtensionEntry>();
         services.AddSingleton<IXveExtension, SolutionExplorerExtensionEntry>();
         services.AddSingleton<IXveExtension, WorkspaceExtensionEntry>();
+        services.AddSingleton<IXveExtension, DapDebuggingExtensionEntry>();
+        services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
         services.AddSingleton<MainWindowViewModel>();

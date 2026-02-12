@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace XamlVisualEditor.Core.Debugging;
+namespace XamlVisualEditor.Extensions.Debugging;
 
 public interface IDebuggerService
 {

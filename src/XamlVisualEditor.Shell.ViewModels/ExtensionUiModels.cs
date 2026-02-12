@@ -256,12 +256,41 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 
         RefreshCommand = ReactiveCommand.CreateFromTask(ct => ReloadAsync(ct));
         CollapseAllCommand = ReactiveCommand.Create(CollapseAll);
-        NewFileCommand = ReactiveCommand.CreateFromTask(_ => InvokeSelectedAsync(node => node.NewFileCommand));
-        NewFolderCommand = ReactiveCommand.CreateFromTask(_ => InvokeSelectedAsync(node => node.NewFolderCommand));
 
         this.WhenAnyValue(x => x.SelectedRow)
-            .Select(row => row?.Item as ExtensionTreeNodeViewModel)
+            .Select(row => row switch
+            {
+                HierarchicalNode<ExtensionTreeNodeViewModel> node => node.Item,
+                HierarchicalNode node => node.Item as ExtensionTreeNodeViewModel,
+                ExtensionTreeNodeViewModel node => node,
+                _ => null
+            })
             .BindTo(this, x => x.SelectedNode);
+
+        IObservable<ExtensionTreeNodeViewModel?> selectedNode = this.WhenAnyValue(x => x.SelectedNode);
+        IObservable<bool> canOpen = selectedNode.Select(node => node?.CanOpen == true);
+        IObservable<bool> canOpenWorkspace = selectedNode.Select(node => node?.CanOpenWorkspace == true);
+        IObservable<bool> canCreateFile = selectedNode.Select(node => node?.CanCreateFile == true);
+        IObservable<bool> canCreateFolder = selectedNode.Select(node => node?.CanCreateFolder == true);
+        IObservable<bool> canRename = selectedNode.Select(node => node?.CanRename == true);
+        IObservable<bool> canDelete = selectedNode.Select(node => node?.CanDelete == true);
+
+        OpenSelectedCommand = ReactiveCommand.CreateFromTask(OpenSelectedAsync, canOpen);
+        OpenWorkspaceSelectedCommand = ReactiveCommand.CreateFromTask(
+            ct => InvokeSelectedAsync(node => node.OpenWorkspaceCommand),
+            canOpenWorkspace);
+        NewFileCommand = ReactiveCommand.CreateFromTask(
+            ct => InvokeSelectedAsync(node => node.NewFileCommand),
+            canCreateFile);
+        NewFolderCommand = ReactiveCommand.CreateFromTask(
+            ct => InvokeSelectedAsync(node => node.NewFolderCommand),
+            canCreateFolder);
+        RenameSelectedCommand = ReactiveCommand.CreateFromTask(
+            ct => InvokeSelectedAsync(node => node.RenameCommand),
+            canRename);
+        DeleteSelectedCommand = ReactiveCommand.CreateFromTask(
+            ct => InvokeSelectedAsync(node => node.DeleteCommand),
+            canDelete);
 
         _provider.Changed += OnProviderChanged;
     }
@@ -280,12 +309,20 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 
     public ReactiveCommand<Unit, Unit> CollapseAllCommand { get; }
 
+    public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> OpenWorkspaceSelectedCommand { get; }
+
     public ReactiveCommand<Unit, Unit> NewFileCommand { get; }
 
     public ReactiveCommand<Unit, Unit> NewFolderCommand { get; }
 
+    public ReactiveCommand<Unit, Unit> RenameSelectedCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> DeleteSelectedCommand { get; }
+
     [Reactive]
-    public HierarchicalNode? SelectedRow { get; set; }
+    public object? SelectedRow { get; set; }
 
     [Reactive]
     public ExtensionTreeNodeViewModel? SelectedNode { get; set; }
@@ -489,6 +526,17 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
         Model.Refresh();
     }
 
+    private async Task OpenSelectedAsync(CancellationToken cancellationToken)
+    {
+        ExtensionTreeNodeViewModel? target = SelectedNode ?? RootItems.FirstOrDefault();
+        if (target is null || !target.CanOpen)
+        {
+            return;
+        }
+
+        await target.OpenAsync(cancellationToken);
+    }
+
     private async Task InvokeSelectedAsync(Func<ExtensionTreeNodeViewModel, ReactiveCommand<Unit, Unit>?> selector)
     {
         ExtensionTreeNodeViewModel? target = SelectedNode ?? RootItems.FirstOrDefault();
@@ -551,6 +599,11 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
         if (item is null)
         {
             return false;
+        }
+
+        if (item is HierarchicalNode<ExtensionTreeNodeViewModel> typed)
+        {
+            return matches.Contains(typed.Item);
         }
 
         if (item is HierarchicalNode hierarchical)
@@ -647,6 +700,10 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
 
         if (_operationsProvider is not null)
         {
+            CanRename = _operationsProvider.CanRename;
+            CanDelete = _operationsProvider.CanDelete;
+            CanCreateFile = _operationsProvider.CanCreateFile;
+            CanCreateFolder = _operationsProvider.CanCreateFolder;
             OpenCommand = CreateCommand(_operationsProvider.CanOpen, ct => _operationsProvider.OpenAsync(ct));
             RenameCommand = CreateCommand(_operationsProvider.CanRename, ct => _operationsProvider.RenameAsync(ct));
             DeleteCommand = CreateCommand(_operationsProvider.CanDelete, ct => _operationsProvider.DeleteAsync(ct));
@@ -677,6 +734,16 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
 
     public bool IsPlaceholder { get; }
 
+    public bool CanOpen => _operationsProvider?.CanOpen ?? _actionProvider?.CanOpen ?? false;
+
+    public bool CanCreateFile { get; }
+
+    public bool CanCreateFolder { get; }
+
+    public bool CanRename { get; }
+
+    public bool CanDelete { get; }
+
     public ReactiveCommand<Unit, Unit>? OpenCommand { get; }
 
     public ReactiveCommand<Unit, Unit>? NewFileCommand { get; }
@@ -698,6 +765,31 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
 
     [Reactive]
     public bool HasChildren { get; private set; } = true;
+
+    public Task OpenAsync(CancellationToken cancellationToken)
+    {
+        if (_operationsProvider is not null)
+        {
+            if (!_operationsProvider.CanOpen)
+            {
+                return Task.CompletedTask;
+            }
+
+            return _operationsProvider.OpenAsync(cancellationToken);
+        }
+
+        if (_actionProvider is not null)
+        {
+            if (!_actionProvider.CanOpen)
+            {
+                return Task.CompletedTask;
+            }
+
+            return _actionProvider.OpenAsync(cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
 
     public async Task EnsureChildrenAsync(CancellationToken cancellationToken)
     {

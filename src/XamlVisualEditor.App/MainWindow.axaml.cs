@@ -33,6 +33,11 @@ public sealed partial class MainWindow : Window
 
     public MainWindow(MainWindowViewModel? viewModel)
     {
+        if (viewModel is not null)
+        {
+            DataContext = viewModel;
+        }
+
         InitializeComponent();
 
         // Register interaction handlers when DataContext is set
@@ -59,11 +64,7 @@ public sealed partial class MainWindow : Window
             _debugToolConsentHandler?.Dispose();
         };
 
-        if (viewModel is not null)
-        {
-            DataContext = viewModel;
-        }
-        else if (DataContext is MainWindowViewModel vm)
+        if (DataContext is MainWindowViewModel vm)
         {
             RegisterInteractions(vm);
         }

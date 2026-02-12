@@ -43,6 +43,17 @@ internal sealed class DapDebugAdapterHost : IAsyncDisposable
             throw new InvalidOperationException("Failed to start debug adapter process.");
         }
 
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+        });
+
         Stream input = process.StandardOutput.BaseStream;
         Stream output = process.StandardInput.BaseStream;
 

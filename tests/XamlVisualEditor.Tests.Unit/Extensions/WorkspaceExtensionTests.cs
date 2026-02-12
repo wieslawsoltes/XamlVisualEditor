@@ -1,5 +1,6 @@
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
+using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Extensions.Hosting;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
 using Xunit;
@@ -78,6 +79,7 @@ public sealed class WorkspaceExtensionTests
             "/tmp",
             commands,
             contributions,
+            new DebuggerServiceRegistry(),
             new InMemoryWorkspace(),
             workspaceInfo,
             window,

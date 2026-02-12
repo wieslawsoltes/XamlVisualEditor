@@ -127,6 +127,12 @@ public sealed class ProjectModel
 
     /// <summary>Gets the primary output assembly path for the project, if known.</summary>
     public string? OutputAssemblyPath { get; init; }
+
+    /// <summary>Gets the target framework for this project instance, if known.</summary>
+    public string? TargetFramework { get; init; }
+
+    /// <summary>Gets whether the project output is executable.</summary>
+    public bool IsExecutable { get; init; }
 }
 
 /// <summary>

@@ -34,42 +34,82 @@ public sealed class ExtensionTreeOpenBehavior
     {
         if (e.NewValue is true && e.OldValue is false)
         {
-            control.AddHandler(InputElement.DoubleTappedEvent, OnDoubleTapped, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+            control.AddHandler(
+                InputElement.PointerPressedEvent,
+                OnPointerPressed,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+                handledEventsToo: true);
         }
         else if (e.NewValue is false && e.OldValue is true)
         {
-            control.RemoveHandler(InputElement.DoubleTappedEvent, OnDoubleTapped);
+            control.RemoveHandler(InputElement.PointerPressedEvent, OnPointerPressed);
         }
     }
 
-    private static void OnDoubleTapped(object? sender, TappedEventArgs e)
+    private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        ExtensionTreeNodeViewModel? node = GetNodeFromEvent(e);
-        if (node?.OpenCommand is null)
+        if (sender is not DataGrid dataGrid)
         {
             return;
         }
 
-        if (node.OpenCommand is ICommand command && command.CanExecute(null))
+        if (!IsPrimaryDoubleClick(dataGrid, e))
         {
-            command.Execute(null);
-            e.Handled = true;
+            return;
+        }
+
+        _ = GetNodeFromEvent(dataGrid, e);
+        if (dataGrid.DataContext is ExtensionTreeViewModel viewModel)
+        {
+            ICommand openCommand = viewModel.OpenSelectedCommand;
+            if (openCommand.CanExecute(null))
+            {
+                openCommand.Execute(null);
+                e.Handled = true;
+            }
         }
     }
 
-    private static ExtensionTreeNodeViewModel? GetNodeFromEvent(RoutedEventArgs e)
+    private static ExtensionTreeNodeViewModel? GetNodeFromEvent(DataGrid dataGrid, PointerPressedEventArgs e)
     {
-        if (e.Source is not Visual source)
+        Visual? source = e.Source as Visual;
+        DataGridRow? row = source?.GetVisualAncestors().OfType<DataGridRow>().FirstOrDefault();
+        if (row is null)
+        {
+            Point position = e.GetPosition(dataGrid);
+            if (dataGrid.InputHitTest(position) is Visual hit)
+            {
+                row = hit.GetVisualAncestors().OfType<DataGridRow>().FirstOrDefault();
+            }
+        }
+
+        if (row?.DataContext is null)
         {
             return null;
         }
 
-        DataGridRow? row = source.GetVisualAncestors().OfType<DataGridRow>().FirstOrDefault();
-        if (row?.DataContext is HierarchicalNode node)
+        if (!Equals(dataGrid.SelectedItem, row.DataContext))
         {
-            return node.Item as ExtensionTreeNodeViewModel;
+            dataGrid.SelectedItem = row.DataContext;
         }
 
-        return null;
+        return ResolveNode(row.DataContext);
+    }
+
+    private static ExtensionTreeNodeViewModel? ResolveNode(object? dataContext)
+    {
+        return dataContext switch
+        {
+            ExtensionTreeNodeViewModel node => node,
+            HierarchicalNode<ExtensionTreeNodeViewModel> node => node.Item,
+            HierarchicalNode node => node.Item as ExtensionTreeNodeViewModel,
+            _ => null
+        };
+    }
+
+    private static bool IsPrimaryDoubleClick(DataGrid dataGrid, PointerPressedEventArgs e)
+    {
+        PointerPoint point = e.GetCurrentPoint(dataGrid);
+        return point.Properties.IsLeftButtonPressed && e.ClickCount == 2;
     }
 }

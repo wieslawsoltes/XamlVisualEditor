@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using XamlVisualEditor.Core.Debugging;
+using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.Debugging.Dap;
 
@@ -12,12 +12,16 @@ internal sealed class DapDebugSession : IDebugSession
 {
     private readonly DapDebugAdapterHost _host;
     private readonly DapProtocolClient _client;
+    private readonly string _adapterId;
+    private readonly string _clientId;
     private DebugSessionState _state;
 
-    public DapDebugSession(DapDebugAdapterHost host)
+    public DapDebugSession(DapDebugAdapterHost host, string adapterId, string clientId)
     {
         _host = host;
         _client = host.Client;
+        _adapterId = adapterId;
+        _clientId = clientId;
         _client.EventReceived += OnEventReceived;
         _state = DebugSessionState.Created;
     }
@@ -32,8 +36,8 @@ internal sealed class DapDebugSession : IDebugSession
         SetState(DebugSessionState.Initializing);
         var args = new
         {
-            clientID = "XamlVisualEditor",
-            adapterID = "netcoredbg",
+            clientID = _clientId,
+            adapterID = _adapterId,
             linesStartAt1 = true,
             columnsStartAt1 = true,
             pathFormat = "path",
@@ -403,7 +407,64 @@ internal sealed class DapDebugSession : IDebugSession
 
     private static string[] SplitArguments(string args)
     {
-        return args.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            return Array.Empty<string>();
+        }
+
+        List<string> results = new();
+        System.Text.StringBuilder current = new();
+        bool inQuotes = false;
+        char quoteChar = '\0';
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            char c = args[i];
+            if (inQuotes)
+            {
+                if (c == quoteChar)
+                {
+                    inQuotes = false;
+                    continue;
+                }
+
+                if (c == '\\' && i + 1 < args.Length && args[i + 1] == quoteChar)
+                {
+                    current.Append(quoteChar);
+                    i++;
+                    continue;
+                }
+
+                current.Append(c);
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (current.Length > 0)
+                {
+                    results.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+
+            if (c == '"' || c == '\'')
+            {
+                inQuotes = true;
+                quoteChar = c;
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        if (current.Length > 0)
+        {
+            results.Add(current.ToString());
+        }
+
+        return results.ToArray();
     }
 
     private void SetState(DebugSessionState state)

@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace XamlVisualEditor.Core.Debugging;
+namespace XamlVisualEditor.Extensions.Debugging;
 
 public sealed record DebugToolConsentRequest(
     string ToolId,

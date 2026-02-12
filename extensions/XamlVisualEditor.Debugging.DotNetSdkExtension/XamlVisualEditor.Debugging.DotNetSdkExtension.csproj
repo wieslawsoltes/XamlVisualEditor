@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>XamlVisualEditor.Debugging.DotNetSdkExtension</RootNamespace>
+    <Description>.NET SDK debugger integration (vsdbg-based)</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Debugging.DapExtension\XamlVisualEditor.Debugging.DapExtension.csproj" />
+  </ItemGroup>
+</Project>

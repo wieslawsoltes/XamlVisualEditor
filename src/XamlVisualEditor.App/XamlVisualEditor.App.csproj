@@ -64,7 +64,8 @@
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.GitExtension\XamlVisualEditor.GitExtension.csproj" />
-    <ProjectReference Include="..\XamlVisualEditor.Debugging.Dap\XamlVisualEditor.Debugging.Dap.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.Debugging.DapExtension\XamlVisualEditor.Debugging.DapExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.Debugging.DotNetSdkExtension\XamlVisualEditor.Debugging.DotNetSdkExtension.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell\XamlVisualEditor.Shell.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Shell.ViewModels\XamlVisualEditor.Shell.ViewModels.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Terminal\XamlVisualEditor.Terminal.csproj" />
