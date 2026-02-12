@@ -14,8 +14,21 @@ public interface IEditorServices
     /// <summary>Opens a document in the editor.</summary>
     Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct);
 
+    /// <summary>Opens a document in the editor with the specified behavior.</summary>
+    Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct);
+
     /// <summary>Raised when the active document changes.</summary>
     event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
+}
+
+/// <summary>Specifies how documents are opened.</summary>
+public enum EditorDocumentOpenBehavior
+{
+    /// <summary>Allow loading a workspace when opening a workspace file.</summary>
+    AllowWorkspaceLoad = 0,
+
+    /// <summary>Open the file as a document only.</summary>
+    DocumentOnly = 1
 }
 
 /// <summary>Represents a single editor document.</summary>

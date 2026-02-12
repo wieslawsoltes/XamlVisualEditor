@@ -67,6 +67,12 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     /// <inheritdoc />
     public async Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct)
     {
+        return await OpenDocumentAsync(filePath, EditorDocumentOpenBehavior.AllowWorkspaceLoad, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(filePath))
         {
             return null;
@@ -74,21 +80,21 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
 
         if (Dispatcher.UIThread.CheckAccess())
         {
-            return await OpenDocumentCoreAsync(filePath).ConfigureAwait(false);
+            return await OpenDocumentCoreAsync(filePath, behavior).ConfigureAwait(false);
         }
 
         IEditorDocument? result = null;
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            result = await OpenDocumentCoreAsync(filePath);
+            result = await OpenDocumentCoreAsync(filePath, behavior);
         }, DispatcherPriority.Background, ct);
 
         return result;
     }
 
-    private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath)
+    private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath, EditorDocumentOpenBehavior behavior)
     {
-        await _mainViewModel.OpenFileAsync(filePath);
+        await _mainViewModel.OpenFileAsync(filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
         IEditorDocumentViewModel? document = _mainViewModel.Documents
             .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
         return document is null ? null : GetAdapter(document);

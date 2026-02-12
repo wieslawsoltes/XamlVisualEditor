@@ -2,14 +2,33 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:media="using:Avalonia.Media"
+             xmlns:v="using:XamlVisualEditor.App.Views"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              x:Class="XamlVisualEditor.App.Views.ExtensionTreeView"
              x:DataType="vm:ExtensionTreeViewModel">
   <DockPanel>
-    <TextBox DockPanel.Dock="Top"
-             Watermark="Search..."
-             Text="{CompiledBinding FilterText, Mode=TwoWay}"
-             Margin="4" />
+    <Grid DockPanel.Dock="Top" Margin="4,2" ColumnDefinitions="Auto,*">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+        <Button ToolTip.Tip="New File" Command="{CompiledBinding NewFileCommand}" Padding="6,2">
+          <PathIcon Width="14" Height="14" Data="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H14a1 1 0 0 1-1-1V3.5zM8 12h4v-2H8v2zm0 4h8v-2H8v2z" />
+        </Button>
+        <Button ToolTip.Tip="New Folder" Command="{CompiledBinding NewFolderCommand}" Padding="6,2">
+          <PathIcon Width="14" Height="14" Data="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6zm5 5v2h4v-2H7zm6 0v2h4v-2h-4z" />
+        </Button>
+        <Button ToolTip.Tip="Refresh" Command="{CompiledBinding RefreshCommand}" Padding="6,2">
+          <PathIcon Width="14" Height="14" Data="M12 4V1l4 4-4 4V6a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z" />
+        </Button>
+        <Button ToolTip.Tip="Collapse All" Command="{CompiledBinding CollapseAllCommand}" Padding="6,2">
+          <PathIcon Width="14" Height="14" Data="M4 6h16v2H4V6zm0 5h10v2H4v-2zm0 5h7v2H4v-2z" />
+        </Button>
+        <Separator Margin="4,0" />
+      </StackPanel>
+      <TextBox Grid.Column="1"
+               Watermark="Search..."
+               Text="{CompiledBinding FilterText, Mode=TwoWay}"
+               Margin="4,0,0,0" />
+    </Grid>
 
     <dg:DataGrid ItemsSource="{CompiledBinding Model.Flattened}"
                 HierarchicalModel="{CompiledBinding Model}"
@@ -21,10 +40,40 @@
                 HeadersVisibility="Column"
                 GridLinesVisibility="None"
                 CanUserSortColumns="True"
-                IsReadOnly="True">
+                IsReadOnly="True"
+                v:ExtensionTreeOpenBehavior.IsEnabled="True">
+      <dg:DataGrid.Styles>
+        <Style Selector="DataGridRow" x:DataType="dh:HierarchicalNode">
+          <Setter Property="ContextMenu">
+            <ContextMenu x:DataType="vm:ExtensionTreeNodeViewModel"
+                         DataContext="{CompiledBinding Item}">
+              <MenuItem Header="Open" Command="{CompiledBinding OpenCommand}" />
+              <MenuItem Header="Open Workspace"
+                        Command="{CompiledBinding OpenWorkspaceCommand}"
+                        IsVisible="{CompiledBinding CanOpenWorkspace}" />
+              <Separator />
+              <MenuItem Header="New File" Command="{CompiledBinding NewFileCommand}" />
+              <MenuItem Header="New Folder" Command="{CompiledBinding NewFolderCommand}" />
+              <Separator />
+              <MenuItem Header="Rename" Command="{CompiledBinding RenameCommand}" />
+              <MenuItem Header="Delete" Command="{CompiledBinding DeleteCommand}" />
+            </ContextMenu>
+          </Setter>
+        </Style>
+      </dg:DataGrid.Styles>
       <dg:DataGrid.DataTemplates>
         <DataTemplate DataType="vm:ExtensionTreeNodeViewModel" x:DataType="vm:ExtensionTreeNodeViewModel">
           <StackPanel Orientation="Horizontal" Spacing="6">
+            <ContentControl Content="{CompiledBinding Icon}">
+              <ContentControl.DataTemplates>
+                <DataTemplate x:DataType="media:IImage">
+                  <Image Width="16" Height="16" Source="{CompiledBinding .}" />
+                </DataTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{CompiledBinding .}" />
+                </DataTemplate>
+              </ContentControl.DataTemplates>
+            </ContentControl>
             <TextBlock Text="{CompiledBinding Label}" />
             <TextBlock Text="{CompiledBinding Description}"
                        Opacity="0.6" />

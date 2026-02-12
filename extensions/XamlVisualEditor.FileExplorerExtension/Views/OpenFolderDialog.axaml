@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.FileExplorerExtension.ViewModels"
+        x:Class="XamlVisualEditor.FileExplorerExtension.Views.OpenFolderDialog"
+        x:DataType="vm:OpenFolderDialogViewModel"
+        Width="520"
+        Height="180"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="12" LastChildFill="True">
+    <TextBlock DockPanel.Dock="Top"
+               Text="Open Folder"
+               FontSize="16"
+               FontWeight="SemiBold"
+               Margin="0,0,0,12" />
+
+    <StackPanel Spacing="12">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Folder" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBox Width="360"
+                   Text="{CompiledBinding FolderPath, Mode=TwoWay}" />
+          <Button Content="Browse"
+                  Command="{CompiledBinding BrowseCommand}" />
+        </StackPanel>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  Spacing="8">
+        <Button Content="Open"
+                Command="{CompiledBinding OpenCommand}"
+                MinWidth="90" />
+        <Button Content="Cancel"
+                Command="{CompiledBinding CancelCommand}"
+                MinWidth="90" />
+      </StackPanel>
+    </StackPanel>
+  </DockPanel>
+</Window>

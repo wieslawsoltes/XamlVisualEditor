@@ -30,7 +30,11 @@ public sealed class GitService : IGitService
             return null;
         }
 
-        GitCommandResult result = await RunGitAsync(workingDirectory, new[] { "rev-parse", "--show-toplevel" }, ct);
+        GitCommandResult result = await RunGitAsync(
+            workingDirectory,
+            new[] { "rev-parse", "--show-toplevel" },
+            ct,
+            allowNonZeroExitCode: true);
         if (result.ExitCode != 0)
         {
             return null;

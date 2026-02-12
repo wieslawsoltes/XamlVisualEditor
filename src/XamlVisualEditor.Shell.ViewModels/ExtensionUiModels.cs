@@ -251,6 +251,15 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
+        RefreshCommand = ReactiveCommand.CreateFromTask(ct => ReloadAsync(ct));
+        CollapseAllCommand = ReactiveCommand.Create(CollapseAll);
+        NewFileCommand = ReactiveCommand.CreateFromTask(_ => InvokeSelectedAsync(node => node.NewFileCommand));
+        NewFolderCommand = ReactiveCommand.CreateFromTask(_ => InvokeSelectedAsync(node => node.NewFolderCommand));
+
+        this.WhenAnyValue(x => x.SelectedRow)
+            .Select(row => row?.Item as ExtensionTreeNodeViewModel)
+            .BindTo(this, x => x.SelectedNode);
+
         _provider.Changed += OnProviderChanged;
     }
 
@@ -264,14 +273,26 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 
     public SearchModel SearchModel { get; }
 
+    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> CollapseAllCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> NewFileCommand { get; }
+
+    public ReactiveCommand<Unit, Unit> NewFolderCommand { get; }
+
     [Reactive]
     public HierarchicalNode? SelectedRow { get; set; }
+
+    [Reactive]
+    public ExtensionTreeNodeViewModel? SelectedNode { get; set; }
 
     [Reactive]
     public string? FilterText { get; set; }
 
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
+        HashSet<string> expandedKeys = CollectExpandedKeys(RootItems);
         IReadOnlyList<object> items = await _provider.GetChildrenAsync(null, cancellationToken).ConfigureAwait(false);
         List<ExtensionTreeNodeViewModel> nodes = new(items.Count);
 
@@ -281,14 +302,30 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
             nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, RefreshModel));
         }
 
-        RootItems.Clear();
-        foreach (ExtensionTreeNodeViewModel node in nodes)
+        if (cancellationToken.IsCancellationRequested)
         {
-            RootItems.Add(node);
+            return;
         }
 
-        Model.Refresh();
-        ApplyFilterAndSearch(FilterText);
+        await ScheduleOnMainThreadAsync(() =>
+        {
+            RootItems.Clear();
+            foreach (ExtensionTreeNodeViewModel node in nodes)
+            {
+                RootItems.Add(node);
+            }
+
+            Model.Refresh();
+            ApplyFilterAndSearch(FilterText);
+        });
+
+        if (expandedKeys.Count > 0)
+        {
+            await ScheduleOnMainThreadAsync(() =>
+            {
+                _ = RestoreExpandedNodesAsync(RootItems, expandedKeys, cancellationToken);
+            });
+        }
     }
 
     public async Task ReloadAsync(CancellationToken cancellationToken)
@@ -335,6 +372,141 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
         ApplySearch(text);
     }
 
+    private static Task ScheduleOnMainThreadAsync(Action action)
+    {
+        TaskCompletionSource<Unit> tcs = new();
+        RxApp.MainThreadScheduler.Schedule(() =>
+        {
+            try
+            {
+                action();
+                tcs.SetResult(Unit.Default);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        });
+
+        return tcs.Task;
+    }
+
+    private static HashSet<string> CollectExpandedKeys(IEnumerable<ExtensionTreeNodeViewModel> roots)
+    {
+        HashSet<string> keys = new(StringComparer.Ordinal);
+        foreach (ExtensionTreeNodeViewModel root in roots)
+        {
+            CollectExpandedKeys(root, keys);
+        }
+
+        return keys;
+    }
+
+    private static void CollectExpandedKeys(ExtensionTreeNodeViewModel node, HashSet<string> keys)
+    {
+        if (node.IsPlaceholder)
+        {
+            return;
+        }
+
+        if (node.IsExpanded)
+        {
+            string? key = GetExpansionKey(node);
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                keys.Add(key);
+            }
+        }
+
+        foreach (ExtensionTreeNodeViewModel child in node.Children)
+        {
+            CollectExpandedKeys(child, keys);
+        }
+    }
+
+    private static string? GetExpansionKey(ExtensionTreeNodeViewModel node)
+    {
+        return string.IsNullOrWhiteSpace(node.ContextValue) ? null : node.ContextValue;
+    }
+
+    private async Task RestoreExpandedNodesAsync(
+        IEnumerable<ExtensionTreeNodeViewModel> roots,
+        HashSet<string> expandedKeys,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (ExtensionTreeNodeViewModel root in roots)
+            {
+                await RestoreExpandedNodeAsync(root, expandedKeys, cancellationToken);
+            }
+
+            ApplyFilterAndSearch(FilterText);
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task RestoreExpandedNodeAsync(
+        ExtensionTreeNodeViewModel node,
+        HashSet<string> expandedKeys,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested || node.IsPlaceholder)
+        {
+            return;
+        }
+
+        string? key = GetExpansionKey(node);
+        if (!string.IsNullOrWhiteSpace(key) && expandedKeys.Contains(key))
+        {
+            node.IsExpanded = true;
+            await node.EnsureChildrenAsync(cancellationToken);
+        }
+
+        if (!node.IsExpanded)
+        {
+            return;
+        }
+
+        foreach (ExtensionTreeNodeViewModel child in node.Children)
+        {
+            await RestoreExpandedNodeAsync(child, expandedKeys, cancellationToken);
+        }
+    }
+
+    private void CollapseAll()
+    {
+        foreach (ExtensionTreeNodeViewModel node in RootItems)
+        {
+            CollapseNode(node);
+        }
+
+        Model.Refresh();
+    }
+
+    private async Task InvokeSelectedAsync(Func<ExtensionTreeNodeViewModel, ReactiveCommand<Unit, Unit>?> selector)
+    {
+        ExtensionTreeNodeViewModel? target = SelectedNode ?? RootItems.FirstOrDefault();
+        ReactiveCommand<Unit, Unit>? command = target is null ? null : selector(target);
+        if (command is null)
+        {
+            return;
+        }
+
+        await command.Execute().FirstAsync();
+    }
+
+    private static void CollapseNode(ExtensionTreeNodeViewModel node)
+    {
+        node.IsExpanded = false;
+        foreach (ExtensionTreeNodeViewModel child in node.Children)
+        {
+            CollapseNode(child);
+        }
+    }
+
     private void ApplyFiltering(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -373,7 +545,17 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 
     private static bool MatchesFilter(object? item, HashSet<object> matches)
     {
-        return item is not null && matches.Contains(item);
+        if (item is null)
+        {
+            return false;
+        }
+
+        if (item is HierarchicalNode hierarchical)
+        {
+            return hierarchical.Item is not null && matches.Contains(hierarchical.Item);
+        }
+
+        return matches.Contains(item);
     }
 
     private static HashSet<object> BuildMatchSet(
@@ -394,6 +576,11 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
         string text,
         HashSet<object> matches)
     {
+        if (node.IsPlaceholder)
+        {
+            return false;
+        }
+
         bool matchesSelf = node.Label.Contains(text, StringComparison.OrdinalIgnoreCase)
             || (node.Description?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false);
 
@@ -421,19 +608,58 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
     private readonly Action _refresh;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private bool _isLoaded;
+    private readonly IExtensionTreeItemActionProvider? _actionProvider;
+    private readonly IExtensionTreeItemOperationsProvider? _operationsProvider;
+    private readonly IExtensionTreeItemChildrenProvider? _childrenProvider;
+    private readonly IExtensionTreeItemWorkspaceProvider? _workspaceProvider;
 
     public ExtensionTreeNodeViewModel(
         object element,
         TreeItem item,
         IExtensionTreeDataProvider provider,
-        Action refresh)
+        Action refresh,
+        bool isPlaceholder = false)
     {
         Element = element;
         Label = item.Label;
         Description = item.Description;
         ContextValue = item.ContextValue;
+        Icon = item.Icon;
         _provider = provider;
         _refresh = refresh;
+        IsPlaceholder = isPlaceholder;
+        _actionProvider = element as IExtensionTreeItemActionProvider;
+        _operationsProvider = element as IExtensionTreeItemOperationsProvider;
+        _childrenProvider = element as IExtensionTreeItemChildrenProvider;
+        _workspaceProvider = element as IExtensionTreeItemWorkspaceProvider;
+
+        if (_childrenProvider is not null)
+        {
+            HasChildren = _childrenProvider.HasChildren;
+        }
+        else if (IsPlaceholder)
+        {
+            HasChildren = false;
+        }
+
+        if (_operationsProvider is not null)
+        {
+            OpenCommand = CreateCommand(_operationsProvider.CanOpen, ct => _operationsProvider.OpenAsync(ct));
+            RenameCommand = CreateCommand(_operationsProvider.CanRename, ct => _operationsProvider.RenameAsync(ct));
+            DeleteCommand = CreateCommand(_operationsProvider.CanDelete, ct => _operationsProvider.DeleteAsync(ct));
+            NewFileCommand = CreateCommand(_operationsProvider.CanCreateFile, ct => _operationsProvider.CreateFileAsync(ct));
+            NewFolderCommand = CreateCommand(_operationsProvider.CanCreateFolder, ct => _operationsProvider.CreateFolderAsync(ct));
+        }
+        else if (_actionProvider is not null)
+        {
+            OpenCommand = CreateCommand(_actionProvider.CanOpen, ct => _actionProvider.OpenAsync(ct));
+        }
+
+        if (_workspaceProvider is not null)
+        {
+            OpenWorkspaceCommand = CreateCommand(_workspaceProvider.CanOpenWorkspace, ct => _workspaceProvider.OpenWorkspaceAsync(ct));
+            CanOpenWorkspace = _workspaceProvider.CanOpenWorkspace;
+        }
     }
 
     public object Element { get; }
@@ -443,6 +669,24 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
     public string? Description { get; }
 
     public string? ContextValue { get; }
+
+    public object? Icon { get; }
+
+    public bool IsPlaceholder { get; }
+
+    public ReactiveCommand<Unit, Unit>? OpenCommand { get; }
+
+    public ReactiveCommand<Unit, Unit>? NewFileCommand { get; }
+
+    public ReactiveCommand<Unit, Unit>? NewFolderCommand { get; }
+
+    public ReactiveCommand<Unit, Unit>? RenameCommand { get; }
+
+    public ReactiveCommand<Unit, Unit>? DeleteCommand { get; }
+
+    public ReactiveCommand<Unit, Unit>? OpenWorkspaceCommand { get; }
+
+    public bool CanOpenWorkspace { get; }
 
     public ObservableCollection<ExtensionTreeNodeViewModel> Children { get; } = new();
 
@@ -459,7 +703,7 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
             return;
         }
 
-        await _loadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _loadGate.WaitAsync(cancellationToken);
         try
         {
             if (_isLoaded)
@@ -467,13 +711,18 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
                 return;
             }
 
-            IReadOnlyList<object> items = await _provider.GetChildrenAsync(Element, cancellationToken)
-                .ConfigureAwait(false);
+            if (Children.Count == 0)
+            {
+                Children.Add(CreateLoadingPlaceholder(_provider, _refresh));
+                _refresh();
+            }
+
+            IReadOnlyList<object> items = await _provider.GetChildrenAsync(Element, cancellationToken);
             List<ExtensionTreeNodeViewModel> nodes = new(items.Count);
 
             foreach (object item in items)
             {
-                TreeItem treeItem = await _provider.GetTreeItemAsync(item, cancellationToken).ConfigureAwait(false);
+                TreeItem treeItem = await _provider.GetTreeItemAsync(item, cancellationToken);
                 nodes.Add(new ExtensionTreeNodeViewModel(item, treeItem, _provider, _refresh));
             }
 
@@ -491,5 +740,23 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
         {
             _loadGate.Release();
         }
+    }
+
+    private static ExtensionTreeNodeViewModel CreateLoadingPlaceholder(
+        IExtensionTreeDataProvider provider,
+        Action refresh)
+    {
+        TreeItem item = new("Loading...", null, null);
+        return new ExtensionTreeNodeViewModel(new LoadingPlaceholder(), item, provider, refresh, isPlaceholder: true);
+    }
+
+    private sealed class LoadingPlaceholder
+    {
+    }
+
+    private static ReactiveCommand<Unit, Unit> CreateCommand(bool canExecute, Func<CancellationToken, Task> execute)
+    {
+        IObservable<bool> canRun = Observable.Return(canExecute);
+        return ReactiveCommand.CreateFromTask(execute, canRun);
     }
 }

@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.InputBoxDialog"
+        x:DataType="vm:InputBoxDialogViewModel"
+        Width="360"
+        Height="180"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="16" Spacing="8">
+    <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+    <TextBlock Text="{CompiledBinding Prompt}" Opacity="0.7" />
+    <TextBox Text="{CompiledBinding Value, Mode=TwoWay}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Command="{CompiledBinding CancelCommand}" IsCancel="True" />
+      <Button Content="OK" Command="{CompiledBinding ConfirmCommand}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -897,7 +897,33 @@ public sealed class XamlEditorDockFactory : Factory
         if (toolDock is not null)
         {
             ExtensionTool tool = new(viewModel);
-            AddDockable(toolDock, tool);
+            if (toolDock.VisibleDockables is ObservableCollection<IDockable> dockables)
+            {
+                int insertIndex = dockables.Count;
+                if (viewModel.Location == ExtensionViewLocation.Left)
+                {
+                    int solutionIndex = -1;
+                    for (int i = 0; i < dockables.Count; i++)
+                    {
+                        if (dockables[i] is SolutionExplorerTool)
+                        {
+                            solutionIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (solutionIndex >= 0 && solutionIndex <= dockables.Count)
+                    {
+                        insertIndex = Math.Min(solutionIndex + 1, dockables.Count);
+                    }
+                }
+
+                dockables.Insert(insertIndex, tool);
+            }
+            else
+            {
+                AddDockable(toolDock, tool);
+            }
             if (toolDock.ActiveDockable is null)
             {
                 SetActiveDockable(tool);

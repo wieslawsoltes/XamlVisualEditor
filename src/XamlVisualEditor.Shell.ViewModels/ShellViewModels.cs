@@ -5400,9 +5400,41 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Opens a specific file.
     /// </summary>
-    public async System.Threading.Tasks.Task OpenFileAsync(string filePath)
+    public System.Threading.Tasks.Task OpenFileAsync(string filePath)
     {
-        await EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: true);
+        return OpenFileAsync(filePath, allowWorkspaceLoad: true);
+    }
+
+    internal System.Threading.Tasks.Task OpenFileAsync(string filePath, bool allowWorkspaceLoad)
+    {
+        return EnsureDocumentOpenAsync(filePath, addRecent: true, updateStatus: true, allowWorkspaceLoad: allowWorkspaceLoad);
+    }
+
+    public System.Threading.Tasks.Task OpenFolderAsync(string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath) || !System.IO.Directory.Exists(folderPath))
+        {
+            StatusText = "Folder not found";
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        _workspace = null;
+        _workspacePath = folderPath;
+        _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
+        HasWorkspace = false;
+
+        WorkspaceProjects.Clear();
+        _projectLookup.Clear();
+        SetActiveProject(null);
+        SolutionExplorer.Clear();
+        SolutionExplorer.IsVisible = false;
+
+        string name = System.IO.Path.GetFileName(folderPath.TrimEnd(
+            System.IO.Path.DirectorySeparatorChar,
+            System.IO.Path.AltDirectorySeparatorChar));
+        StatusText = $"Opened folder {name}";
+        LogOutput("Info", $"Opened folder: {folderPath}");
+        return System.Threading.Tasks.Task.CompletedTask;
     }
 
     private async System.Threading.Tasks.Task OpenFromSolutionExplorerAsync(string filePath)
@@ -6770,6 +6802,14 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
         CollapseAll(Root);
         WireFileOpen(Root);
         SetRoot(Root);
+    }
+
+    public void Clear()
+    {
+        Root = null;
+        RootItems.Clear();
+        Model.Refresh();
+        ApplyFilterAndSearch(FilterText);
     }
 
     private void SetRoot(SolutionExplorerNodeViewModel? root)

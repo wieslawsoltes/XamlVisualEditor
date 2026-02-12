@@ -25,6 +25,7 @@
     <PackageReference Include="Serilog.Extensions.Logging" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Xaml.Behaviors.Avalonia" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
@@ -34,6 +35,7 @@
     <ProjectReference Include="..\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.AcpExtension\XamlVisualEditor.AcpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.DotNetTemplatesExtension\XamlVisualEditor.DotNetTemplatesExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.FileExplorerExtension\XamlVisualEditor.FileExplorerExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.McpExtension\XamlVisualEditor.McpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.VscodeCompatExtension\XamlVisualEditor.VscodeCompatExtension.csproj" />

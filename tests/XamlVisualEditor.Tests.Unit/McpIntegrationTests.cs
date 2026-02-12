@@ -253,6 +253,13 @@ public sealed class McpIntegrationTests
             return Task.FromResult<IEditorDocument?>(doc);
         }
 
+        public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
+        {
+            StubEditorDocument doc = new(filePath);
+            _documents.Add(doc);
+            return Task.FromResult<IEditorDocument?>(doc);
+        }
+
         public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
     }
 

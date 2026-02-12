@@ -27,7 +27,68 @@ public interface ITreeDataProvider<T>
 }
 
 /// <summary>Describes a tree item.</summary>
-public sealed record TreeItem(string Label, string? Description, string? ContextValue);
+public sealed record TreeItem(string Label, string? Description, string? ContextValue, object? Icon = null);
+
+/// <summary>Provides actions for a tree item.</summary>
+public interface IExtensionTreeItemActionProvider
+{
+    /// <summary>Gets whether the item can be opened.</summary>
+    bool CanOpen { get; }
+
+    /// <summary>Opens the item.</summary>
+    Task OpenAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Provides additional operations for a tree item.</summary>
+public interface IExtensionTreeItemOperationsProvider
+{
+    /// <summary>Gets whether the item can be opened.</summary>
+    bool CanOpen { get; }
+
+    /// <summary>Opens the item.</summary>
+    Task OpenAsync(CancellationToken cancellationToken);
+
+    /// <summary>Gets whether the item can be renamed.</summary>
+    bool CanRename { get; }
+
+    /// <summary>Renames the item.</summary>
+    Task RenameAsync(CancellationToken cancellationToken);
+
+    /// <summary>Gets whether the item can be deleted.</summary>
+    bool CanDelete { get; }
+
+    /// <summary>Deletes the item.</summary>
+    Task DeleteAsync(CancellationToken cancellationToken);
+
+    /// <summary>Gets whether a file can be created under this item.</summary>
+    bool CanCreateFile { get; }
+
+    /// <summary>Creates a file under this item.</summary>
+    Task CreateFileAsync(CancellationToken cancellationToken);
+
+    /// <summary>Gets whether a folder can be created under this item.</summary>
+    bool CanCreateFolder { get; }
+
+    /// <summary>Creates a folder under this item.</summary>
+    Task CreateFolderAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Provides a hint about child availability for a tree item.</summary>
+public interface IExtensionTreeItemChildrenProvider
+{
+    /// <summary>Gets whether the item has children.</summary>
+    bool HasChildren { get; }
+}
+
+/// <summary>Provides workspace open behavior for a tree item.</summary>
+public interface IExtensionTreeItemWorkspaceProvider
+{
+    /// <summary>Gets whether the item can open a workspace.</summary>
+    bool CanOpenWorkspace { get; }
+
+    /// <summary>Opens the item as a workspace.</summary>
+    Task OpenWorkspaceAsync(CancellationToken cancellationToken);
+}
 
 /// <summary>Provides a webview view.</summary>
 public interface IWebviewViewProvider

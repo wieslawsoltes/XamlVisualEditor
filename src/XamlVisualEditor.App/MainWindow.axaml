@@ -44,7 +44,9 @@
                         <DataTemplate x:DataType="vm:RecentFileEntry">
                             <MenuItem ToolTip.Tip="{CompiledBinding FilePath}"
                                       Command="{CompiledBinding DataContext.OpenPathCommand, ElementName=MainWin}"
-                                      CommandParameter="{CompiledBinding FilePath}">
+                                      CommandParameter="{CompiledBinding FilePath}"
+                                      Margin="0"
+                                      Padding="0">
                                 <MenuItem.Header>
                                     <TextBlock Text="{CompiledBinding DisplayName}"
                                                MaxWidth="420"
@@ -54,6 +56,21 @@
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
+                <ItemsControl ItemsSource="{CompiledBinding FileMenuItems}" Margin="0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Vertical" Spacing="0" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}"
+                                      Margin="0"
+                                      Padding="0" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <Separator />
                 <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
                 <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />

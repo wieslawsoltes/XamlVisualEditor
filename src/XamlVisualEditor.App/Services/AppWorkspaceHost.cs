@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
@@ -18,6 +19,15 @@ public sealed class AppWorkspaceHost : IWorkspaceHost
 
     public Task OpenWorkspaceAsync(string workspacePath, WorkspaceOpenMode mode, CancellationToken cancellationToken)
     {
+        if (Directory.Exists(workspacePath))
+        {
+            return mode switch
+            {
+                WorkspaceOpenMode.NewWindow => OpenInNewWindowAsync(workspacePath, cancellationToken),
+                _ => OpenFolderInCurrentWindowAsync(workspacePath)
+            };
+        }
+
         return mode switch
         {
             WorkspaceOpenMode.NewWindow => OpenInNewWindowAsync(workspacePath, cancellationToken),
@@ -28,6 +38,11 @@ public sealed class AppWorkspaceHost : IWorkspaceHost
     private Task OpenInCurrentWindowAsync(string workspacePath)
     {
         return _mainViewModel.OpenFileAsync(workspacePath);
+    }
+
+    private Task OpenFolderInCurrentWindowAsync(string workspacePath)
+    {
+        return _mainViewModel.OpenFolderAsync(workspacePath);
     }
 
     private static Task OpenInNewWindowAsync(string workspacePath, CancellationToken cancellationToken)

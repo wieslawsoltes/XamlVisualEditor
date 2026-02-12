@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
@@ -8,27 +9,34 @@ public sealed class ExtensionManager : IExtensionManager
     private readonly IExtensionPackageStore _store;
     private readonly IExtensionStateStore _stateStore;
     private readonly IExtensionUpdateService _updateService;
-    private readonly IReadOnlyList<ExtensionPackageInfo> _builtInPackages;
-    private readonly HashSet<string> _builtInIds;
+    private readonly Lazy<IReadOnlyList<ExtensionPackageInfo>> _builtInPackages;
+    private readonly Lazy<HashSet<string>> _builtInIds;
 
     public ExtensionManager(
         IExtensionPackageStore store,
         IExtensionStateStore stateStore,
         IExtensionUpdateService updateService,
-        IEnumerable<IXveExtension> builtInExtensions)
+        IServiceProvider services)
     {
         _store = store;
         _stateStore = stateStore;
         _updateService = updateService;
-        _builtInPackages = BuildBuiltInPackages(builtInExtensions ?? Array.Empty<IXveExtension>());
-        _builtInIds = new HashSet<string>(_builtInPackages.Select(package => package.Manifest.ExtensionId), StringComparer.OrdinalIgnoreCase);
+        _builtInPackages = new Lazy<IReadOnlyList<ExtensionPackageInfo>>(() =>
+        {
+            IEnumerable<IXveExtension> extensions = services.GetServices<IXveExtension>();
+            return BuildBuiltInPackages(extensions ?? Array.Empty<IXveExtension>());
+        });
+        _builtInIds = new Lazy<HashSet<string>>(() =>
+            new HashSet<string>(
+                _builtInPackages.Value.Select(package => package.Manifest.ExtensionId),
+                StringComparer.OrdinalIgnoreCase));
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<ExtensionPackageInfo>> GetInstalledAsync(CancellationToken ct)
     {
         IReadOnlyList<ExtensionPackageInfo> installed = await _store.GetInstalledAsync(ct).ConfigureAwait(false);
-        if (_builtInPackages.Count == 0)
+        if (_builtInPackages.Value.Count == 0)
         {
             return installed;
         }
@@ -39,7 +47,7 @@ public sealed class ExtensionManager : IExtensionManager
             merged[package.Manifest.ExtensionId] = package;
         }
 
-        foreach (ExtensionPackageInfo package in _builtInPackages)
+        foreach (ExtensionPackageInfo package in _builtInPackages.Value)
         {
             if (!merged.ContainsKey(package.Manifest.ExtensionId))
             {
@@ -97,7 +105,7 @@ public sealed class ExtensionManager : IExtensionManager
 
     private bool IsBuiltIn(string extensionId)
     {
-        return !string.IsNullOrWhiteSpace(extensionId) && _builtInIds.Contains(extensionId);
+        return !string.IsNullOrWhiteSpace(extensionId) && _builtInIds.Value.Contains(extensionId);
     }
 
     private static IReadOnlyList<ExtensionPackageInfo> BuildBuiltInPackages(IEnumerable<IXveExtension> extensions)

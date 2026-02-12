@@ -218,6 +218,9 @@ public sealed class IdeBridgeCoreHandlerTests
 
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, CancellationToken ct)
             => Task.FromResult(_document);
+
+        public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
+            => Task.FromResult(_document);
     }
 
     private sealed class FakeEditorDocument : IEditorDocument

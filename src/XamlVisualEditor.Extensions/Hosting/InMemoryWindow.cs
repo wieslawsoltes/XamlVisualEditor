@@ -59,6 +59,15 @@ public sealed class InMemoryWindow : IWindow
     }
 }
 
+/// <summary>In-memory folder picker.</summary>
+public sealed class InMemoryFolderPicker : IFolderPicker
+{
+    public Task<string?> PickFolderAsync(string? title, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<string?>(null);
+    }
+}
+
 /// <summary>In-memory dialog host.</summary>
 public sealed class InMemoryDialogHost : IDialogHost
 {

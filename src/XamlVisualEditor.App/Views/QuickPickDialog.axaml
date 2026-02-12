@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dg="using:Avalonia.Controls"
+        xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
+        x:Class="XamlVisualEditor.App.Views.QuickPickDialog"
+        x:DataType="vm:QuickPickDialogViewModel"
+        Width="520"
+        Height="360"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="12">
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding Title}"
+               FontWeight="SemiBold"
+               Margin="0,0,0,8" />
+
+    <StackPanel DockPanel.Dock="Bottom"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="8"
+                Margin="0,8,0,0">
+      <Button Content="Select"
+              Command="{CompiledBinding ConfirmCommand}"
+              MinWidth="80"
+              IsDefault="True" />
+      <Button Content="Cancel"
+              Command="{CompiledBinding CancelCommand}"
+              MinWidth="80"
+              IsCancel="True" />
+    </StackPanel>
+
+    <dg:DataGrid ItemsSource="{CompiledBinding Items}"
+                SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}"
+                HeadersVisibility="None"
+                GridLinesVisibility="None"
+                AutoGenerateColumns="False"
+                CanUserSortColumns="False"
+                IsReadOnly="True">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTemplateColumn Header="Item" Width="*">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:QuickPickItemViewModel">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{CompiledBinding Label}" />
+                <TextBlock Text="{CompiledBinding Description}"
+                           IsVisible="{CompiledBinding HasDescription}"
+                           Opacity="0.6"
+                           FontSize="11" />
+                <TextBlock Text="{CompiledBinding Detail}"
+                           IsVisible="{CompiledBinding HasDetail}"
+                           Opacity="0.5"
+                           FontSize="10" />
+              </StackPanel>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+      </dg:DataGrid.Columns>
+      <dg:DataGrid.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{CompiledBinding ConfirmCommand}" />
+        <KeyBinding Gesture="Return" Command="{CompiledBinding ConfirmCommand}" />
+      </dg:DataGrid.KeyBindings>
+    </dg:DataGrid>
+  </DockPanel>
+</Window>
