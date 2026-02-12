@@ -73,7 +73,14 @@ public sealed class DotNetTemplateListItemViewModel : ReactiveObject
 
     public string ShortName => Template.ShortName;
 
-    public string Language => string.IsNullOrWhiteSpace(Template.Language) ? "Any" : Template.Language;
+    public string Language
+    {
+        get
+        {
+            IReadOnlyList<string> languages = DotNetTemplateWizardViewModel.GetTemplateLanguages(Template);
+            return languages.Count == 0 ? "Any" : string.Join(", ", languages);
+        }
+    }
 
     public string Type => string.IsNullOrWhiteSpace(Template.Type) ? "Template" : Template.Type;
 
@@ -123,9 +130,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         _templateService = templateService;
         Mode = mode;
 
-        Title = mode == DotNetTemplateWizardMode.Solution
-            ? "New Solution"
-            : "New Project";
+        UpdateTitle();
 
         SearchText = string.Empty;
         ProjectName = "MyProject";
@@ -223,6 +228,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
             {
                 this.RaisePropertyChanged(nameof(IsTemplateStep));
                 this.RaisePropertyChanged(nameof(IsConfigureStep));
+                UpdateTitle();
             });
 
         this.WhenAnyValue(x => x.CreateSolution)
@@ -281,7 +287,8 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         _ = LoadTemplatesAsync(CancellationToken.None);
     }
 
-    public string Title { get; }
+    [Reactive]
+    public string Title { get; private set; } = string.Empty;
 
     public DotNetTemplateWizardMode Mode { get; }
 
@@ -410,11 +417,9 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
                 Languages.Clear();
                 Languages.Add("All");
                 foreach (string language in items
-                             .Select(item => item.Template.Language)
-                             .Where(lang => !string.IsNullOrWhiteSpace(lang))
+                             .SelectMany(item => GetTemplateLanguages(item.Template))
                              .Distinct(StringComparer.OrdinalIgnoreCase)
-                             .OrderBy(lang => lang, StringComparer.OrdinalIgnoreCase)
-                             .Select(lang => lang!))
+                             .OrderBy(lang => lang, StringComparer.OrdinalIgnoreCase))
                 {
                     Languages.Add(language);
                 }
@@ -443,7 +448,9 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
         if (!string.IsNullOrWhiteSpace(language) && !string.Equals(language, "All", StringComparison.OrdinalIgnoreCase))
         {
-            filtered = filtered.Where(item => string.Equals(item.Template.Language, language, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(item =>
+                GetTemplateLanguages(item.Template).Any(lang =>
+                    string.Equals(lang, language, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -626,13 +633,60 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
     private IReadOnlyDictionary<string, string> BuildTemplateParameters()
     {
         Dictionary<string, string> parameters = new(StringComparer.OrdinalIgnoreCase);
-        string? language = SelectedTemplate?.Template.Language;
-        if (!string.IsNullOrWhiteSpace(language))
+
+        string? selectedLanguage = SelectedLanguage;
+        if (!string.IsNullOrWhiteSpace(selectedLanguage)
+            && !string.Equals(selectedLanguage, "All", StringComparison.OrdinalIgnoreCase))
         {
-            parameters["language"] = language;
+            parameters["language"] = selectedLanguage;
+            return parameters;
+        }
+
+        if (SelectedTemplate is null)
+        {
+            return parameters;
+        }
+
+        IReadOnlyList<string> templateLanguages = GetTemplateLanguages(SelectedTemplate.Template);
+        if (templateLanguages.Count == 1)
+        {
+            parameters["language"] = templateLanguages[0];
         }
 
         return parameters;
+    }
+
+    internal static IReadOnlyList<string> GetTemplateLanguages(DotNetTemplateInfo template)
+    {
+        string? language = template.Language;
+        if (string.IsNullOrWhiteSpace(language)
+            && template.Tags.TryGetValue("language", out string? tagLanguage))
+        {
+            language = tagLanguage;
+        }
+
+        if (string.IsNullOrWhiteSpace(language))
+        {
+            return Array.Empty<string>();
+        }
+
+        string cleaned = language.Replace("[", string.Empty, StringComparison.Ordinal)
+            .Replace("]", string.Empty, StringComparison.Ordinal);
+
+        string[] parts = cleaned.Split(new[] { ',', ';', '|', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        List<string> languages = new();
+        foreach (string part in parts)
+        {
+            string trimmed = part.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                languages.Add(trimmed);
+            }
+        }
+
+        return languages.Count == 0
+            ? Array.Empty<string>()
+            : languages;
     }
 
     private string BuildProjectPathPreview()
@@ -763,6 +817,19 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
         }
 
         return Environment.CurrentDirectory;
+    }
+
+    private void UpdateTitle()
+    {
+        string baseTitle = Mode == DotNetTemplateWizardMode.Solution
+            ? "New Solution"
+            : "New Project";
+
+        string stepTitle = Step == DotNetTemplateWizardStep.Template
+            ? "Select Template"
+            : "Configure";
+
+        Title = baseTitle + " - " + stepTitle;
     }
 }
 
