@@ -1,0 +1,160 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dg="using:Avalonia.Controls"
+        xmlns:vm="using:XamlVisualEditor.DotNetTemplatesExtension.ViewModels"
+        x:Class="XamlVisualEditor.DotNetTemplatesExtension.Views.NewDotNetWizardDialog"
+        x:DataType="vm:DotNetTemplateWizardViewModel"
+        Width="960"
+        Height="680"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="12" LastChildFill="True">
+    <TextBlock DockPanel.Dock="Top"
+               Text="{CompiledBinding Title}"
+               FontSize="18"
+               FontWeight="SemiBold"
+               Margin="0,0,0,12" />
+
+    <StackPanel DockPanel.Dock="Bottom"
+                Orientation="Horizontal"
+                HorizontalAlignment="Right"
+                Spacing="8"
+                Margin="0,12,0,0">
+      <Button Content="Back"
+              Command="{CompiledBinding BackCommand}"
+              IsVisible="{CompiledBinding IsConfigureStep}"
+              MinWidth="90" />
+      <Button Content="Next"
+              Command="{CompiledBinding NextCommand}"
+              IsVisible="{CompiledBinding IsTemplateStep}"
+              MinWidth="90" />
+      <Button Content="Create"
+              Command="{CompiledBinding CreateCommand}"
+              IsVisible="{CompiledBinding IsConfigureStep}"
+              MinWidth="90" />
+      <Button Content="Cancel"
+              Command="{CompiledBinding CancelCommand}"
+              MinWidth="90" />
+    </StackPanel>
+
+    <Grid>
+      <DockPanel IsVisible="{CompiledBinding IsTemplateStep}">
+        <StackPanel DockPanel.Dock="Top" Spacing="8">
+          <Grid ColumnDefinitions="*,200,Auto" RowDefinitions="Auto,Auto">
+            <TextBox Grid.Row="0"
+                     Grid.Column="0"
+                     Watermark="Search templates..."
+                     Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+            <ComboBox Grid.Row="0"
+                      Grid.Column="1"
+                      Margin="8,0,0,0"
+                      ItemsSource="{CompiledBinding Languages}"
+                      SelectedItem="{CompiledBinding SelectedLanguage, Mode=TwoWay}" />
+            <Button Grid.Row="0"
+                    Grid.Column="2"
+                    Margin="8,0,0,0"
+                    Content="Refresh"
+                    Command="{CompiledBinding RefreshTemplatesCommand}" />
+            <TextBox Grid.Row="1"
+                     Grid.Column="0"
+                     Grid.ColumnSpan="2"
+                     Watermark="Install template package or path"
+                     Text="{CompiledBinding InstallTemplateInput, Mode=TwoWay}" />
+            <Button Grid.Row="1"
+                    Grid.Column="2"
+                    Margin="8,0,0,0"
+                    Content="Install"
+                    Command="{CompiledBinding InstallTemplateCommand}" />
+          </Grid>
+
+          <TextBlock Text="{CompiledBinding StatusMessage}" Opacity="0.7" />
+          <TextBlock Text="{CompiledBinding ErrorMessage}" Foreground="Tomato" />
+        </StackPanel>
+
+        <dg:DataGrid ItemsSource="{CompiledBinding Templates}"
+                    SelectedItem="{CompiledBinding SelectedTemplate, Mode=TwoWay}"
+                    AutoGenerateColumns="False"
+                    HeadersVisibility="All"
+                    GridLinesVisibility="None"
+                    IsReadOnly="True">
+          <dg:DataGrid.Columns>
+            <dg:DataGridTextColumn Header="Name" Binding="{CompiledBinding Name}" Width="2*" />
+            <dg:DataGridTextColumn Header="Short Name" Binding="{CompiledBinding ShortName}" Width="*" />
+            <dg:DataGridTextColumn Header="Language" Binding="{CompiledBinding Language}" Width="*" />
+            <dg:DataGridTextColumn Header="Type" Binding="{CompiledBinding Type}" Width="*" />
+            <dg:DataGridTextColumn Header="Description" Binding="{CompiledBinding Description}" Width="3*" />
+          </dg:DataGrid.Columns>
+        </dg:DataGrid>
+      </DockPanel>
+
+      <ScrollViewer IsVisible="{CompiledBinding IsConfigureStep}">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Project name" VerticalAlignment="Center" />
+            <TextBox Grid.Row="0" Grid.Column="1" Text="{CompiledBinding ProjectName, Mode=TwoWay}" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Location" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <TextBox Width="360" Text="{CompiledBinding Location, Mode=TwoWay}" />
+              <Button Content="Browse" Command="{CompiledBinding BrowseLocationCommand}" />
+            </StackPanel>
+
+            <CheckBox Grid.Row="2" Grid.Column="1"
+                      Content="Create project directory"
+                      IsChecked="{CompiledBinding CreateProjectDirectory, Mode=TwoWay}" />
+
+            <CheckBox Grid.Row="3" Grid.Column="1"
+                      Content="Create solution"
+                      IsChecked="{CompiledBinding CreateSolution, Mode=TwoWay}"
+                      IsVisible="{CompiledBinding CanToggleSolution}" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Solution name" VerticalAlignment="Center"
+                       IsVisible="{CompiledBinding IsSolutionSetup}" />
+            <TextBox Grid.Row="4" Grid.Column="1" Text="{CompiledBinding SolutionName, Mode=TwoWay}"
+                     IsVisible="{CompiledBinding IsSolutionSetup}" />
+
+            <CheckBox Grid.Row="5" Grid.Column="1"
+                      Content="Create solution directory"
+                      IsChecked="{CompiledBinding CreateSolutionDirectory, Mode=TwoWay}"
+                      IsVisible="{CompiledBinding IsSolutionSetup}" />
+
+            <CheckBox Grid.Row="6" Grid.Column="1"
+                      Content="Add project to solution"
+                      IsChecked="{CompiledBinding AddProjectToSolution, Mode=TwoWay}"
+                      IsVisible="{CompiledBinding IsSolutionSetup}" />
+          </Grid>
+
+          <StackPanel Spacing="6" IsVisible="{CompiledBinding IsSolutionSetup}">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="{CompiledBinding ProjectCountDisplay}" VerticalAlignment="Center" />
+              <Button Content="Add" Command="{CompiledBinding AddProjectRowCommand}" />
+              <Button Content="Remove" Command="{CompiledBinding RemoveProjectRowCommand}" />
+            </StackPanel>
+
+            <dg:DataGrid ItemsSource="{CompiledBinding ProjectRows}"
+                        SelectedItem="{CompiledBinding SelectedProjectRow, Mode=TwoWay}"
+                        AutoGenerateColumns="False"
+                        HeadersVisibility="All"
+                        GridLinesVisibility="None">
+              <dg:DataGrid.Columns>
+                <dg:DataGridTextColumn Header="Project" Binding="{CompiledBinding ProjectName}" Width="3*" />
+                <dg:DataGridCheckBoxColumn Header="Create Directory" Binding="{CompiledBinding CreateProjectDirectory}" Width="*" />
+              </dg:DataGrid.Columns>
+            </dg:DataGrid>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Project path preview" FontWeight="SemiBold" />
+            <TextBlock Text="{CompiledBinding ProjectPathPreview}" />
+            <TextBlock Text="Solution path preview" FontWeight="SemiBold"
+                       IsVisible="{CompiledBinding IsSolutionSetup}" />
+            <TextBlock Text="{CompiledBinding SolutionPathPreview}"
+                       IsVisible="{CompiledBinding IsSolutionSetup}" />
+          </StackPanel>
+
+          <TextBlock Text="{CompiledBinding ErrorMessage}" Foreground="Tomato" />
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</Window>

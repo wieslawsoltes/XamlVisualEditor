@@ -19,11 +19,19 @@ namespace XamlVisualEditor.Shell.ViewModels;
 
 public sealed class ExtensionMenuItemViewModel : ReactiveObject
 {
-    public ExtensionMenuItemViewModel(string commandId, string title, string? group, ReactiveCommand<Unit, Unit> command)
+    public ExtensionMenuItemViewModel(
+        string commandId,
+        string title,
+        string? location,
+        string? group,
+        int priority,
+        ReactiveCommand<Unit, Unit> command)
     {
         CommandId = commandId;
         Title = title;
+        Location = location;
         Group = group;
+        Priority = priority;
         Command = command;
     }
 
@@ -31,19 +39,33 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
 
     public string Title { get; }
 
+    public string? Location { get; }
+
     public string? Group { get; }
+
+    public int Priority { get; }
 
     public ReactiveCommand<Unit, Unit> Command { get; }
 }
 
+
 public sealed class ExtensionToolbarItemViewModel : ReactiveObject
 {
-    public ExtensionToolbarItemViewModel(string commandId, string title, string? tooltip, string? group, ReactiveCommand<Unit, Unit> command)
+    public ExtensionToolbarItemViewModel(
+        string commandId,
+        string title,
+        string? tooltip,
+        string? location,
+        string? group,
+        int priority,
+        ReactiveCommand<Unit, Unit> command)
     {
         CommandId = commandId;
         Title = title;
         Tooltip = tooltip;
+        Location = location;
         Group = group;
+        Priority = priority;
         Command = command;
     }
 
@@ -53,7 +75,11 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
 
     public string? Tooltip { get; }
 
+    public string? Location { get; }
+
     public string? Group { get; }
+
+    public int Priority { get; }
 
     public ReactiveCommand<Unit, Unit> Command { get; }
 }

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -30,6 +31,7 @@ using XamlVisualEditor.Xaml.Parsing;
 using XamlVisualEditor.Xaml.Serialization;
 using XamlVisualEditor.Terminal;
 using System.Threading;
+using DotNetTemplatesExtensionEntry = XamlVisualEditor.DotNetTemplatesExtension.DotNetTemplatesExtension;
 
 namespace XamlVisualEditor.App;
 
@@ -61,7 +63,17 @@ public sealed class App : Application
             extensionHost.ActivateAsync(CancellationToken.None).GetAwaiter().GetResult();
 
             MainWindowViewModel mainVm = Services.GetRequiredService<MainWindowViewModel>();
-            desktop.MainWindow = new MainWindow(mainVm);
+            MainWindow mainWindow = new(mainVm);
+            desktop.MainWindow = mainWindow;
+
+            MainWindowProvider windowProvider = Services.GetRequiredService<MainWindowProvider>();
+            windowProvider.MainWindow = mainWindow;
+
+            string? startupPath = StartupArgs.GetWorkspacePath(desktop.Args);
+            if (!string.IsNullOrWhiteSpace(startupPath))
+            {
+                Dispatcher.UIThread.Post(() => _ = mainVm.OpenFileAsync(startupPath));
+            }
 
             desktop.ShutdownRequested += (_, _) =>
             {
@@ -96,6 +108,8 @@ public sealed class App : Application
         services.AddSingleton<IXamlSerializationService, XamlSerializationService>();
         services.AddSingleton<ITypeMetadataService, TypeMetadataService>();
         services.AddSingleton<IWorkspaceService, WorkspaceService>();
+        services.AddSingleton<IDotNetCli, DotNetCliRunner>();
+        services.AddSingleton<IDotNetTemplateService, DotNetTemplateService>();
         services.AddSingleton<IGitService, GitService>();
         services.AddSingleton<IAnimationPreviewService, AnimationPreviewService>();
         services.AddSingleton<IDebuggerService, DapDebuggerService>();
@@ -115,6 +129,9 @@ public sealed class App : Application
         services.AddSingleton<IWorkspace, InMemoryWorkspace>();
         services.AddSingleton<IWindow, InMemoryWindow>();
         services.AddSingleton<ISettings, InMemorySettingsStore>();
+        services.AddSingleton<MainWindowProvider>();
+        services.AddSingleton<IDialogHost, AppDialogHost>();
+        services.AddSingleton<IWorkspaceHost, AppWorkspaceHost>();
 
         // LSP services
         services.AddSingleton<ILspSettingsStore, LspSettingsStore>();
@@ -162,6 +179,7 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, IdeBridgeExtensionEntry>();
         services.AddSingleton<IXveExtension, McpExtensionEntry>();
         services.AddSingleton<IXveExtension, VscodeCompatExtensionEntry>();
+        services.AddSingleton<IXveExtension, DotNetTemplatesExtensionEntry>();
 
         // ViewModels (Singleton for shell-level, Transient for per-document)
         services.AddSingleton<MainWindowViewModel>();

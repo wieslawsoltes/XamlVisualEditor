@@ -24,7 +24,17 @@
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
-                <MenuItem Header="_New" Command="{CompiledBinding NewDocumentCommand}" InputGesture="Ctrl+N" />
+                <MenuItem Header="_New">
+                    <MenuItem.ItemsSource>
+                        <CompiledBinding Path="FileNewMenuEntries" />
+                    </MenuItem.ItemsSource>
+                    <MenuItem.Styles>
+                        <Style Selector="MenuItem">
+                            <Setter Property="Header" Value="{Binding Title}" />
+                            <Setter Property="Command" Value="{Binding Command}" />
+                        </Style>
+                    </MenuItem.Styles>
+                </MenuItem>
                 <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
                 <MenuItem Header="Open _Recent">
                     <MenuItem.ItemsSource>
@@ -47,6 +57,14 @@
                 <Separator />
                 <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
                 <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />
+                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding FileMenuItems}">
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}" />
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="Save _Mode">
                     <MenuItem Header="_Auto Save"
@@ -137,6 +155,22 @@
                     <MenuItem Header="_Build" Command="{CompiledBinding BuildWorkspaceCommand}" />
                     <MenuItem Header="Re_build" Command="{CompiledBinding RebuildWorkspaceCommand}" />
                     <MenuItem Header="_Clean" Command="{CompiledBinding CleanWorkspaceCommand}" />
+                    <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding WorkspaceMenuItems}">
+                        <MenuItem.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                                <MenuItem Header="{CompiledBinding Title}"
+                                          Command="{CompiledBinding Command}" />
+                            </DataTemplate>
+                        </MenuItem.ItemTemplate>
+                    </MenuItem>
+                </MenuItem>
+                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ToolsMenuItems}">
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}" />
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding ExtensionMenuItems}">
@@ -195,6 +229,21 @@
                 <Button ToolTip.Tip="Delete" Command="{CompiledBinding DeleteCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
                 </Button>
+                <ItemsControl ItemsSource="{CompiledBinding MainToolbarItems}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionToolbarItemViewModel">
+                            <Button Content="{CompiledBinding Title}"
+                                    ToolTip.Tip="{CompiledBinding Tooltip}"
+                                    Command="{CompiledBinding Command}"
+                                    Padding="6,4" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <Separator Margin="4,0" IsVisible="{CompiledBinding HasExtensionToolbarItems}" />
                 <ItemsControl ItemsSource="{CompiledBinding ExtensionToolbarItems}" IsVisible="{CompiledBinding HasExtensionToolbarItems}">
                     <ItemsControl.ItemsPanel>

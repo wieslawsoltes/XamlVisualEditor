@@ -13,6 +13,8 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly IWorkspace _workspace;
     private readonly IWorkspaceInfo _workspaceInfo;
     private readonly IWindow _window;
+    private readonly IDialogHost _dialogHost;
+    private readonly IWorkspaceHost _workspaceHost;
     private readonly IViews _views;
     private readonly IExtensionLanguageServices _languageServices;
     private readonly IEditorServices _editor;
@@ -29,6 +31,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         IWorkspace workspace,
         IWorkspaceInfo workspaceInfo,
         IWindow window,
+        IDialogHost dialogHost,
+        IWorkspaceHost workspaceHost,
         IViews views,
         IExtensionLanguageServices languageServices,
         IEditorServices editor,
@@ -42,6 +46,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         _workspace = workspace;
         _workspaceInfo = workspaceInfo;
         _window = window;
+        _dialogHost = dialogHost;
+        _workspaceHost = workspaceHost;
         _views = views;
         _languageServices = languageServices;
         _editor = editor;
@@ -96,6 +102,8 @@ public sealed class BuiltInExtensionHost : IDisposable
             _workspace,
             _workspaceInfo,
             _window,
+            _dialogHost,
+            _workspaceHost,
             _views,
             _languageServices,
             _editor,

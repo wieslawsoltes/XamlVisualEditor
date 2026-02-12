@@ -59,6 +59,36 @@ public sealed class InMemoryWindow : IWindow
     }
 }
 
+/// <summary>In-memory dialog host.</summary>
+public sealed class InMemoryDialogHost : IDialogHost
+{
+    public IDisposable RegisterDialog(string dialogId, Func<object?, object> factory)
+    {
+        return new Registration();
+    }
+
+    public Task<T?> ShowDialogAsync<T>(string dialogId, object? viewModel, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<T?>(default);
+    }
+
+    private sealed class Registration : IDisposable
+    {
+        public void Dispose()
+        {
+        }
+    }
+}
+
+/// <summary>In-memory workspace host.</summary>
+public sealed class InMemoryWorkspaceHost : IWorkspaceHost
+{
+    public Task OpenWorkspaceAsync(string workspacePath, WorkspaceOpenMode mode, CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
+}
+
 /// <summary>In-memory output channel.</summary>
 public sealed class InMemoryOutputChannel : IOutputChannel
 {

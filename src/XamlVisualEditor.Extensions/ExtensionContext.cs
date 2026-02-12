@@ -19,6 +19,8 @@ public sealed class ExtensionContext
         IWorkspace workspace,
         IWorkspaceInfo workspaceInfo,
         IWindow window,
+        IDialogHost dialogHost,
+        IWorkspaceHost workspaceHost,
         IViews views,
         IExtensionLanguageServices languageServices,
         IEditorServices editor,
@@ -36,6 +38,8 @@ public sealed class ExtensionContext
         Workspace = workspace;
         WorkspaceInfo = workspaceInfo;
         Window = window;
+        DialogHost = dialogHost;
+        WorkspaceHost = workspaceHost;
         Views = views;
         LanguageServices = languageServices;
         Editor = editor;
@@ -67,6 +71,12 @@ public sealed class ExtensionContext
 
     /// <summary>Gets the window service.</summary>
     public IWindow Window { get; }
+
+    /// <summary>Gets the dialog host service.</summary>
+    public IDialogHost DialogHost { get; }
+
+    /// <summary>Gets the workspace host service.</summary>
+    public IWorkspaceHost WorkspaceHost { get; }
 
     /// <summary>Gets the views service.</summary>
     public IViews Views { get; }

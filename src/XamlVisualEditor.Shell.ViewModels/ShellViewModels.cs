@@ -2253,9 +2253,39 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     public ObservableCollection<ExtensionMenuItemViewModel> ExtensionMenuItems { get; } = new();
 
     /// <summary>
+    /// Gets extension-provided File menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> FileMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided File > New menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> FileNewMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets File > New menu entries (built-in + extensions).
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> FileNewMenuEntries { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided Tools menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> ToolsMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided Tools > Workspace menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> WorkspaceMenuItems { get; } = new();
+
+    /// <summary>
     /// Gets extension-provided toolbar items.
     /// </summary>
     public ObservableCollection<ExtensionToolbarItemViewModel> ExtensionToolbarItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided main toolbar items.
+    /// </summary>
+    public ObservableCollection<ExtensionToolbarItemViewModel> MainToolbarItems { get; } = new();
 
     /// <summary>
     /// Gets extension-provided command palette items.
@@ -2272,7 +2302,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public ExtensionManagerViewModel ExtensionManager { get; }
 
-    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0;
+    public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0 || MainToolbarItems.Count > 0;
 
     /// <summary>
     /// Gets the debugger ViewModel.
@@ -2474,6 +2504,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     /// </summary>
     public Interaction<DebugToolConsentRequest, bool> DebugToolConsentInteraction { get; } = new();
 
+
     // Panel visibility
     [Reactive] public bool IsToolboxVisible { get; set; } = true;
     [Reactive] public bool IsPropertiesVisible { get; set; } = true;
@@ -2653,6 +2684,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         ExtensionToolbarItems.CollectionChanged += (_, _) =>
             this.RaisePropertyChanged(nameof(HasExtensionToolbarItems));
+        MainToolbarItems.CollectionChanged += (_, _) =>
+            this.RaisePropertyChanged(nameof(HasExtensionToolbarItems));
 
         LoadTrustedPreviewerRoots();
 
@@ -2700,8 +2733,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         DockFactory.ConfigureDocumentViewModels(layout);
         DockLayout = layout;
         WireDockEvents();
-        RefreshExtensionContributions();
-        SyncExtensionDockables();
+
 
         IObservable<int> activeLine = this.WhenAnyValue(x => x.ActiveDocument)
             .Select(doc => doc is null
@@ -2733,6 +2765,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         OpenDocumentCommand = ReactiveCommand.CreateFromTask(OpenDocumentAsync);
         OpenPathCommand = ReactiveCommand.CreateFromTask<string>(OpenFileAsync);
         OpenPathsCommand = ReactiveCommand.CreateFromTask<IReadOnlyList<string>>(OpenDroppedPathsAsync);
+
+        RefreshExtensionContributions();
+        UpdateFileNewMenuEntries();
+        SyncExtensionDockables();
 
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
@@ -4050,6 +4086,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
     private void UpdateExtensionMenuItems()
     {
         ExtensionMenuItems.Clear();
+        FileMenuItems.Clear();
+        FileNewMenuItems.Clear();
+        ToolsMenuItems.Clear();
+        WorkspaceMenuItems.Clear();
 
         if (_extensionContributions is null)
         {
@@ -4057,20 +4097,63 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
         }
 
         foreach (ExtensionMenuContribution item in _extensionContributions.MenuItems
-            .OrderBy(menu => menu.Group, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(menu => menu.Location ?? ExtensionMenuLocations.Extensions, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(menu => menu.Group, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(menu => menu.Priority)
             .ThenBy(menu => menu.Title, StringComparer.OrdinalIgnoreCase))
         {
-            ExtensionMenuItems.Add(new ExtensionMenuItemViewModel(
+            string location = string.IsNullOrWhiteSpace(item.Location)
+                ? ExtensionMenuLocations.Extensions
+                : item.Location;
+
+            ObservableCollection<ExtensionMenuItemViewModel> target = location switch
+            {
+                ExtensionMenuLocations.File => FileMenuItems,
+                ExtensionMenuLocations.FileNew => FileNewMenuItems,
+                ExtensionMenuLocations.Tools => ToolsMenuItems,
+                ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
+                _ => ExtensionMenuItems
+            };
+
+            target.Add(new ExtensionMenuItemViewModel(
                 item.CommandId,
                 item.Title,
+                location,
                 item.Group,
+                item.Priority,
                 CreateExtensionCommand(item.CommandId)));
+        }
+
+        UpdateFileNewMenuEntries();
+    }
+
+    private void UpdateFileNewMenuEntries()
+    {
+        FileNewMenuEntries.Clear();
+
+        if (NewDocumentCommand is null)
+        {
+            return;
+        }
+
+        FileNewMenuEntries.Add(new ExtensionMenuItemViewModel(
+            "builtin.newFile",
+            "_File",
+            ExtensionMenuLocations.FileNew,
+            "builtin",
+            -100,
+            NewDocumentCommand));
+
+        foreach (ExtensionMenuItemViewModel item in FileNewMenuItems)
+        {
+            FileNewMenuEntries.Add(item);
         }
     }
 
     private void UpdateExtensionToolbarItems()
     {
         ExtensionToolbarItems.Clear();
+        MainToolbarItems.Clear();
 
         if (_extensionContributions is null)
         {
@@ -4079,13 +4162,25 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable
 
         foreach (ExtensionToolbarContribution item in _extensionContributions.ToolbarItems
             .OrderBy(toolbar => toolbar.Group, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(toolbar => toolbar.Priority)
             .ThenBy(toolbar => toolbar.Title, StringComparer.OrdinalIgnoreCase))
         {
-            ExtensionToolbarItems.Add(new ExtensionToolbarItemViewModel(
+            string location = string.IsNullOrWhiteSpace(item.Location)
+                ? ExtensionToolbarLocations.Extensions
+                : item.Location;
+
+            ObservableCollection<ExtensionToolbarItemViewModel> target =
+                string.Equals(location, ExtensionToolbarLocations.Main, StringComparison.OrdinalIgnoreCase)
+                    ? MainToolbarItems
+                    : ExtensionToolbarItems;
+
+            target.Add(new ExtensionToolbarItemViewModel(
                 item.CommandId,
                 item.Title,
                 item.Tooltip,
+                location,
                 item.Group,
+                item.Priority,
                 CreateExtensionCommand(item.CommandId)));
         }
     }
