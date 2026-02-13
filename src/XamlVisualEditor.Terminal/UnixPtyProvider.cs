@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -15,11 +16,18 @@ public sealed class UnixPtyProvider : IPtyProvider
         string[] args = BuildArgs(shell, options.Arguments);
 
         IntPtr winSizePtr = CreateWinSize(options.Columns, options.Rows);
-        int pid = UnixNative.forkpty(out int masterFd, IntPtr.Zero, IntPtr.Zero, winSizePtr);
+        IntPtr ttyPathPtr = Marshal.AllocHGlobal(UnixNative.PtyNameBufferSize);
+        ZeroMemory(ttyPathPtr, UnixNative.PtyNameBufferSize);
+
+        int pid = UnixNative.forkpty(out int masterFd, ttyPathPtr, IntPtr.Zero, winSizePtr);
+        string? ttyPath = Marshal.PtrToStringAnsi(ttyPathPtr);
+        Marshal.FreeHGlobal(ttyPathPtr);
+
         if (winSizePtr != IntPtr.Zero)
         {
             Marshal.FreeHGlobal(winSizePtr);
         }
+
         if (pid == 0)
         {
             if (!string.IsNullOrWhiteSpace(options.WorkingDirectory))
@@ -39,7 +47,7 @@ public sealed class UnixPtyProvider : IPtyProvider
             throw new InvalidOperationException("Failed to create PTY process.");
         }
 
-        return new UnixPtyProcess(pid, masterFd, options.Columns, options.Rows);
+        return new UnixPtyProcess(pid, masterFd, options.Columns, options.Rows, ttyPath);
     }
 
     private static void ApplyEnvironment(IReadOnlyDictionary<string, string> environment)
@@ -52,12 +60,12 @@ public sealed class UnixPtyProvider : IPtyProvider
 
     private static void ApplyDefaultEnvironment(IReadOnlyDictionary<string, string> environment)
     {
-        if (!environment.ContainsKey("TERM") && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TERM")))
+        if (!environment.ContainsKey("TERM"))
         {
             UnixNative.setenv("TERM", "xterm-256color", 1);
         }
 
-        if (!environment.ContainsKey("COLORTERM") && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("COLORTERM")))
+        if (!environment.ContainsKey("COLORTERM"))
         {
             UnixNative.setenv("COLORTERM", "truecolor", 1);
         }
@@ -113,36 +121,69 @@ public sealed class UnixPtyProvider : IPtyProvider
         Marshal.WriteIntPtr(argv, args.Length * IntPtr.Size, IntPtr.Zero);
         return argv;
     }
+
+    private static void ZeroMemory(IntPtr ptr, int length)
+    {
+        for (int i = 0; i < length; i++)
+        {
+            Marshal.WriteByte(ptr, i, 0);
+        }
+    }
 }
 
 public sealed class UnixPtyProcess : IPtyProcess
 {
     private readonly SafeFileHandle _handle;
     private readonly FileStream _stream;
+    private readonly string? _ttyPath;
+    private int _columns;
+    private int _rows;
 
     public Stream Input => _stream;
     public Stream Output => _stream;
     public int Pid { get; }
 
-    public UnixPtyProcess(int pid, int masterFd, int columns, int rows)
+    public UnixPtyProcess(int pid, int masterFd, int columns, int rows, string? ttyPath)
     {
         Pid = pid;
+        _columns = columns;
+        _rows = rows;
+        _ttyPath = string.IsNullOrWhiteSpace(ttyPath) ? null : ttyPath;
         _handle = new SafeFileHandle(new IntPtr(masterFd), ownsHandle: true);
         _stream = new FileStream(_handle, FileAccess.ReadWrite, 4096, isAsync: false);
-        Resize(columns, rows);
     }
 
     public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
     {
+        int clampedColumns = Math.Clamp(columns, 1, ushort.MaxValue);
+        int clampedRows = Math.Clamp(rows, 1, ushort.MaxValue);
+        if (_columns == clampedColumns && _rows == clampedRows)
+        {
+            return;
+        }
+
+        _columns = clampedColumns;
+        _rows = clampedRows;
+
         UnixNative.WinSize winsize = new()
         {
-            ws_col = (ushort)columns,
-            ws_row = (ushort)rows,
+            ws_col = (ushort)clampedColumns,
+            ws_row = (ushort)clampedRows,
             ws_xpixel = (ushort)Math.Clamp(pixelWidth, 0, ushort.MaxValue),
             ws_ypixel = (ushort)Math.Clamp(pixelHeight, 0, ushort.MaxValue)
         };
 
-        UnixNative.ioctl(_handle, UnixNative.TIOCSWINSZ, ref winsize);
+        if (UnixNative.IsLinux)
+        {
+            UnixNative.ioctl(_handle, UnixNative.TIOCSWINSZ, ref winsize);
+            return;
+        }
+
+        if (_ttyPath is not null)
+        {
+            // BSD/macOS: use stty on the slave PTY to avoid ioctl varargs ABI issues.
+            UnixNative.TryResizeWithStty(_ttyPath, clampedRows, clampedColumns);
+        }
     }
 
     public void Dispose()
@@ -155,6 +196,8 @@ public sealed class UnixPtyProcess : IPtyProcess
 internal static class UnixNative
 {
     public const uint TIOCSWINSZ = 0x5414;
+    public const int PtyNameBufferSize = 128;
+    public static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
     [DllImport("libutil")]
     public static extern int forkpty(out int master, IntPtr name, IntPtr termp, IntPtr winp);
@@ -171,8 +214,61 @@ internal static class UnixNative
     [DllImport("libc")]
     public static extern void _exit(int status);
 
-    [DllImport("libc")]
+    [DllImport("libc", SetLastError = true)]
     public static extern int ioctl(SafeFileHandle fd, uint request, ref WinSize data);
+
+    public static void TryResizeWithStty(string ttyPath, int rows, int columns)
+    {
+        string sttyPath = "/bin/stty";
+        if (!File.Exists(sttyPath))
+        {
+            return;
+        }
+
+        try
+        {
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = sttyPath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                || RuntimeInformation.IsOSPlatform(OSPlatform.Create("FREEBSD"))
+                || RuntimeInformation.IsOSPlatform(OSPlatform.Create("NETBSD"))
+                || RuntimeInformation.IsOSPlatform(OSPlatform.Create("OPENBSD")))
+            {
+                startInfo.ArgumentList.Add("-f");
+            }
+            else
+            {
+                startInfo.ArgumentList.Add("-F");
+            }
+
+            startInfo.ArgumentList.Add(ttyPath);
+            startInfo.ArgumentList.Add("rows");
+            startInfo.ArgumentList.Add(rows.ToString());
+            startInfo.ArgumentList.Add("cols");
+            startInfo.ArgumentList.Add(columns.ToString());
+
+            Process? process = Process.Start(startInfo);
+            if (process is null)
+            {
+                return;
+            }
+
+            using (process)
+            {
+                process.WaitForExit(250);
+            }
+        }
+        catch
+        {
+        }
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct WinSize

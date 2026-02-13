@@ -700,16 +700,30 @@ public sealed class TerminalEmulatorTests
     }
 
     [Fact]
+    public void DecMode1007TogglesAlternateScrollMode()
+    {
+        TerminalEmulator emulator = new(80, 4);
+        Assert.True(emulator.State.MouseAlternateScroll);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?1007l"));
+        Assert.False(emulator.State.MouseAlternateScroll);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?1007h"));
+        Assert.True(emulator.State.MouseAlternateScroll);
+    }
+
+    [Fact]
     public void DecstrSoftResetRestoresCoreModesWithoutClearingBuffer()
     {
         TerminalEmulator emulator = new(8, 2);
-        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[31mX\u001b[4h\u001b[?6h\u001b[!p"));
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[31mX\u001b[4h\u001b[?6h\u001b[?1007l\u001b[!p"));
 
         TerminalCell cell = emulator.ActiveBuffer.GetLine(0).Cells[0];
         Assert.Equal('X', (char)cell.Rune.Value);
         Assert.False(emulator.State.InsertMode);
         Assert.False(emulator.State.OriginMode);
         Assert.True(emulator.State.AutoWrap);
+        Assert.True(emulator.State.MouseAlternateScroll);
         Assert.Equal(TerminalAttributes.Default, emulator.State.Attributes);
     }
 

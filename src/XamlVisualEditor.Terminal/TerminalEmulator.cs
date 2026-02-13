@@ -29,7 +29,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
     private const int WideColumns = 132;
     private static readonly int[] PrivateModeSaveRestoreSupportedParameters =
     {
-        1, 40, 3, 6, 7, 9, 12, 25, 69, 1000, 1002, 1003, 1006, 2004
+        1, 40, 3, 6, 7, 9, 12, 25, 69, 1000, 1002, 1003, 1006, 1007, 2004
     };
 
     public event Action? ScreenUpdated;
@@ -1034,6 +1034,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.MouseSgr = false;
         _state.MouseProtocol = TerminalMouseProtocol.Vt200;
         _state.MouseX10 = false;
+        _state.MouseAlternateScroll = true;
         _state.BracketedPaste = false;
         _state.LineFeedNewLineMode = false;
         _state.LeftRightMarginMode = false;
@@ -1068,6 +1069,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.MouseSgr = false;
         _state.MouseProtocol = TerminalMouseProtocol.Vt200;
         _state.MouseX10 = false;
+        _state.MouseAlternateScroll = true;
         _state.BracketedPaste = false;
         _state.ApplicationKeypad = false;
         _state.ApplicationCursorKeys = false;
@@ -1956,6 +1958,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
                     _state.MouseSgr = enabled;
                     _state.MouseProtocol = enabled ? TerminalMouseProtocol.Sgr : (_state.MouseX10 ? TerminalMouseProtocol.X10 : TerminalMouseProtocol.Vt200);
                     break;
+                case 1007:
+                    _state.MouseAlternateScroll = enabled;
+                    break;
                 case 6:
                     _state.OriginMode = enabled;
                     _state.CursorRow = enabled ? _state.ScrollTop : 0;
@@ -2157,6 +2162,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
             MouseSgr = _state.MouseSgr,
             MouseProtocol = _state.MouseProtocol,
             MouseX10 = _state.MouseX10,
+            MouseAlternateScroll = _state.MouseAlternateScroll,
             OriginMode = _state.OriginMode,
             AutoWrap = _state.AutoWrap,
             CursorBlink = _state.CursorBlink,
@@ -2264,6 +2270,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 _state.MouseProtocol = _savedPrivateModes.MouseProtocol;
                 _state.MouseX10 = _savedPrivateModes.MouseX10;
                 break;
+            case 1007:
+                _state.MouseAlternateScroll = _savedPrivateModes.MouseAlternateScroll;
+                break;
             case 12:
                 _state.CursorBlink = _savedPrivateModes.CursorBlink;
                 break;
@@ -2303,6 +2312,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         public bool MouseSgr { get; init; }
         public TerminalMouseProtocol MouseProtocol { get; init; }
         public bool MouseX10 { get; init; }
+        public bool MouseAlternateScroll { get; init; }
         public bool OriginMode { get; init; }
         public bool AutoWrap { get; init; }
         public bool CursorBlink { get; init; }

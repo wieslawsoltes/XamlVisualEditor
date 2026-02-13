@@ -305,17 +305,43 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        if (vm.Emulator.State.MouseMode != TerminalMouseMode.None)
+        double deltaY = e.Delta.Y;
+        int steps = GetWheelSteps(deltaY);
+        if (steps <= 0)
+        {
+            return;
+        }
+
+        TerminalState state = vm.Emulator.State;
+        bool reportsWheelToApp = state.MouseMode != TerminalMouseMode.None && state.MouseProtocol != TerminalMouseProtocol.X10;
+        if (reportsWheelToApp)
         {
             Point pos = e.GetPosition(control);
             if (vm.TryGetCellFromPoint(pos.X, pos.Y, out int row, out int col))
             {
-                TerminalMouseButton button = e.Delta.Y < 0 ? TerminalMouseButton.WheelDown : TerminalMouseButton.WheelUp;
-                vm.SendMouseReport(row, col, button, TerminalMouseAction.Press);
-                vm.SendMouseReport(row, col, TerminalMouseButton.None, TerminalMouseAction.Release);
+                TerminalMouseButton button = deltaY < 0 ? TerminalMouseButton.WheelDown : TerminalMouseButton.WheelUp;
+                for (int i = 0; i < steps; i++)
+                {
+                    // Wheel events are reported as press-only in xterm-compatible mouse protocols.
+                    vm.SendMouseReport(row, col, button, TerminalMouseAction.Press);
+                }
                 e.Handled = true;
             }
 
+            return;
+        }
+
+        bool useAlternateScrollFallback = state.AltBufferActive && state.MouseAlternateScroll;
+        if (useAlternateScrollFallback)
+        {
+            TerminalKey key = deltaY > 0 ? TerminalKey.Up : TerminalKey.Down;
+            TerminalKeyInfo keyInfo = new(key, ctrl: false, alt: false, shift: false);
+            for (int i = 0; i < steps; i++)
+            {
+                vm.SendKey(keyInfo);
+            }
+
+            e.Handled = true;
             return;
         }
 
@@ -325,9 +351,20 @@ public sealed class TerminalInputBehavior
             return;
         }
 
-        int delta = e.Delta.Y > 0 ? 3 : -3;
+        int delta = deltaY > 0 ? 3 : -3;
         vm.ScrollByLines(delta);
         e.Handled = true;
+    }
+
+    private static int GetWheelSteps(double deltaY)
+    {
+        double magnitude = Math.Abs(deltaY);
+        if (magnitude < double.Epsilon)
+        {
+            return 0;
+        }
+
+        return Math.Max(1, (int)Math.Round(magnitude));
     }
 
     private static TerminalKeyInfo MapKey(Key key, KeyModifiers modifiers)

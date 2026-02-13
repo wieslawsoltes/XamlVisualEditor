@@ -21,6 +21,7 @@ public sealed class TerminalState
     public bool MouseSgr { get; set; }
     public TerminalMouseProtocol MouseProtocol { get; set; } = TerminalMouseProtocol.Vt200;
     public bool MouseX10 { get; set; }
+    public bool MouseAlternateScroll { get; set; } = true;
     public bool CursorVisible { get; set; } = true;
     public bool CursorBlink { get; set; } = true;
     public TerminalCursorShape CursorShape { get; set; } = TerminalCursorShape.Block;
