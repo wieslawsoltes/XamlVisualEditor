@@ -78,13 +78,22 @@ public sealed class TerminalSession : ITerminalSession
 
     public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
     {
-        if (_process is null)
+        _options.Columns = columns;
+        _options.Rows = rows;
+
+        int currentColumns = 0;
+        int currentRows = 0;
+        Emulator.Read((buffer, _) =>
         {
-            _options.Columns = columns;
-            _options.Rows = rows;
+            currentColumns = buffer.Columns;
+            currentRows = buffer.Rows;
+        });
+
+        if (currentColumns != columns || currentRows != rows)
+        {
+            Emulator.Resize(columns, rows);
         }
 
-        Emulator.Resize(columns, rows);
         _process?.Resize(columns, rows, pixelWidth, pixelHeight);
     }
 

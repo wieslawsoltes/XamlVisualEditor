@@ -71,6 +71,24 @@ public sealed class TerminalEmulatorTests
     }
 
     [Fact]
+    public void AltBufferResizeStillReflowsMainBufferScrollback()
+    {
+        TerminalEmulator emulator = new(5, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("line1\nline2\nline3\nline4\n"));
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?1049h"));
+
+        emulator.Resize(10, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?1049l"));
+
+        emulator.Read((buffer, _) =>
+        {
+            Assert.Equal(10, buffer.Columns);
+            Assert.NotEmpty(buffer.Scrollback);
+            Assert.Equal(10, buffer.Scrollback[0].Cells.Length);
+        });
+    }
+
+    [Fact]
     public void ScrollsWhenReachingBottom()
     {
         TerminalEmulator emulator = new(5, 2);
@@ -161,6 +179,46 @@ public sealed class TerminalEmulatorTests
     {
         TerminalEmulator emulator = new(10, 4);
         emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?69h\u001b[2;6s\u001b[s"));
+
+        Assert.Equal(0, emulator.State.ScrollLeft);
+        Assert.Equal(9, emulator.State.ScrollRight);
+    }
+
+    [Fact]
+    public void DecstbmZeroParametersResetRegionToFullHeight()
+    {
+        TerminalEmulator emulator = new(10, 6);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2;4r\u001b[0;0r"));
+
+        Assert.Equal(0, emulator.State.ScrollTop);
+        Assert.Equal(5, emulator.State.ScrollBottom);
+    }
+
+    [Fact]
+    public void DecstbmMissingBottomDefaultsToTerminalBottom()
+    {
+        TerminalEmulator emulator = new(10, 6);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2;4r\u001b[1;r"));
+
+        Assert.Equal(0, emulator.State.ScrollTop);
+        Assert.Equal(5, emulator.State.ScrollBottom);
+    }
+
+    [Fact]
+    public void DecslrmZeroRightDefaultsToTerminalWidth()
+    {
+        TerminalEmulator emulator = new(10, 4);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?69h\u001b[3;7s\u001b[2;0s"));
+
+        Assert.Equal(1, emulator.State.ScrollLeft);
+        Assert.Equal(9, emulator.State.ScrollRight);
+    }
+
+    [Fact]
+    public void DecslrmLeadingSemicolonDefaultsToFullWidth()
+    {
+        TerminalEmulator emulator = new(10, 4);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?69h\u001b[3;7s\u001b[;s"));
 
         Assert.Equal(0, emulator.State.ScrollLeft);
         Assert.Equal(9, emulator.State.ScrollRight);

@@ -60,21 +60,25 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
         IsConnected = true;
     }
 
-    public void Resize(int columns, int rows)
+    public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
     {
         if (columns <= 0 || rows <= 0)
         {
             return;
         }
 
-        int pixelWidth = (int)Math.Round(_metrics.CellWidth * columns);
-        int pixelHeight = (int)Math.Round(_metrics.CellHeight * rows);
+        int effectivePixelWidth = pixelWidth > 0
+            ? pixelWidth
+            : (int)Math.Round(_metrics.CellWidth * columns);
+        int effectivePixelHeight = pixelHeight > 0
+            ? pixelHeight
+            : (int)Math.Round(_metrics.CellHeight * rows);
 
         if (Selection.IsActive)
         {
             TerminalCellPosition start = new(Selection.StartRow, Selection.StartColumn);
             TerminalCellPosition end = new(Selection.EndRow, Selection.EndColumn);
-            IReadOnlyList<TerminalCellPosition> mapped = _session.ResizeWithMappingGlobal(columns, rows, new[] { start, end }, pixelWidth, pixelHeight);
+            IReadOnlyList<TerminalCellPosition> mapped = _session.ResizeWithMappingGlobal(columns, rows, new[] { start, end }, effectivePixelWidth, effectivePixelHeight);
             if (mapped.Count == 2)
             {
                 Selection = TerminalSelection.Start(mapped[0].Row, mapped[0].Column)
@@ -87,14 +91,20 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
         }
         else
         {
-            _session.Resize(columns, rows, pixelWidth, pixelHeight);
+            _session.Resize(columns, rows, effectivePixelWidth, effectivePixelHeight);
         }
 
+        int cellWidthPixels = _metrics.CellWidthPixels > 0
+            ? _metrics.CellWidthPixels
+            : Math.Max(1, (int)Math.Round(_metrics.CellWidth));
+        int cellHeightPixels = _metrics.CellHeightPixels > 0
+            ? _metrics.CellHeightPixels
+            : Math.Max(1, (int)Math.Round(_metrics.CellHeight));
         Emulator.SetDisplayMetrics(
-            (int)Math.Round(_metrics.CellWidth),
-            (int)Math.Round(_metrics.CellHeight),
-            pixelWidth,
-            pixelHeight);
+            cellWidthPixels,
+            cellHeightPixels,
+            effectivePixelWidth,
+            effectivePixelHeight);
 
         FrameInvalidated?.Invoke();
     }
@@ -102,11 +112,23 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
     public void SetMetrics(TerminalMetrics metrics)
     {
         _metrics = metrics;
+        int cellWidthPixels = metrics.CellWidthPixels > 0
+            ? metrics.CellWidthPixels
+            : Math.Max(1, (int)Math.Round(metrics.CellWidth));
+        int cellHeightPixels = metrics.CellHeightPixels > 0
+            ? metrics.CellHeightPixels
+            : Math.Max(1, (int)Math.Round(metrics.CellHeight));
+        int pixelWidth = metrics.PixelWidth > 0
+            ? metrics.PixelWidth
+            : (int)Math.Round(metrics.CellWidth * Emulator.ActiveBuffer.Columns);
+        int pixelHeight = metrics.PixelHeight > 0
+            ? metrics.PixelHeight
+            : (int)Math.Round(metrics.CellHeight * Emulator.ActiveBuffer.Rows);
         Emulator.SetDisplayMetrics(
-            (int)Math.Round(metrics.CellWidth),
-            (int)Math.Round(metrics.CellHeight),
-            (int)Math.Round(metrics.CellWidth * Emulator.ActiveBuffer.Columns),
-            (int)Math.Round(metrics.CellHeight * Emulator.ActiveBuffer.Rows));
+            cellWidthPixels,
+            cellHeightPixels,
+            pixelWidth,
+            pixelHeight);
     }
 
     public void SendText(string text)

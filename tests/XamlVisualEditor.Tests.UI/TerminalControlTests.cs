@@ -203,9 +203,103 @@ public sealed class TerminalControlTests
             await Dispatcher.UIThread.InvokeAsync(() => { });
 
             Assert.NotEmpty(session.ResizeCalls);
-            (int Columns, int Rows) last = session.ResizeCalls[^1];
+            (int Columns, int Rows, int PixelWidth, int PixelHeight) last = session.ResizeCalls[^1];
             Assert.True(last.Columns > 0);
             Assert.True(last.Rows > 0);
+            Assert.True(last.PixelWidth > 0);
+            Assert.True(last.PixelHeight > 0);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TerminalControl_WindowResize_UpdatesSessionDimensions()
+    {
+        TestTerminalSession session = new();
+        TerminalViewModel vm = new(session);
+        TerminalView view = new() { DataContext = vm };
+
+        Window window = await ShowInWindowAsync(view, width: 640, height: 400);
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            Assert.NotEmpty(session.ResizeCalls);
+            (int Columns, int Rows, int PixelWidth, int PixelHeight) initial = session.ResizeCalls[^1];
+
+            window.Width = 900;
+            window.Height = 650;
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            (int Columns, int Rows, int PixelWidth, int PixelHeight) updated = session.ResizeCalls[^1];
+            Assert.True(updated.Columns >= initial.Columns);
+            Assert.True(updated.Rows >= initial.Rows);
+            Assert.True(updated.PixelWidth >= initial.PixelWidth);
+            Assert.True(updated.PixelHeight >= initial.PixelHeight);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TerminalControl_MultipleInstances_IsolateInputAndResize()
+    {
+        TestTerminalSession session1 = new();
+        TerminalViewModel vm1 = new(session1);
+        TerminalView view1 = new() { DataContext = vm1 };
+
+        TestTerminalSession session2 = new();
+        TerminalViewModel vm2 = new(session2);
+        TerminalView view2 = new() { DataContext = vm2 };
+
+        Grid host = new()
+        {
+            RowDefinitions = new RowDefinitions("*,*")
+        };
+        host.Children.Add(view1);
+        Grid.SetRow(view1, 0);
+        host.Children.Add(view2);
+        Grid.SetRow(view2, 1);
+
+        Window window = await ShowInWindowAsync(host, width: 900, height: 700);
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            TerminalControl[] controls = host.GetVisualDescendants().OfType<TerminalControl>().ToArray();
+            Assert.Equal(2, controls.Length);
+
+            TerminalControl? controlForSecond = controls.FirstOrDefault(x => ReferenceEquals(x.TerminalViewModel, vm2));
+            Assert.NotNull(controlForSecond);
+
+            TextInputEventArgs textInput = new()
+            {
+                RoutedEvent = InputElement.TextInputEvent,
+                Source = controlForSecond,
+                Text = "two"
+            };
+            controlForSecond!.RaiseEvent(textInput);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            Assert.Equal(string.Empty, session1.GetWrittenText());
+            Assert.Equal("two", session2.GetWrittenText());
+
+            window.Width = 1100;
+            window.Height = 760;
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            Assert.NotEmpty(session1.ResizeCalls);
+            Assert.NotEmpty(session2.ResizeCalls);
+            (int Columns, int Rows, int PixelWidth, int PixelHeight) resize1 = session1.ResizeCalls[^1];
+            (int Columns, int Rows, int PixelWidth, int PixelHeight) resize2 = session2.ResizeCalls[^1];
+            Assert.True(resize1.Columns > 0 && resize1.Rows > 0);
+            Assert.True(resize2.Columns > 0 && resize2.Rows > 0);
+            Assert.True(resize1.PixelWidth > 0 && resize1.PixelHeight > 0);
+            Assert.True(resize2.PixelWidth > 0 && resize2.PixelHeight > 0);
         }
         finally
         {
@@ -341,7 +435,7 @@ public sealed class TerminalControlTests
     private sealed class TestTerminalSession : ITerminalSession
     {
         public ITerminalEmulator Emulator { get; }
-        public List<(int Columns, int Rows)> ResizeCalls { get; } = new();
+        public List<(int Columns, int Rows, int PixelWidth, int PixelHeight)> ResizeCalls { get; } = new();
         private readonly List<byte[]> _writes = new();
 
         public event Action? ScreenUpdated;
@@ -365,19 +459,19 @@ public sealed class TerminalControlTests
 
         public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
         {
-            ResizeCalls.Add((columns, rows));
+            ResizeCalls.Add((columns, rows, pixelWidth, pixelHeight));
             Emulator.Resize(columns, rows);
         }
 
         public IReadOnlyList<TerminalCellPosition> ResizeWithMapping(int columns, int rows, IReadOnlyList<TerminalCellPosition> positions, int pixelWidth = 0, int pixelHeight = 0)
         {
-            ResizeCalls.Add((columns, rows));
+            ResizeCalls.Add((columns, rows, pixelWidth, pixelHeight));
             return Emulator.ResizeWithMapping(columns, rows, positions);
         }
 
         public IReadOnlyList<TerminalCellPosition> ResizeWithMappingGlobal(int columns, int rows, IReadOnlyList<TerminalCellPosition> positions, int pixelWidth = 0, int pixelHeight = 0)
         {
-            ResizeCalls.Add((columns, rows));
+            ResizeCalls.Add((columns, rows, pixelWidth, pixelHeight));
             return Emulator.ResizeWithMappingGlobal(columns, rows, positions);
         }
 

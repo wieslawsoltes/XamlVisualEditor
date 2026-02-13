@@ -14,7 +14,7 @@ public interface ITerminalViewModel
     event Action? FrameInvalidated;
     event Action<string>? ClipboardCopyRequested;
 
-    void Resize(int columns, int rows);
+    void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0);
     void SetMetrics(TerminalMetrics metrics);
     void SendText(string text);
     void SendKey(TerminalKeyInfo key);
@@ -36,13 +36,29 @@ public readonly struct TerminalMetrics
     public double CellHeight { get; }
     public double OffsetX { get; }
     public double OffsetY { get; }
+    public int CellWidthPixels { get; }
+    public int CellHeightPixels { get; }
+    public int PixelWidth { get; }
+    public int PixelHeight { get; }
 
-    public TerminalMetrics(double cellWidth, double cellHeight, double offsetX, double offsetY)
+    public TerminalMetrics(
+        double cellWidth,
+        double cellHeight,
+        double offsetX,
+        double offsetY,
+        int cellWidthPixels = 0,
+        int cellHeightPixels = 0,
+        int pixelWidth = 0,
+        int pixelHeight = 0)
     {
         CellWidth = cellWidth;
         CellHeight = cellHeight;
         OffsetX = offsetX;
         OffsetY = offsetY;
+        CellWidthPixels = cellWidthPixels;
+        CellHeightPixels = cellHeightPixels;
+        PixelWidth = pixelWidth;
+        PixelHeight = pixelHeight;
     }
 }
 

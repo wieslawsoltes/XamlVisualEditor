@@ -7,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Rendering;
 using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Avalonia.Threading;
@@ -43,9 +44,13 @@ public sealed class TerminalControl : Control, ILogicalScrollable
     private Size _lastLayoutSize;
     private int _lastColumns;
     private int _lastRows;
+    private int _lastPixelWidth;
+    private int _lastPixelHeight;
+    private double _lastRenderScaling;
     private double _lastCellWidth;
     private double _lastCellHeight;
     private double _lastMetricsOffsetY;
+    private bool _pendingInitialResizePulse;
     private Size _extent;
     private Size _viewport;
     private Vector _logicalOffset;
@@ -72,6 +77,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
             ResetViewModelSizingCache();
             _terminalViewModel = value;
+            _pendingInitialResizePulse = value is not null;
             if (_terminalViewModel is not null)
             {
                 _terminalViewModel.FrameInvalidated += OnFrameInvalidated;
@@ -237,9 +243,13 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             _offsetY = 0;
             _lastColumns = 0;
             _lastRows = 0;
+            _lastPixelWidth = 0;
+            _lastPixelHeight = 0;
+            _lastRenderScaling = 1;
             _lastCellWidth = 0;
             _lastCellHeight = 0;
             _lastMetricsOffsetY = 0;
+            _pendingInitialResizePulse = false;
             return;
         }
 
@@ -252,30 +262,48 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
         int cols = (int)Math.Floor(Bounds.Width / _renderState.CellSize.Width);
         int rows = (int)Math.Floor(Bounds.Height / _renderState.CellSize.Height);
-        double usedHeight = rows > 0 ? rows * _renderState.CellSize.Height : 0;
-        double remainderOffset = Math.Max(0, Bounds.Height - usedHeight);
-        _offsetY = MathF.Round((float)remainderOffset);
+        _offsetY = 0;
+        double renderScaling = GetRenderScaling();
+        int pixelWidth = Math.Max(0, (int)Math.Round(Bounds.Width * renderScaling));
+        int pixelHeight = Math.Max(0, (int)Math.Round(Bounds.Height * renderScaling));
+        int cellWidthPixels = Math.Max(1, (int)Math.Round(_renderState.CellSize.Width * renderScaling));
+        int cellHeightPixels = Math.Max(1, (int)Math.Round(_renderState.CellSize.Height * renderScaling));
         if (cols > 0 && rows > 0)
         {
-            if (NeedsMetricsUpdate(_renderState.CellSize.Width, _renderState.CellSize.Height, _offsetY))
+            if (NeedsMetricsUpdate(_renderState.CellSize.Width, _renderState.CellSize.Height, _offsetY, renderScaling))
             {
-                _terminalViewModel.SetMetrics(new TerminalMetrics(_renderState.CellSize.Width, _renderState.CellSize.Height, 0, _offsetY));
+                _terminalViewModel.SetMetrics(new TerminalMetrics(
+                    _renderState.CellSize.Width,
+                    _renderState.CellSize.Height,
+                    0,
+                    _offsetY,
+                    cellWidthPixels,
+                    cellHeightPixels,
+                    pixelWidth,
+                    pixelHeight));
                 _lastCellWidth = _renderState.CellSize.Width;
                 _lastCellHeight = _renderState.CellSize.Height;
                 _lastMetricsOffsetY = _offsetY;
+                _lastRenderScaling = renderScaling;
             }
 
-            if (cols != _lastColumns || rows != _lastRows)
+            bool pixelSizeChanged = pixelWidth != _lastPixelWidth || pixelHeight != _lastPixelHeight;
+            if (cols != _lastColumns || rows != _lastRows || pixelSizeChanged)
             {
-                _terminalViewModel.Resize(cols, rows);
+                _terminalViewModel.Resize(cols, rows, pixelWidth, pixelHeight);
                 _lastColumns = cols;
                 _lastRows = rows;
+                _lastPixelWidth = pixelWidth;
+                _lastPixelHeight = pixelHeight;
+                TryQueueInitialResizePulse();
             }
         }
         else
         {
             _lastColumns = 0;
             _lastRows = 0;
+            _lastPixelWidth = 0;
+            _lastPixelHeight = 0;
         }
 
         InvalidateScrollable();
@@ -291,9 +319,42 @@ public sealed class TerminalControl : Control, ILogicalScrollable
     {
         _lastColumns = 0;
         _lastRows = 0;
+        _lastPixelWidth = 0;
+        _lastPixelHeight = 0;
+        _lastRenderScaling = double.NaN;
         _lastCellWidth = double.NaN;
         _lastCellHeight = double.NaN;
         _lastMetricsOffsetY = double.NaN;
+    }
+
+    private void TryQueueInitialResizePulse()
+    {
+        if (!_pendingInitialResizePulse || _terminalViewModel is null)
+        {
+            return;
+        }
+
+        _pendingInitialResizePulse = false;
+        ITerminalViewModel terminalViewModel = _terminalViewModel;
+        int columns = _lastColumns;
+        int rows = _lastRows;
+        int pixelWidth = _lastPixelWidth;
+        int pixelHeight = _lastPixelHeight;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(_terminalViewModel, terminalViewModel))
+            {
+                return;
+            }
+
+            if (columns <= 0 || rows <= 0)
+            {
+                return;
+            }
+
+            terminalViewModel.Resize(columns, rows, pixelWidth, pixelHeight);
+        }, DispatcherPriority.Background);
     }
 
     private void OnFrameInvalidated()
@@ -362,6 +423,11 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
         double maxY = Math.Max(_extent.Height - _viewport.Height, 0);
         int clampedOffset = Math.Clamp(_terminalViewModel.ScrollOffset, 0, (int)Math.Round(maxY));
+        if (clampedOffset != _terminalViewModel.ScrollOffset)
+        {
+            _terminalViewModel.SetScrollOffset(clampedOffset);
+        }
+
         _logicalOffset = CoerceOffset(new Vector(0, maxY - clampedOffset));
 
         ((ILogicalScrollable)this).RaiseScrollInvalidated(EventArgs.Empty);
@@ -384,11 +450,22 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         return Math.Abs(left - right) < 0.001;
     }
 
-    private bool NeedsMetricsUpdate(double cellWidth, double cellHeight, double offsetY)
+    private bool NeedsMetricsUpdate(double cellWidth, double cellHeight, double offsetY, double renderScaling)
     {
         return !AreClose(_lastCellWidth, cellWidth)
             || !AreClose(_lastCellHeight, cellHeight)
-            || !AreClose(_lastMetricsOffsetY, offsetY);
+            || !AreClose(_lastMetricsOffsetY, offsetY)
+            || !AreClose(_lastRenderScaling, renderScaling);
+    }
+
+    private double GetRenderScaling()
+    {
+        if (VisualRoot is IRenderRoot renderRoot && renderRoot.RenderScaling > 0)
+        {
+            return renderRoot.RenderScaling;
+        }
+
+        return 1;
     }
 
     private static double Clamp(double value, double min, double max)

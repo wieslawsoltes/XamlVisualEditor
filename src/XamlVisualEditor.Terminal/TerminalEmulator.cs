@@ -109,7 +109,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 // Alternate screen should not reflow on resize.
                 // Full-screen TUIs (e.g. curses/mc) repaint explicitly after SIGWINCH and rely on a stable grid.
                 _altBuffer.Resize(columns, rows, TerminalAttributes.Default);
-                _mainBuffer.Resize(columns, rows, TerminalAttributes.Default);
+                _mainBuffer.ReflowResize(columns, rows, TerminalAttributes.Default, -1, -1);
                 mapped = MapLocalPositionsForSimpleResize(combined, columns, rows);
             }
             else
@@ -170,7 +170,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
             {
                 // See comment in ResizeWithMapping: avoid alt-screen reflow.
                 _altBuffer.Resize(columns, rows, TerminalAttributes.Default);
-                _mainBuffer.Resize(columns, rows, TerminalAttributes.Default);
+                _mainBuffer.ReflowResize(columns, rows, TerminalAttributes.Default, -1, -1);
                 int newTotalLines = _altBuffer.ScrollbackCount + rows;
                 mapped = MapGlobalPositionsForSimpleResize(combined, columns, newTotalLines);
             }
@@ -1546,10 +1546,19 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
     private void SetScrollRegion(IReadOnlyList<int> parameters)
     {
-        int top = parameters.Count > 0 ? Math.Max(1, parameters[0]) : 1;
-        int bottom = parameters.Count > 1 ? Math.Max(1, parameters[1]) : ActiveBuffer.Rows;
-        top = Math.Clamp(top, 1, ActiveBuffer.Rows) - 1;
-        bottom = Math.Clamp(bottom, 1, ActiveBuffer.Rows) - 1;
+        int rowCount = ActiveBuffer.Rows;
+        if (rowCount <= 0)
+        {
+            return;
+        }
+
+        int topParam = parameters.Count > 0 ? parameters[0] : 1;
+        int bottomParam = parameters.Count > 1 ? parameters[1] : rowCount;
+
+        int top = topParam <= 0 ? 1 : topParam;
+        int bottom = bottomParam <= 0 ? rowCount : bottomParam;
+        top = Math.Clamp(top, 1, rowCount) - 1;
+        bottom = Math.Clamp(bottom, 1, rowCount) - 1;
         if (top >= bottom)
         {
             return;
@@ -1577,10 +1586,19 @@ public sealed class TerminalEmulator : ITerminalEmulator
             return;
         }
 
-        int left = parameters.Count > 0 ? Math.Max(1, parameters[0]) : 1;
-        int right = parameters.Count > 1 ? Math.Max(1, parameters[1]) : ActiveBuffer.Columns;
-        left = Math.Clamp(left, 1, ActiveBuffer.Columns) - 1;
-        right = Math.Clamp(right, 1, ActiveBuffer.Columns) - 1;
+        int columnCount = ActiveBuffer.Columns;
+        if (columnCount <= 0)
+        {
+            return;
+        }
+
+        int leftParam = parameters.Count > 0 ? parameters[0] : 1;
+        int rightParam = parameters.Count > 1 ? parameters[1] : columnCount;
+
+        int left = leftParam <= 0 ? 1 : leftParam;
+        int right = rightParam <= 0 ? columnCount : rightParam;
+        left = Math.Clamp(left, 1, columnCount) - 1;
+        right = Math.Clamp(right, 1, columnCount) - 1;
         if (left >= right)
         {
             return;
