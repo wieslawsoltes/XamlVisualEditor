@@ -90,6 +90,12 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
             _session.Resize(columns, rows, pixelWidth, pixelHeight);
         }
 
+        Emulator.SetDisplayMetrics(
+            (int)Math.Round(_metrics.CellWidth),
+            (int)Math.Round(_metrics.CellHeight),
+            pixelWidth,
+            pixelHeight);
+
         FrameInvalidated?.Invoke();
     }
 

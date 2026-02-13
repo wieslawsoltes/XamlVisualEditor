@@ -57,7 +57,7 @@ public sealed class ViewLocator : IDataTemplate
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
                 case TerminalTool tool:
-                    return new TerminalView { DataContext = tool.TerminalViewModel };
+                    return new TerminalToolView { DataContext = tool };
                 case DebugSettingsTool tool:
                     return new DebugSettingsView { DataContext = tool.DebugSettingsViewModel };
                 case LspSettingsTool tool:

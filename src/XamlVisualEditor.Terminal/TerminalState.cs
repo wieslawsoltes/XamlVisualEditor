@@ -13,6 +13,9 @@ public sealed class TerminalState
     public bool WrapPending { get; set; }
     public int ScrollTop { get; set; }
     public int ScrollBottom { get; set; }
+    public int ScrollLeft { get; set; }
+    public int ScrollRight { get; set; }
+    public bool LeftRightMarginMode { get; set; }
     public bool AltBufferActive { get; set; }
     public TerminalMouseMode MouseMode { get; set; } = TerminalMouseMode.None;
     public bool MouseSgr { get; set; }

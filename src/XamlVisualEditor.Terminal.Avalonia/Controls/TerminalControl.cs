@@ -70,6 +70,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
                 _terminalViewModel.FrameInvalidated -= OnFrameInvalidated;
             }
 
+            ResetViewModelSizingCache();
             _terminalViewModel = value;
             if (_terminalViewModel is not null)
             {
@@ -286,13 +287,22 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         _renderState = null;
     }
 
+    private void ResetViewModelSizingCache()
+    {
+        _lastColumns = 0;
+        _lastRows = 0;
+        _lastCellWidth = double.NaN;
+        _lastCellHeight = double.NaN;
+        _lastMetricsOffsetY = double.NaN;
+    }
+
     private void OnFrameInvalidated()
     {
         Dispatcher.UIThread.Post(() =>
         {
             InvalidateScrollable();
             RequestRender();
-        });
+        }, DispatcherPriority.Render);
     }
 
     private void SetLogicalOffset(Vector value)
@@ -442,6 +452,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             false,
             string.Empty,
             0));
+        ElementComposition.SetElementChildVisual(this, null);
         _compositionVisual = null;
     }
 
@@ -913,6 +924,8 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         {
             ITerminalEmulator emulator = viewModel.Emulator;
             TerminalTheme theme = viewModel.Theme;
+            TerminalRgb defaultBackground = theme.Background;
+            canvas.Clear(new SKColor(defaultBackground.R, defaultBackground.G, defaultBackground.B));
 
             float cellWidth = state.CellSize.Width;
             float cellHeight = state.CellSize.Height;
@@ -929,6 +942,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
             canvas.Save();
             canvas.Translate((float)bounds.X, (float)(bounds.Y + offsetY));
+            canvas.ClipRect(new SKRect(0, 0, (float)Math.Max(0, bounds.Width), (float)Math.Max(0, bounds.Height)));
 
             emulator.Read((buffer, tstate) =>
             {

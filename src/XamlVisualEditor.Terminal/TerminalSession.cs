@@ -78,12 +78,24 @@ public sealed class TerminalSession : ITerminalSession
 
     public void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0)
     {
+        if (_process is null)
+        {
+            _options.Columns = columns;
+            _options.Rows = rows;
+        }
+
         Emulator.Resize(columns, rows);
         _process?.Resize(columns, rows, pixelWidth, pixelHeight);
     }
 
     public IReadOnlyList<TerminalCellPosition> ResizeWithMapping(int columns, int rows, IReadOnlyList<TerminalCellPosition> positions, int pixelWidth = 0, int pixelHeight = 0)
     {
+        if (_process is null)
+        {
+            _options.Columns = columns;
+            _options.Rows = rows;
+        }
+
         IReadOnlyList<TerminalCellPosition> mapped = Emulator.ResizeWithMapping(columns, rows, positions);
         _process?.Resize(columns, rows, pixelWidth, pixelHeight);
         return mapped;
@@ -91,6 +103,12 @@ public sealed class TerminalSession : ITerminalSession
 
     public IReadOnlyList<TerminalCellPosition> ResizeWithMappingGlobal(int columns, int rows, IReadOnlyList<TerminalCellPosition> positions, int pixelWidth = 0, int pixelHeight = 0)
     {
+        if (_process is null)
+        {
+            _options.Columns = columns;
+            _options.Rows = rows;
+        }
+
         IReadOnlyList<TerminalCellPosition> mapped = Emulator.ResizeWithMappingGlobal(columns, rows, positions);
         _process?.Resize(columns, rows, pixelWidth, pixelHeight);
         return mapped;

@@ -12,6 +12,9 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Xunit;
+using XamlVisualEditor.App;
+using XamlVisualEditor.App.Views;
+using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal;
 using XamlVisualEditor.Terminal.Avalonia.Controls;
@@ -76,6 +79,40 @@ public sealed class TerminalControlTests
     }
 
     [AvaloniaFact]
+    public async Task ViewLocator_TerminalTool_DataContextAsTool_StillProcessesInput()
+    {
+        TestTerminalSession session = new();
+        TerminalViewModel vm = new(session);
+        TerminalTool tool = new(vm);
+        ViewLocator locator = new();
+        Control view = locator.Build(tool);
+
+        // Simulate docking host assigning the dockable as DataContext.
+        view.DataContext = tool;
+
+        Window window = await ShowInWindowAsync(view);
+        try
+        {
+            TerminalControl control = GetTerminalControl(view);
+            TextInputEventArgs textInput = new()
+            {
+                RoutedEvent = InputElement.TextInputEvent,
+                Source = control,
+                Text = "abc"
+            };
+
+            control.RaiseEvent(textInput);
+            await Dispatcher.UIThread.InvokeAsync(() => { });
+
+            Assert.Equal("abc", session.GetWrittenText());
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TerminalControl_MouseFocus_KeyDown_Enter_SendsCarriageReturn()
     {
         TestTerminalSession session = new();
@@ -95,6 +132,57 @@ public sealed class TerminalControlTests
             await Dispatcher.UIThread.InvokeAsync(() => { });
 
             Assert.Contains("\r", session.GetWrittenText());
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TerminalToolView_DataContextSwap_RebindsResizeAndInputToNewTerminal()
+    {
+        TestTerminalSession session1 = new();
+        TerminalViewModel vm1 = new(session1);
+        TerminalTool tool1 = new(vm1);
+
+        TestTerminalSession session2 = new();
+        TerminalViewModel vm2 = new(session2);
+        TerminalTool tool2 = new(vm2);
+
+        TerminalToolView view = new() { DataContext = tool1 };
+        Window window = await ShowInWindowAsync(view, width: 800, height: 600);
+        try
+        {
+            TerminalControl control = GetTerminalControl(view);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            Assert.NotEmpty(session1.ResizeCalls);
+
+            TextInputEventArgs textInputFirst = new()
+            {
+                RoutedEvent = InputElement.TextInputEvent,
+                Source = control,
+                Text = "one"
+            };
+            control.RaiseEvent(textInputFirst);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            Assert.Equal("one", session1.GetWrittenText());
+
+            view.DataContext = tool2;
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+            Assert.NotEmpty(session2.ResizeCalls);
+
+            TextInputEventArgs textInputSecond = new()
+            {
+                RoutedEvent = InputElement.TextInputEvent,
+                Source = control,
+                Text = "two"
+            };
+            control.RaiseEvent(textInputSecond);
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+
+            Assert.Equal("one", session1.GetWrittenText());
+            Assert.Equal("two", session2.GetWrittenText());
         }
         finally
         {

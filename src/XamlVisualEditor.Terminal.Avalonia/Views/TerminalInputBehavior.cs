@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using XamlVisualEditor.Terminal;
 
@@ -15,6 +16,7 @@ public sealed class TerminalInputBehavior
 {
     private static readonly ConditionalWeakTable<Control, SpaceInputState> s_spaceState = new();
     private static readonly ConditionalWeakTable<Control, ClipboardSubscription> s_clipboardSubscriptions = new();
+    private static readonly ConditionalWeakTable<Control, InputHandlerState> s_inputHandlerStates = new();
 
     public static readonly AttachedProperty<ITerminalViewModel?> ViewModelProperty =
         AvaloniaProperty.RegisterAttached<TerminalInputBehavior, Control, ITerminalViewModel?>("ViewModel");
@@ -36,28 +38,70 @@ public sealed class TerminalInputBehavior
 
     private static void OnViewModelChanged(Control control, AvaloniaPropertyChangedEventArgs e)
     {
-        if (e.NewValue is ITerminalViewModel && e.OldValue is null)
+        if (e.NewValue is ITerminalViewModel viewModel)
         {
+            EnsureInputHandlers(control);
             control.Focusable = true;
-            control.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble, handledEventsToo: true);
-            control.AddHandler(InputElement.TextInputEvent, OnTextInput, RoutingStrategies.Bubble);
-            control.AddHandler(InputElement.PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
-            control.AddHandler(InputElement.PointerMovedEvent, OnPointerMoved, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
-            control.AddHandler(InputElement.PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
-            control.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
-            control.Focus();
-            AttachClipboard(control, (ITerminalViewModel)e.NewValue);
+            s_spaceState.GetOrCreateValue(control).SuppressNextTextInput = false;
+            bool shouldTryFocus = e.OldValue is not ITerminalViewModel || control.IsKeyboardFocusWithin;
+            if (shouldTryFocus)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!ReferenceEquals(GetViewModel(control), viewModel))
+                    {
+                        return;
+                    }
+
+                    if (!control.IsEffectivelyVisible)
+                    {
+                        return;
+                    }
+
+                    control.Focus();
+                }, DispatcherPriority.Input);
+            }
+            AttachClipboard(control, viewModel);
         }
-        else if (e.NewValue is null && e.OldValue is ITerminalViewModel)
+        else
         {
-            control.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
-            control.RemoveHandler(InputElement.TextInputEvent, OnTextInput);
-            control.RemoveHandler(InputElement.PointerPressedEvent, OnPointerPressed);
-            control.RemoveHandler(InputElement.PointerMovedEvent, OnPointerMoved);
-            control.RemoveHandler(InputElement.PointerReleasedEvent, OnPointerReleased);
-            control.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel);
             DetachClipboard(control);
+            DetachInputHandlers(control);
         }
+    }
+
+    private static void EnsureInputHandlers(Control control)
+    {
+        InputHandlerState state = s_inputHandlerStates.GetOrCreateValue(control);
+        if (state.IsAttached)
+        {
+            return;
+        }
+
+        control.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble, handledEventsToo: true);
+        control.AddHandler(InputElement.TextInputEvent, OnTextInput, RoutingStrategies.Bubble);
+        control.AddHandler(InputElement.PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+        control.AddHandler(InputElement.PointerMovedEvent, OnPointerMoved, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+        control.AddHandler(InputElement.PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+        control.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
+        state.IsAttached = true;
+    }
+
+    private static void DetachInputHandlers(Control control)
+    {
+        if (!s_inputHandlerStates.TryGetValue(control, out InputHandlerState? state) || !state.IsAttached)
+        {
+            return;
+        }
+
+        control.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+        control.RemoveHandler(InputElement.TextInputEvent, OnTextInput);
+        control.RemoveHandler(InputElement.PointerPressedEvent, OnPointerPressed);
+        control.RemoveHandler(InputElement.PointerMovedEvent, OnPointerMoved);
+        control.RemoveHandler(InputElement.PointerReleasedEvent, OnPointerReleased);
+        control.RemoveHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel);
+        state.IsAttached = false;
+        s_inputHandlerStates.Remove(control);
     }
 
     private static void OnTextInput(object? sender, TextInputEventArgs e)
@@ -407,6 +451,11 @@ public sealed class TerminalInputBehavior
     private sealed class SpaceInputState
     {
         public bool SuppressNextTextInput { get; set; }
+    }
+
+    private sealed class InputHandlerState
+    {
+        public bool IsAttached { get; set; }
     }
 
     private sealed class ClipboardSubscription

@@ -451,90 +451,215 @@ public sealed class TerminalBuffer
 
     public void ScrollUp(int top, int bottom, TerminalAttributes attributes)
     {
-        if (top < 0 || bottom >= Rows || top >= bottom)
+        ScrollUp(top, bottom, 0, Columns - 1, attributes);
+    }
+
+    public void ScrollUp(int top, int bottom, int left, int right, TerminalAttributes attributes)
+    {
+        if (Rows <= 0 || top < 0 || bottom >= Rows || top >= bottom)
         {
             return;
         }
 
-        TerminalLine outgoing = _lines[top];
-        _scrollback.Add(outgoing);
-        if (_scrollback.Count > ScrollbackLimit)
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
         {
-            _scrollback.RemoveAt(0);
+            return;
+        }
+
+        bool fullWidth = regionLeft == 0 && regionRight == Columns - 1;
+        if (fullWidth)
+        {
+            if (top == 0 && bottom == Rows - 1 && ScrollbackLimit > 0)
+            {
+                TerminalLine outgoing = _lines[top];
+                _scrollback.Add(outgoing);
+                if (_scrollback.Count > ScrollbackLimit)
+                {
+                    _scrollback.RemoveAt(0);
+                }
+            }
+
+            for (int row = top; row < bottom; row++)
+            {
+                _lines[row] = _lines[row + 1];
+            }
+
+            _lines[bottom] = new TerminalLine(Columns, attributes);
+            return;
         }
 
         for (int row = top; row < bottom; row++)
         {
-            _lines[row] = _lines[row + 1];
+            CopyCellRange(_lines[row + 1], _lines[row], regionLeft, regionRight);
+            _lines[row].IsWrapped = false;
         }
 
-        _lines[bottom] = new TerminalLine(Columns, attributes);
+        ClearCellRange(_lines[bottom], regionLeft, regionRight, attributes);
+        _lines[bottom].IsWrapped = false;
     }
 
     public void ScrollDown(int top, int bottom, TerminalAttributes attributes)
     {
-        if (top < 0 || bottom >= Rows || top >= bottom)
+        ScrollDown(top, bottom, 0, Columns - 1, attributes);
+    }
+
+    public void ScrollDown(int top, int bottom, int left, int right, TerminalAttributes attributes)
+    {
+        if (Rows <= 0 || top < 0 || bottom >= Rows || top >= bottom)
         {
+            return;
+        }
+
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
+        {
+            return;
+        }
+
+        bool fullWidth = regionLeft == 0 && regionRight == Columns - 1;
+        if (fullWidth)
+        {
+            for (int row = bottom; row > top; row--)
+            {
+                _lines[row] = _lines[row - 1];
+            }
+
+            _lines[top] = new TerminalLine(Columns, attributes);
             return;
         }
 
         for (int row = bottom; row > top; row--)
         {
-            _lines[row] = _lines[row - 1];
+            CopyCellRange(_lines[row - 1], _lines[row], regionLeft, regionRight);
+            _lines[row].IsWrapped = false;
         }
 
-        _lines[top] = new TerminalLine(Columns, attributes);
+        ClearCellRange(_lines[top], regionLeft, regionRight, attributes);
+        _lines[top].IsWrapped = false;
     }
 
     public void InsertLines(int row, int count, int top, int bottom, TerminalAttributes attributes)
     {
-        if (count <= 0 || row < top || row > bottom)
+        InsertLines(row, count, top, bottom, 0, Columns - 1, attributes);
+    }
+
+    public void InsertLines(int row, int count, int top, int bottom, int left, int right, TerminalAttributes attributes)
+    {
+        if (count <= 0 || row < top || row > bottom || Rows <= 0)
+        {
+            return;
+        }
+
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
         {
             return;
         }
 
         int linesToMove = Math.Min(count, bottom - row + 1);
+        bool fullWidth = regionLeft == 0 && regionRight == Columns - 1;
+        if (fullWidth)
+        {
+            for (int i = bottom; i >= row + linesToMove; i--)
+            {
+                _lines[i] = _lines[i - linesToMove];
+            }
+
+            for (int i = 0; i < linesToMove; i++)
+            {
+                _lines[row + i] = new TerminalLine(Columns, attributes);
+            }
+
+            return;
+        }
+
         for (int i = bottom; i >= row + linesToMove; i--)
         {
-            _lines[i] = _lines[i - linesToMove];
+            CopyCellRange(_lines[i - linesToMove], _lines[i], regionLeft, regionRight);
+            _lines[i].IsWrapped = false;
         }
 
         for (int i = 0; i < linesToMove; i++)
         {
-            _lines[row + i] = new TerminalLine(Columns, attributes);
+            ClearCellRange(_lines[row + i], regionLeft, regionRight, attributes);
+            _lines[row + i].IsWrapped = false;
         }
     }
 
     public void DeleteLines(int row, int count, int top, int bottom, TerminalAttributes attributes)
     {
-        if (count <= 0 || row < top || row > bottom)
+        DeleteLines(row, count, top, bottom, 0, Columns - 1, attributes);
+    }
+
+    public void DeleteLines(int row, int count, int top, int bottom, int left, int right, TerminalAttributes attributes)
+    {
+        if (count <= 0 || row < top || row > bottom || Rows <= 0)
+        {
+            return;
+        }
+
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
         {
             return;
         }
 
         int linesToMove = Math.Min(count, bottom - row + 1);
+        bool fullWidth = regionLeft == 0 && regionRight == Columns - 1;
+        if (fullWidth)
+        {
+            for (int i = row; i <= bottom - linesToMove; i++)
+            {
+                _lines[i] = _lines[i + linesToMove];
+            }
+
+            for (int i = 0; i < linesToMove; i++)
+            {
+                _lines[bottom - i] = new TerminalLine(Columns, attributes);
+            }
+
+            return;
+        }
+
         for (int i = row; i <= bottom - linesToMove; i++)
         {
-            _lines[i] = _lines[i + linesToMove];
+            CopyCellRange(_lines[i + linesToMove], _lines[i], regionLeft, regionRight);
+            _lines[i].IsWrapped = false;
         }
 
         for (int i = 0; i < linesToMove; i++)
         {
-            _lines[bottom - i] = new TerminalLine(Columns, attributes);
+            ClearCellRange(_lines[bottom - i], regionLeft, regionRight, attributes);
+            _lines[bottom - i].IsWrapped = false;
         }
     }
 
     public void InsertChars(int row, int column, int count, TerminalAttributes attributes)
+    {
+        InsertChars(row, column, count, 0, Columns - 1, attributes);
+    }
+
+    public void InsertChars(int row, int column, int count, int left, int right, TerminalAttributes attributes)
     {
         if (row < 0 || row >= Rows || count <= 0)
         {
             return;
         }
 
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
+        {
+            return;
+        }
+
+        if (column < regionLeft || column > regionRight)
+        {
+            return;
+        }
+
         TerminalLine line = _lines[row];
-        int max = Columns - 1;
-        column = Math.Clamp(column, 0, max);
-        count = Math.Min(count, Columns - column);
+        int max = regionRight;
+        count = Math.Min(count, max - column + 1);
+        if (count <= 0)
+        {
+            return;
+        }
 
         for (int i = max; i >= column + count; i--)
         {
@@ -545,19 +670,39 @@ public sealed class TerminalBuffer
         {
             line.Cells[column + i] = TerminalCell.Empty(attributes);
         }
+
+        line.IsWrapped = false;
     }
 
     public void DeleteChars(int row, int column, int count, TerminalAttributes attributes)
+    {
+        DeleteChars(row, column, count, 0, Columns - 1, attributes);
+    }
+
+    public void DeleteChars(int row, int column, int count, int left, int right, TerminalAttributes attributes)
     {
         if (row < 0 || row >= Rows || count <= 0)
         {
             return;
         }
 
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
+        {
+            return;
+        }
+
+        if (column < regionLeft || column > regionRight)
+        {
+            return;
+        }
+
         TerminalLine line = _lines[row];
-        int max = Columns - 1;
-        column = Math.Clamp(column, 0, max);
-        count = Math.Min(count, Columns - column);
+        int max = regionRight;
+        count = Math.Min(count, max - column + 1);
+        if (count <= 0)
+        {
+            return;
+        }
 
         for (int i = column; i <= max - count; i++)
         {
@@ -568,23 +713,75 @@ public sealed class TerminalBuffer
         {
             line.Cells[max - i] = TerminalCell.Empty(attributes);
         }
+
+        line.IsWrapped = false;
     }
 
     public void EraseChars(int row, int column, int count, TerminalAttributes attributes)
+    {
+        EraseChars(row, column, count, 0, Columns - 1, attributes);
+    }
+
+    public void EraseChars(int row, int column, int count, int left, int right, TerminalAttributes attributes)
     {
         if (row < 0 || row >= Rows || count <= 0)
         {
             return;
         }
 
+        if (!TryNormalizeHorizontalRange(left, right, out int regionLeft, out int regionRight))
+        {
+            return;
+        }
+
+        if (column < regionLeft || column > regionRight)
+        {
+            return;
+        }
+
         TerminalLine line = _lines[row];
-        int max = Columns - 1;
-        column = Math.Clamp(column, 0, max);
-        count = Math.Min(count, Columns - column);
+        int max = regionRight;
+        count = Math.Min(count, max - column + 1);
+        if (count <= 0)
+        {
+            return;
+        }
 
         for (int i = 0; i < count; i++)
         {
             line.Cells[column + i] = TerminalCell.Empty(attributes);
+        }
+
+        line.IsWrapped = false;
+    }
+
+    private bool TryNormalizeHorizontalRange(int left, int right, out int normalizedLeft, out int normalizedRight)
+    {
+        normalizedLeft = 0;
+        normalizedRight = 0;
+        if (Columns <= 0)
+        {
+            return false;
+        }
+
+        normalizedLeft = Math.Clamp(left, 0, Columns - 1);
+        normalizedRight = Math.Clamp(right, 0, Columns - 1);
+        return normalizedLeft <= normalizedRight;
+    }
+
+    private static void CopyCellRange(TerminalLine source, TerminalLine target, int left, int right)
+    {
+        for (int col = left; col <= right; col++)
+        {
+            target.Cells[col] = source.Cells[col];
+        }
+    }
+
+    private static void ClearCellRange(TerminalLine line, int left, int right, TerminalAttributes attributes)
+    {
+        for (int col = left; col <= right; col++)
+        {
+            line.Cells[col] = TerminalCell.Empty(attributes);
         }
     }
 

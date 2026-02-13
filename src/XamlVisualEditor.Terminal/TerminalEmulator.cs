@@ -16,10 +16,17 @@ public sealed class TerminalEmulator : ITerminalEmulator
     private readonly HashSet<int> _tabStops = new();
     private PrivateModeSnapshot _savedPrivateModes;
     private bool _hasSavedPrivateModes;
+    private readonly HashSet<int> _savedPrivateModeParameters = new();
+    private CursorSnapshot _savedCursor;
+    private bool _hasSavedCursor;
     private int _cellWidthPx;
     private int _cellHeightPx;
     private int _pixelWidthPx;
     private int _pixelHeightPx;
+    private static readonly int[] PrivateModeSaveRestoreSupportedParameters =
+    {
+        1, 6, 7, 9, 12, 25, 69, 1000, 1002, 1003, 1006, 2004
+    };
 
     public event Action? ScreenUpdated;
     public event Action<string>? TitleChanged;
@@ -31,8 +38,11 @@ public sealed class TerminalEmulator : ITerminalEmulator
     {
         _mainBuffer = new TerminalBuffer(columns, rows, TerminalAttributes.Default);
         _altBuffer = new TerminalBuffer(columns, rows, TerminalAttributes.Default);
+        _altBuffer.ScrollbackLimit = 0;
         _state.ScrollTop = 0;
         _state.ScrollBottom = rows - 1;
+        _state.ScrollLeft = 0;
+        _state.ScrollRight = columns - 1;
         InitializeTabStops(columns);
     }
 
@@ -52,7 +62,8 @@ public sealed class TerminalEmulator : ITerminalEmulator
     {
         int clamped = Math.Max(0, limit);
         _mainBuffer.ScrollbackLimit = clamped;
-        _altBuffer.ScrollbackLimit = clamped;
+        _altBuffer.ScrollbackLimit = 0;
+        _altBuffer.ClearScrollback();
     }
 
     public void Read(Action<TerminalBuffer, TerminalState> reader)
@@ -95,9 +106,11 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
             if (_state.AltBufferActive)
             {
-                IReadOnlyList<TerminalCellPosition> bufferMapped = _altBuffer.ReflowResizeWithMapping(columns, rows, TerminalAttributes.Default, combined);
-                _mainBuffer.ReflowResize(columns, rows, TerminalAttributes.Default, -1, -1);
-                mapped = bufferMapped.ToArray();
+                // Alternate screen should not reflow on resize.
+                // Full-screen TUIs (e.g. curses/mc) repaint explicitly after SIGWINCH and rely on a stable grid.
+                _altBuffer.Resize(columns, rows, TerminalAttributes.Default);
+                _mainBuffer.Resize(columns, rows, TerminalAttributes.Default);
+                mapped = MapLocalPositionsForSimpleResize(combined, columns, rows);
             }
             else
             {
@@ -114,8 +127,14 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
             _state.ScrollTop = 0;
             _state.ScrollBottom = rows - 1;
+            CoerceHorizontalMargins(columns);
             _state.CursorRow = Math.Clamp(_state.CursorRow, 0, rows - 1);
             _state.CursorColumn = Math.Clamp(_state.CursorColumn, 0, columns - 1);
+            if (_state.OriginMode && _state.LeftRightMarginMode)
+            {
+                GetMargins(ActiveBuffer, out int marginLeft, out int marginRight);
+                _state.CursorColumn = Math.Clamp(_state.CursorColumn, marginLeft, marginRight);
+            }
         }
 
         ScreenUpdated?.Invoke();
@@ -149,9 +168,11 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
             if (_state.AltBufferActive)
             {
-                IReadOnlyList<TerminalCellPosition> bufferMapped = _altBuffer.ReflowResizeWithMappingGlobal(columns, rows, TerminalAttributes.Default, combined);
-                _mainBuffer.ReflowResize(columns, rows, TerminalAttributes.Default, -1, -1);
-                mapped = bufferMapped.ToArray();
+                // See comment in ResizeWithMapping: avoid alt-screen reflow.
+                _altBuffer.Resize(columns, rows, TerminalAttributes.Default);
+                _mainBuffer.Resize(columns, rows, TerminalAttributes.Default);
+                int newTotalLines = _altBuffer.ScrollbackCount + rows;
+                mapped = MapGlobalPositionsForSimpleResize(combined, columns, newTotalLines);
             }
             else
             {
@@ -169,8 +190,14 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
             _state.ScrollTop = 0;
             _state.ScrollBottom = rows - 1;
+            CoerceHorizontalMargins(columns);
             _state.CursorRow = Math.Clamp(_state.CursorRow, 0, rows - 1);
             _state.CursorColumn = Math.Clamp(_state.CursorColumn, 0, columns - 1);
+            if (_state.OriginMode && _state.LeftRightMarginMode)
+            {
+                GetMargins(ActiveBuffer, out int marginLeft, out int marginRight);
+                _state.CursorColumn = Math.Clamp(_state.CursorColumn, marginLeft, marginRight);
+            }
         }
 
         ScreenUpdated?.Invoke();
@@ -183,6 +210,42 @@ public sealed class TerminalEmulator : ITerminalEmulator
         TerminalCellPosition[] selectionMapped = new TerminalCellPosition[mapped.Length - 1];
         Array.Copy(mapped, 1, selectionMapped, 0, selectionMapped.Length);
         return selectionMapped;
+    }
+
+    private static TerminalCellPosition[] MapLocalPositionsForSimpleResize(
+        IReadOnlyList<TerminalCellPosition> positions,
+        int columns,
+        int rows)
+    {
+        TerminalCellPosition[] mapped = new TerminalCellPosition[positions.Count];
+        int maxRow = Math.Max(0, rows - 1);
+        int maxCol = Math.Max(0, columns - 1);
+        for (int i = 0; i < positions.Count; i++)
+        {
+            mapped[i] = new TerminalCellPosition(
+                Math.Clamp(positions[i].Row, 0, maxRow),
+                Math.Clamp(positions[i].Column, 0, maxCol));
+        }
+
+        return mapped;
+    }
+
+    private static TerminalCellPosition[] MapGlobalPositionsForSimpleResize(
+        IReadOnlyList<TerminalCellPosition> positions,
+        int columns,
+        int totalLines)
+    {
+        TerminalCellPosition[] mapped = new TerminalCellPosition[positions.Count];
+        int maxRow = Math.Max(0, totalLines - 1);
+        int maxCol = Math.Max(0, columns - 1);
+        for (int i = 0; i < positions.Count; i++)
+        {
+            mapped[i] = new TerminalCellPosition(
+                Math.Clamp(positions[i].Row, 0, maxRow),
+                Math.Clamp(positions[i].Column, 0, maxCol));
+        }
+
+        return mapped;
     }
 
     public void WriteRune(Rune rune)
@@ -202,12 +265,14 @@ public sealed class TerminalEmulator : ITerminalEmulator
             CarriageReturn();
         }
 
+        GetHorizontalBoundsForCursor(buffer, out int regionLeft, out int regionRight);
+
         if (!_state.AutoWrap && _state.CursorColumn >= buffer.Columns)
         {
             _state.CursorColumn = buffer.Columns - 1;
         }
 
-        if (_state.AutoWrap && width == 2 && _state.CursorColumn == buffer.Columns - 1)
+        if (_state.AutoWrap && width == 2 && _state.CursorColumn == regionRight)
         {
             buffer.GetLine(_state.CursorRow).IsWrapped = true;
             LineFeed();
@@ -218,7 +283,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         TerminalAttributes attrs = _state.Attributes;
         int? hyperlinkId = _state.ActiveHyperlinkId;
 
-        int available = Math.Max(0, buffer.Columns - _state.CursorColumn);
+        int available = Math.Max(0, regionRight - _state.CursorColumn + 1);
         int widthToWrite = Math.Min(width, available);
         if (widthToWrite <= 0)
         {
@@ -227,7 +292,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
         if (_state.InsertMode)
         {
-            buffer.InsertChars(_state.CursorRow, _state.CursorColumn, widthToWrite, attrs);
+            buffer.InsertChars(_state.CursorRow, _state.CursorColumn, widthToWrite, regionLeft, regionRight, attrs);
         }
 
         line.Cells[_state.CursorColumn] = new TerminalCell(rune, (byte)widthToWrite, attrs, hyperlinkId);
@@ -236,9 +301,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
             line.Cells[_state.CursorColumn + 1] = new TerminalCell(new Rune(' '), 0, attrs, hyperlinkId);
         }
 
-        if (_state.AutoWrap && _state.CursorColumn + widthToWrite >= buffer.Columns)
+        if (_state.AutoWrap && _state.CursorColumn + widthToWrite > regionRight)
         {
-            _state.CursorColumn = buffer.Columns - 1;
+            _state.CursorColumn = regionRight;
             _state.WrapPending = true;
             line.IsWrapped = true;
         }
@@ -264,7 +329,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 _state.UseG1Charset = false;
                 break;
             case 0x09: // TAB
-                _state.CursorColumn = NextTabStop(_state.CursorColumn, ActiveBuffer.Columns);
+                HorizontalTab(1);
                 break;
             case 0x0A: // LF
                 LineFeed();
@@ -286,12 +351,10 @@ public sealed class TerminalEmulator : ITerminalEmulator
         switch (code)
         {
             case '7':
-                _state.SavedCursorRow = _state.CursorRow;
-                _state.SavedCursorColumn = _state.CursorColumn;
+                SaveCursorState();
                 break;
             case '8':
-                _state.CursorRow = _state.SavedCursorRow;
-                _state.CursorColumn = _state.SavedCursorColumn;
+                RestoreCursorState();
                 break;
             case 'M':
                 ReverseIndex();
@@ -326,9 +389,14 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
     private void ReverseIndex()
     {
-        if (_state.CursorRow == _state.ScrollTop)
+        TerminalBuffer buffer = ActiveBuffer;
+        GetMargins(buffer, out int left, out int right);
+        bool insideHorizontalMargins = !_state.LeftRightMarginMode
+            || (_state.CursorColumn >= left && _state.CursorColumn <= right);
+
+        if (_state.CursorRow == _state.ScrollTop && insideHorizontalMargins)
         {
-            ActiveBuffer.ScrollDown(_state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+            buffer.ScrollDown(_state.ScrollTop, _state.ScrollBottom, left, right, _state.Attributes);
         }
         else
         {
@@ -426,26 +494,44 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 }
                 break;
             case 'A':
-                MoveCursor(-Math.Max(1, p1), 0);
+                CursorUp(Math.Max(1, p1));
                 break;
             case 'B':
-                MoveCursor(Math.Max(1, p1), 0);
+                CursorDown(Math.Max(1, p1));
                 break;
             case 'C':
-                MoveCursor(0, Math.Max(1, p1));
+                CursorRight(Math.Max(1, p1));
                 break;
             case 'D':
-                MoveCursor(0, -Math.Max(1, p1));
+                CursorLeft(Math.Max(1, p1));
+                break;
+            case 'E':
+                CursorDown(Math.Max(1, p1));
+                CarriageReturn();
+                break;
+            case 'F':
+                CursorUp(Math.Max(1, p1));
+                CarriageReturn();
+                break;
+            case 'I':
+                HorizontalTab(Math.Max(1, p1));
                 break;
             case 'H':
             case 'f':
                 SetCursorPosition(parameters);
                 break;
             case 'G':
+            case '`':
                 SetCursorColumn(parameters);
                 break;
             case 'd':
                 SetCursorRow(parameters);
+                break;
+            case 'a':
+                CursorRight(Math.Max(1, p1));
+                break;
+            case 'e':
+                CursorDown(Math.Max(1, p1));
                 break;
             case 'J':
                 EraseDisplay(p1);
@@ -465,6 +551,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
             case 'X':
                 EraseChars(Math.Max(1, p1));
                 break;
+            case 'Z':
+                HorizontalTabBack(Math.Max(1, p1));
+                break;
             case 'L':
                 InsertLines(Math.Max(1, p1));
                 break;
@@ -483,22 +572,24 @@ public sealed class TerminalEmulator : ITerminalEmulator
             case 's':
                 if (privatePrefix == '?')
                 {
-                    SavePrivateModes();
+                    SavePrivateModes(parameters);
+                }
+                else if (_state.LeftRightMarginMode)
+                {
+                    SetLeftRightMargins(parameters);
                 }
                 else
                 {
-                    _state.SavedCursorRow = _state.CursorRow;
-                    _state.SavedCursorColumn = _state.CursorColumn;
+                    SaveCursorState();
                 }
                 break;
             case 'u':
-                _state.CursorRow = _state.SavedCursorRow;
-                _state.CursorColumn = _state.SavedCursorColumn;
+                RestoreCursorState();
                 break;
             case 'r':
                 if (privatePrefix == '?')
                 {
-                    RestorePrivateModes();
+                    RestorePrivateModes(parameters);
                 }
                 else
                 {
@@ -527,6 +618,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 {
                     SetModes(parameters, enabled: false);
                 }
+                break;
+            case 't':
+                HandleWindowOps(parameters);
                 break;
             case 'q':
                 if (privatePrefix == '>')
@@ -698,14 +792,19 @@ public sealed class TerminalEmulator : ITerminalEmulator
         }
     }
 
-    private int NextTabStop(int column, int columns)
+    private int NextTabStop(int column, int rightLimit)
     {
-        if (_tabStops.Count == 0)
+        if (column >= rightLimit)
         {
-            return Math.Min(columns - 1, ((column / 8) + 1) * 8);
+            return rightLimit;
         }
 
-        for (int i = column + 1; i < columns; i++)
+        if (_tabStops.Count == 0)
+        {
+            return Math.Min(rightLimit, ((column / 8) + 1) * 8);
+        }
+
+        for (int i = column + 1; i <= rightLimit; i++)
         {
             if (_tabStops.Contains(i))
             {
@@ -713,7 +812,80 @@ public sealed class TerminalEmulator : ITerminalEmulator
             }
         }
 
-        return columns - 1;
+        return rightLimit;
+    }
+
+    private int PreviousTabStop(int column, int leftLimit)
+    {
+        if (column <= leftLimit)
+        {
+            return leftLimit;
+        }
+
+        if (_tabStops.Count == 0)
+        {
+            return Math.Max(leftLimit, ((column - 1) / 8) * 8);
+        }
+
+        for (int i = column - 1; i >= leftLimit; i--)
+        {
+            if (_tabStops.Contains(i))
+            {
+                return i;
+            }
+        }
+
+        return leftLimit;
+    }
+
+    private void HorizontalTab(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        GetMargins(buffer, out int _, out int marginRight);
+        int rightLimit = _state.LeftRightMarginMode ? marginRight : buffer.Columns - 1;
+        int steps = Math.Max(1, count);
+        for (int i = 0; i < steps; i++)
+        {
+            if (_state.CursorColumn >= rightLimit)
+            {
+                break;
+            }
+
+            int next = NextTabStop(_state.CursorColumn, rightLimit);
+            if (next <= _state.CursorColumn)
+            {
+                break;
+            }
+
+            _state.CursorColumn = next;
+        }
+
+        _state.WrapPending = false;
+    }
+
+    private void HorizontalTabBack(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        GetMargins(buffer, out int marginLeft, out int _);
+        int leftLimit = _state.OriginMode && _state.LeftRightMarginMode ? marginLeft : 0;
+        int steps = Math.Max(1, count);
+        for (int i = 0; i < steps; i++)
+        {
+            if (_state.CursorColumn <= leftLimit)
+            {
+                break;
+            }
+
+            int previous = PreviousTabStop(_state.CursorColumn, leftLimit);
+            if (previous >= _state.CursorColumn)
+            {
+                break;
+            }
+
+            _state.CursorColumn = previous;
+        }
+
+        _state.WrapPending = false;
     }
 
     private void ClearTabStops(int mode)
@@ -773,6 +945,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.CursorColumn = 0;
         _state.ScrollTop = 0;
         _state.ScrollBottom = ActiveBuffer.Rows - 1;
+        _state.ScrollLeft = 0;
+        _state.ScrollRight = ActiveBuffer.Columns - 1;
+        _state.LeftRightMarginMode = false;
         _state.AltBufferActive = false;
         _state.MouseMode = TerminalMouseMode.None;
         _state.MouseSgr = false;
@@ -782,14 +957,22 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.ApplicationKeypad = false;
         _state.ApplicationCursorKeys = false;
         _state.Utf8Mode = true;
+        _state.CursorVisible = true;
         _state.CursorBlink = true;
         _state.CursorShape = TerminalCursorShape.Block;
         _state.CharsetG0 = TerminalCharset.Ascii;
         _state.CharsetG1 = TerminalCharset.Ascii;
         _state.UseG1Charset = false;
+        _state.InsertMode = false;
+        _state.OriginMode = false;
+        _state.ActiveHyperlinkId = null;
         _state.WrapPending = false;
+        _hasSavedCursor = false;
+        _savedCursor = default;
         _hasSavedPrivateModes = false;
         _savedPrivateModes = default;
+        _savedPrivateModeParameters.Clear();
+        InitializeTabStops(ActiveBuffer.Columns);
         _mainBuffer.Clear(TerminalAttributes.Default);
         _altBuffer.Clear(TerminalAttributes.Default);
     }
@@ -958,15 +1141,52 @@ public sealed class TerminalEmulator : ITerminalEmulator
         return true;
     }
 
-    private void MoveCursor(int rowDelta, int colDelta)
+    private void CursorUp(int count)
+    {
+        int minRow;
+        if (_state.CursorRow >= _state.ScrollTop && _state.CursorRow <= _state.ScrollBottom)
+        {
+            minRow = _state.ScrollTop;
+        }
+        else
+        {
+            minRow = _state.OriginMode ? _state.ScrollTop : 0;
+        }
+
+        _state.CursorRow = Math.Max(minRow, _state.CursorRow - Math.Max(1, count));
+        _state.WrapPending = false;
+    }
+
+    private void CursorDown(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
-        int row = _state.CursorRow + rowDelta;
-        int col = _state.CursorColumn + colDelta;
-        int minRow = _state.OriginMode ? _state.ScrollTop : 0;
-        int maxRow = _state.OriginMode ? _state.ScrollBottom : buffer.Rows - 1;
-        _state.CursorRow = Math.Clamp(row, minRow, maxRow);
-        _state.CursorColumn = Math.Clamp(col, 0, buffer.Columns - 1);
+        int maxRow;
+        if (_state.CursorRow >= _state.ScrollTop && _state.CursorRow <= _state.ScrollBottom)
+        {
+            maxRow = _state.ScrollBottom;
+        }
+        else
+        {
+            maxRow = _state.OriginMode ? _state.ScrollBottom : buffer.Rows - 1;
+        }
+
+        _state.CursorRow = Math.Min(maxRow, _state.CursorRow + Math.Max(1, count));
+        _state.WrapPending = false;
+    }
+
+    private void CursorLeft(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        GetHorizontalBoundsForCursor(buffer, out int minCol, out int _);
+        _state.CursorColumn = Math.Max(minCol, _state.CursorColumn - Math.Max(1, count));
+        _state.WrapPending = false;
+    }
+
+    private void CursorRight(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        GetHorizontalBoundsForCursor(buffer, out int _, out int maxCol);
+        _state.CursorColumn = Math.Min(maxCol, _state.CursorColumn + Math.Max(1, count));
         _state.WrapPending = false;
     }
 
@@ -976,14 +1196,22 @@ public sealed class TerminalEmulator : ITerminalEmulator
         int row = parameters.Count > 0 ? Math.Max(1, parameters[0]) : 1;
         int col = parameters.Count > 1 ? Math.Max(1, parameters[1]) : 1;
         int targetRow = row - 1;
+        int targetCol = col - 1;
+        GetMargins(buffer, out int marginLeft, out int marginRight);
         if (_state.OriginMode)
         {
             targetRow += _state.ScrollTop;
+            if (_state.LeftRightMarginMode)
+            {
+                targetCol += marginLeft;
+            }
         }
         int minRow = _state.OriginMode ? _state.ScrollTop : 0;
         int maxRow = _state.OriginMode ? _state.ScrollBottom : buffer.Rows - 1;
+        int minCol = _state.OriginMode && _state.LeftRightMarginMode ? marginLeft : 0;
+        int maxCol = _state.OriginMode && _state.LeftRightMarginMode ? marginRight : buffer.Columns - 1;
         _state.CursorRow = Math.Clamp(targetRow, minRow, maxRow);
-        _state.CursorColumn = Math.Clamp(col - 1, 0, buffer.Columns - 1);
+        _state.CursorColumn = Math.Clamp(targetCol, minCol, maxCol);
         _state.WrapPending = false;
     }
 
@@ -1006,74 +1234,129 @@ public sealed class TerminalEmulator : ITerminalEmulator
     {
         TerminalBuffer buffer = ActiveBuffer;
         int col = parameters.Count > 0 ? Math.Max(1, parameters[0]) : 1;
-        _state.CursorColumn = Math.Clamp(col - 1, 0, buffer.Columns - 1);
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        int minCol = _state.OriginMode && _state.LeftRightMarginMode ? marginLeft : 0;
+        int maxCol = _state.OriginMode && _state.LeftRightMarginMode ? marginRight : buffer.Columns - 1;
+        int targetCol = _state.OriginMode && _state.LeftRightMarginMode
+            ? marginLeft + col - 1
+            : col - 1;
+        _state.CursorColumn = Math.Clamp(targetCol, minCol, maxCol);
+        _state.WrapPending = false;
     }
 
     private void LineFeed()
     {
-        if (_state.CursorRow == _state.ScrollBottom)
+        TerminalBuffer buffer = ActiveBuffer;
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        bool insideHorizontalMargins = !_state.LeftRightMarginMode
+            || (_state.CursorColumn >= marginLeft && _state.CursorColumn <= marginRight);
+
+        if (_state.CursorRow == _state.ScrollBottom && insideHorizontalMargins)
         {
-            ActiveBuffer.ScrollUp(_state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+            buffer.ScrollUp(_state.ScrollTop, _state.ScrollBottom, marginLeft, marginRight, _state.Attributes);
         }
         else
         {
-            _state.CursorRow = Math.Min(_state.CursorRow + 1, ActiveBuffer.Rows - 1);
+            _state.CursorRow = Math.Min(_state.CursorRow + 1, buffer.Rows - 1);
         }
         _state.WrapPending = false;
     }
 
     private void CarriageReturn()
     {
-        _state.CursorColumn = 0;
+        if (_state.LeftRightMarginMode)
+        {
+            GetMargins(ActiveBuffer, out int marginLeft, out _);
+            if (_state.OriginMode || _state.CursorColumn >= marginLeft)
+            {
+                _state.CursorColumn = marginLeft;
+            }
+            else
+            {
+                _state.CursorColumn = 0;
+            }
+        }
+        else
+        {
+            _state.CursorColumn = 0;
+        }
         _state.WrapPending = false;
     }
 
     private void InsertChars(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
-        buffer.InsertChars(_state.CursorRow, _state.CursorColumn, count, _state.Attributes);
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        buffer.InsertChars(_state.CursorRow, _state.CursorColumn, count, marginLeft, marginRight, _state.Attributes);
+        _state.WrapPending = false;
     }
 
     private void DeleteChars(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
-        buffer.DeleteChars(_state.CursorRow, _state.CursorColumn, count, _state.Attributes);
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        buffer.DeleteChars(_state.CursorRow, _state.CursorColumn, count, marginLeft, marginRight, _state.Attributes);
+        _state.WrapPending = false;
     }
 
     private void EraseChars(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
-        buffer.EraseChars(_state.CursorRow, _state.CursorColumn, count, _state.Attributes);
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        buffer.EraseChars(_state.CursorRow, _state.CursorColumn, count, marginLeft, marginRight, _state.Attributes);
+        _state.WrapPending = false;
     }
 
     private void InsertLines(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
-        buffer.InsertLines(_state.CursorRow, count, _state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        if (_state.LeftRightMarginMode && (_state.CursorColumn < marginLeft || _state.CursorColumn > marginRight))
+        {
+            _state.WrapPending = false;
+            return;
+        }
+
+        buffer.InsertLines(_state.CursorRow, count, _state.ScrollTop, _state.ScrollBottom, marginLeft, marginRight, _state.Attributes);
+        _state.WrapPending = false;
     }
 
     private void DeleteLines(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
-        buffer.DeleteLines(_state.CursorRow, count, _state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        if (_state.LeftRightMarginMode && (_state.CursorColumn < marginLeft || _state.CursorColumn > marginRight))
+        {
+            _state.WrapPending = false;
+            return;
+        }
+
+        buffer.DeleteLines(_state.CursorRow, count, _state.ScrollTop, _state.ScrollBottom, marginLeft, marginRight, _state.Attributes);
+        _state.WrapPending = false;
     }
 
     private void ScrollUp(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
+        GetMargins(buffer, out int marginLeft, out int marginRight);
         for (int i = 0; i < count; i++)
         {
-            buffer.ScrollUp(_state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+            buffer.ScrollUp(_state.ScrollTop, _state.ScrollBottom, marginLeft, marginRight, _state.Attributes);
         }
+
+        _state.WrapPending = false;
     }
 
     private void ScrollDown(int count)
     {
         TerminalBuffer buffer = ActiveBuffer;
+        GetMargins(buffer, out int marginLeft, out int marginRight);
         for (int i = 0; i < count; i++)
         {
-            buffer.ScrollDown(_state.ScrollTop, _state.ScrollBottom, _state.Attributes);
+            buffer.ScrollDown(_state.ScrollTop, _state.ScrollBottom, marginLeft, marginRight, _state.Attributes);
         }
+
+        _state.WrapPending = false;
     }
 
     private void HandleDeviceStatusReport(int parameter)
@@ -1275,7 +1558,38 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.ScrollTop = top;
         _state.ScrollBottom = bottom;
         _state.CursorRow = _state.OriginMode ? top : 0;
-        _state.CursorColumn = 0;
+        if (_state.OriginMode && _state.LeftRightMarginMode)
+        {
+            GetMargins(ActiveBuffer, out int marginLeft, out _);
+            _state.CursorColumn = marginLeft;
+        }
+        else
+        {
+            _state.CursorColumn = 0;
+        }
+        _state.WrapPending = false;
+    }
+
+    private void SetLeftRightMargins(IReadOnlyList<int> parameters)
+    {
+        if (!_state.LeftRightMarginMode)
+        {
+            return;
+        }
+
+        int left = parameters.Count > 0 ? Math.Max(1, parameters[0]) : 1;
+        int right = parameters.Count > 1 ? Math.Max(1, parameters[1]) : ActiveBuffer.Columns;
+        left = Math.Clamp(left, 1, ActiveBuffer.Columns) - 1;
+        right = Math.Clamp(right, 1, ActiveBuffer.Columns) - 1;
+        if (left >= right)
+        {
+            return;
+        }
+
+        _state.ScrollLeft = left;
+        _state.ScrollRight = right;
+        _state.CursorRow = _state.OriginMode ? _state.ScrollTop : 0;
+        _state.CursorColumn = _state.OriginMode && _state.LeftRightMarginMode ? _state.ScrollLeft : 0;
         _state.WrapPending = false;
     }
 
@@ -1286,14 +1600,55 @@ public sealed class TerminalEmulator : ITerminalEmulator
             switch (param)
             {
                 case 1049:
+                    if (enabled)
+                    {
+                        SaveCursorState();
+                        _state.AltBufferActive = true;
+                        _altBuffer.ClearScrollback();
+                        _altBuffer.Clear(TerminalAttributes.Default);
+                        _state.CursorRow = 0;
+                        _state.CursorColumn = 0;
+                    }
+                    else
+                    {
+                        _state.AltBufferActive = false;
+                        RestoreCursorState();
+                    }
+
+                    _state.ScrollTop = 0;
+                    _state.ScrollBottom = ActiveBuffer.Rows - 1;
+                    _state.ScrollLeft = 0;
+                    _state.ScrollRight = ActiveBuffer.Columns - 1;
+                    if (enabled)
+                    {
+                        _state.WrapPending = false;
+                    }
+                    break;
                 case 47:
                 case 1047:
                     _state.AltBufferActive = enabled;
                     if (enabled)
                     {
+                        _altBuffer.ClearScrollback();
                         _altBuffer.Clear(TerminalAttributes.Default);
                         _state.CursorRow = 0;
                         _state.CursorColumn = 0;
+                    }
+
+                    _state.ScrollTop = 0;
+                    _state.ScrollBottom = ActiveBuffer.Rows - 1;
+                    _state.ScrollLeft = 0;
+                    _state.ScrollRight = ActiveBuffer.Columns - 1;
+                    _state.WrapPending = false;
+                    break;
+                case 1048:
+                    if (enabled)
+                    {
+                        SaveCursorState();
+                    }
+                    else
+                    {
+                        RestoreCursorState();
                     }
                     break;
                 case 1000:
@@ -1323,11 +1678,35 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 case 6:
                     _state.OriginMode = enabled;
                     _state.CursorRow = enabled ? _state.ScrollTop : 0;
-                    _state.CursorColumn = 0;
+                    if (enabled && _state.LeftRightMarginMode)
+                    {
+                        GetMargins(ActiveBuffer, out int marginLeft, out _);
+                        _state.CursorColumn = marginLeft;
+                    }
+                    else
+                    {
+                        _state.CursorColumn = 0;
+                    }
+                    _state.WrapPending = false;
+                    break;
+                case 69:
+                    _state.LeftRightMarginMode = enabled;
+                    if (!enabled)
+                    {
+                        _state.ScrollLeft = 0;
+                        _state.ScrollRight = ActiveBuffer.Columns - 1;
+                    }
+                    CoerceHorizontalMargins(ActiveBuffer.Columns);
                     _state.WrapPending = false;
                     break;
                 case 7:
                     _state.AutoWrap = enabled;
+                    break;
+                case 12:
+                    _state.CursorBlink = enabled;
+                    break;
+                case 25:
+                    _state.CursorVisible = enabled;
                     break;
                 case 2004:
                     _state.BracketedPaste = enabled;
@@ -1352,50 +1731,266 @@ public sealed class TerminalEmulator : ITerminalEmulator
         }
     }
 
-    private void SavePrivateModes()
+    private void CoerceHorizontalMargins(int columns)
+    {
+        int maxCol = Math.Max(0, columns - 1);
+        if (!_state.LeftRightMarginMode)
+        {
+            _state.ScrollLeft = 0;
+            _state.ScrollRight = maxCol;
+            return;
+        }
+
+        int left = Math.Clamp(_state.ScrollLeft, 0, maxCol);
+        int right = Math.Clamp(_state.ScrollRight, 0, maxCol);
+        if (left >= right)
+        {
+            left = 0;
+            right = maxCol;
+        }
+
+        _state.ScrollLeft = left;
+        _state.ScrollRight = right;
+    }
+
+    private void GetMargins(TerminalBuffer buffer, out int left, out int right)
+    {
+        int maxCol = Math.Max(0, buffer.Columns - 1);
+        if (!_state.LeftRightMarginMode)
+        {
+            left = 0;
+            right = maxCol;
+            return;
+        }
+
+        left = Math.Clamp(_state.ScrollLeft, 0, maxCol);
+        right = Math.Clamp(_state.ScrollRight, 0, maxCol);
+        if (left >= right)
+        {
+            left = 0;
+            right = maxCol;
+        }
+    }
+
+    private void GetHorizontalBoundsForCursor(TerminalBuffer buffer, out int left, out int right)
+    {
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        if (!_state.LeftRightMarginMode)
+        {
+            left = marginLeft;
+            right = marginRight;
+            return;
+        }
+
+        if (_state.CursorColumn < marginLeft || _state.CursorColumn > marginRight)
+        {
+            left = 0;
+            right = Math.Max(0, buffer.Columns - 1);
+            return;
+        }
+
+        left = marginLeft;
+        right = marginRight;
+    }
+
+    private void SaveCursorState()
+    {
+        _state.SavedCursorRow = _state.CursorRow;
+        _state.SavedCursorColumn = _state.CursorColumn;
+        _savedCursor = new CursorSnapshot
+        {
+            Row = _state.CursorRow,
+            Column = _state.CursorColumn,
+            Attributes = _state.Attributes,
+            CharsetG0 = _state.CharsetG0,
+            CharsetG1 = _state.CharsetG1,
+            UseG1Charset = _state.UseG1Charset,
+            OriginMode = _state.OriginMode,
+            AutoWrap = _state.AutoWrap,
+            WrapPending = _state.WrapPending
+        };
+        _hasSavedCursor = true;
+    }
+
+    private void RestoreCursorState()
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        if (_hasSavedCursor)
+        {
+            _state.CursorRow = Math.Clamp(_savedCursor.Row, 0, buffer.Rows - 1);
+            _state.CursorColumn = Math.Clamp(_savedCursor.Column, 0, buffer.Columns - 1);
+            _state.Attributes = _savedCursor.Attributes;
+            _state.CharsetG0 = _savedCursor.CharsetG0;
+            _state.CharsetG1 = _savedCursor.CharsetG1;
+            _state.UseG1Charset = _savedCursor.UseG1Charset;
+            _state.OriginMode = _savedCursor.OriginMode;
+            _state.AutoWrap = _savedCursor.AutoWrap;
+            _state.WrapPending = _savedCursor.WrapPending;
+        }
+        else
+        {
+            _state.CursorRow = Math.Clamp(_state.SavedCursorRow, 0, buffer.Rows - 1);
+            _state.CursorColumn = Math.Clamp(_state.SavedCursorColumn, 0, buffer.Columns - 1);
+            _state.WrapPending = false;
+        }
+
+        if (_state.OriginMode)
+        {
+            _state.CursorRow = Math.Clamp(_state.CursorRow, _state.ScrollTop, _state.ScrollBottom);
+            if (_state.LeftRightMarginMode)
+            {
+                GetMargins(buffer, out int marginLeft, out int marginRight);
+                _state.CursorColumn = Math.Clamp(_state.CursorColumn, marginLeft, marginRight);
+            }
+        }
+    }
+
+    private void SavePrivateModes(IReadOnlyList<int> parameters)
     {
         _savedPrivateModes = new PrivateModeSnapshot
         {
-            AltBufferActive = _state.AltBufferActive,
             MouseMode = _state.MouseMode,
             MouseSgr = _state.MouseSgr,
             MouseProtocol = _state.MouseProtocol,
             MouseX10 = _state.MouseX10,
             OriginMode = _state.OriginMode,
             AutoWrap = _state.AutoWrap,
+            CursorBlink = _state.CursorBlink,
+            CursorVisible = _state.CursorVisible,
+            LeftRightMarginMode = _state.LeftRightMarginMode,
+            ScrollLeft = _state.ScrollLeft,
+            ScrollRight = _state.ScrollRight,
             ApplicationCursorKeys = _state.ApplicationCursorKeys,
             BracketedPaste = _state.BracketedPaste
         };
-        _hasSavedPrivateModes = true;
+
+        _savedPrivateModeParameters.Clear();
+        if (parameters.Count == 0)
+        {
+            foreach (int parameter in PrivateModeSaveRestoreSupportedParameters)
+            {
+                _savedPrivateModeParameters.Add(parameter);
+            }
+        }
+        else
+        {
+            foreach (int parameter in parameters)
+            {
+                if (Array.IndexOf(PrivateModeSaveRestoreSupportedParameters, parameter) >= 0)
+                {
+                    _savedPrivateModeParameters.Add(parameter);
+                }
+            }
+        }
+
+        _hasSavedPrivateModes = _savedPrivateModeParameters.Count > 0;
     }
 
-    private void RestorePrivateModes()
+    private void RestorePrivateModes(IReadOnlyList<int> parameters)
     {
         if (!_hasSavedPrivateModes)
         {
             return;
         }
 
-        _state.AltBufferActive = _savedPrivateModes.AltBufferActive;
-        _state.MouseMode = _savedPrivateModes.MouseMode;
-        _state.MouseSgr = _savedPrivateModes.MouseSgr;
-        _state.MouseProtocol = _savedPrivateModes.MouseProtocol;
-        _state.MouseX10 = _savedPrivateModes.MouseX10;
-        _state.OriginMode = _savedPrivateModes.OriginMode;
-        _state.AutoWrap = _savedPrivateModes.AutoWrap;
-        _state.ApplicationCursorKeys = _savedPrivateModes.ApplicationCursorKeys;
-        _state.BracketedPaste = _savedPrivateModes.BracketedPaste;
+        if (parameters.Count == 0)
+        {
+            foreach (int parameter in _savedPrivateModeParameters)
+            {
+                ApplySavedPrivateMode(parameter);
+            }
+        }
+        else
+        {
+            foreach (int parameter in parameters)
+            {
+                if (_savedPrivateModeParameters.Contains(parameter))
+                {
+                    ApplySavedPrivateMode(parameter);
+                }
+            }
+        }
+
+        CoerceHorizontalMargins(ActiveBuffer.Columns);
+        _state.CursorRow = Math.Clamp(_state.CursorRow, 0, ActiveBuffer.Rows - 1);
+        _state.CursorColumn = Math.Clamp(_state.CursorColumn, 0, ActiveBuffer.Columns - 1);
+        if (_state.OriginMode)
+        {
+            _state.CursorRow = Math.Clamp(_state.CursorRow, _state.ScrollTop, _state.ScrollBottom);
+            if (_state.LeftRightMarginMode)
+            {
+                GetMargins(ActiveBuffer, out int marginLeft, out int marginRight);
+                _state.CursorColumn = Math.Clamp(_state.CursorColumn, marginLeft, marginRight);
+            }
+        }
+    }
+
+    private void ApplySavedPrivateMode(int parameter)
+    {
+        switch (parameter)
+        {
+            case 1:
+                _state.ApplicationCursorKeys = _savedPrivateModes.ApplicationCursorKeys;
+                break;
+            case 6:
+                _state.OriginMode = _savedPrivateModes.OriginMode;
+                break;
+            case 7:
+                _state.AutoWrap = _savedPrivateModes.AutoWrap;
+                break;
+            case 9:
+            case 1000:
+            case 1002:
+            case 1003:
+            case 1006:
+                _state.MouseMode = _savedPrivateModes.MouseMode;
+                _state.MouseSgr = _savedPrivateModes.MouseSgr;
+                _state.MouseProtocol = _savedPrivateModes.MouseProtocol;
+                _state.MouseX10 = _savedPrivateModes.MouseX10;
+                break;
+            case 12:
+                _state.CursorBlink = _savedPrivateModes.CursorBlink;
+                break;
+            case 25:
+                _state.CursorVisible = _savedPrivateModes.CursorVisible;
+                break;
+            case 69:
+                _state.LeftRightMarginMode = _savedPrivateModes.LeftRightMarginMode;
+                _state.ScrollLeft = _savedPrivateModes.ScrollLeft;
+                _state.ScrollRight = _savedPrivateModes.ScrollRight;
+                break;
+            case 2004:
+                _state.BracketedPaste = _savedPrivateModes.BracketedPaste;
+                break;
+        }
+    }
+
+    private struct CursorSnapshot
+    {
+        public int Row { get; init; }
+        public int Column { get; init; }
+        public TerminalAttributes Attributes { get; init; }
+        public TerminalCharset CharsetG0 { get; init; }
+        public TerminalCharset CharsetG1 { get; init; }
+        public bool UseG1Charset { get; init; }
+        public bool OriginMode { get; init; }
+        public bool AutoWrap { get; init; }
+        public bool WrapPending { get; init; }
     }
 
     private struct PrivateModeSnapshot
     {
-        public bool AltBufferActive { get; init; }
         public TerminalMouseMode MouseMode { get; init; }
         public bool MouseSgr { get; init; }
         public TerminalMouseProtocol MouseProtocol { get; init; }
         public bool MouseX10 { get; init; }
         public bool OriginMode { get; init; }
         public bool AutoWrap { get; init; }
+        public bool CursorBlink { get; init; }
+        public bool CursorVisible { get; init; }
+        public bool LeftRightMarginMode { get; init; }
+        public int ScrollLeft { get; init; }
+        public int ScrollRight { get; init; }
         public bool ApplicationCursorKeys { get; init; }
         public bool BracketedPaste { get; init; }
     }

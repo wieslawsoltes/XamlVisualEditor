@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:XamlVisualEditor.Shell"
+             xmlns:controls="using:XamlVisualEditor.Terminal.Avalonia.Controls"
+             xmlns:v="using:XamlVisualEditor.Terminal.Avalonia.Views"
+             x:DataType="shell:TerminalTool"
+             x:Class="XamlVisualEditor.App.Views.TerminalToolView">
+  <Grid>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <controls:TerminalControl TerminalViewModel="{CompiledBinding TerminalViewModel}"
+                                v:TerminalInputBehavior.ViewModel="{CompiledBinding TerminalViewModel}"
+                                FontFamily="Cascadia Mono, Menlo, Consolas, monospace"
+                                FontSize="13"
+                                Focusable="True" />
+    </ScrollViewer>
+  </Grid>
+</UserControl>
