@@ -19,13 +19,17 @@ public sealed class TerminalEmulator : ITerminalEmulator
     private readonly HashSet<int> _savedPrivateModeParameters = new();
     private CursorSnapshot _savedCursor;
     private bool _hasSavedCursor;
+    private readonly Stack<string> _windowTitleStack = new();
     private int _cellWidthPx;
     private int _cellHeightPx;
     private int _pixelWidthPx;
     private int _pixelHeightPx;
+    private const int TitleStackLimit = 10;
+    private const int DefaultColumns = 80;
+    private const int WideColumns = 132;
     private static readonly int[] PrivateModeSaveRestoreSupportedParameters =
     {
-        1, 6, 7, 9, 12, 25, 69, 1000, 1002, 1003, 1006, 2004
+        1, 40, 3, 6, 7, 9, 12, 25, 69, 1000, 1002, 1003, 1006, 2004
     };
 
     public event Action? ScreenUpdated;
@@ -332,13 +336,13 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 HorizontalTab(1);
                 break;
             case 0x0A: // LF
-                LineFeed();
+                LineFeedWithMode();
                 break;
             case 0x0B: // VT
-                LineFeed();
+                LineFeedWithMode();
                 break;
             case 0x0C: // FF
-                LineFeed();
+                LineFeedWithMode();
                 break;
             case 0x0D: // CR
                 CarriageReturn();
@@ -478,9 +482,39 @@ public sealed class TerminalEmulator : ITerminalEmulator
         }
     }
 
-    public void HandleCsi(char code, IReadOnlyList<int> parameters, char privatePrefix)
+    public void HandleCsi(char code, IReadOnlyList<int> parameters, char privatePrefix, char intermediate = '\0')
     {
         int p1 = parameters.Count > 0 ? parameters[0] : 0;
+
+        if (privatePrefix == '\0' && intermediate == ' ')
+        {
+            switch (code)
+            {
+                case '@':
+                    ScrollLeft(Math.Max(1, p1));
+                    return;
+                case 'A':
+                    ScrollRight(Math.Max(1, p1));
+                    return;
+                case 'q':
+                    SetCursorStyle(parameters);
+                    return;
+            }
+        }
+
+        if (privatePrefix == '\0' && intermediate == '\'')
+        {
+            switch (code)
+            {
+                case '}':
+                    InsertColumns(Math.Max(1, p1));
+                    return;
+                case '~':
+                    DeleteColumns(Math.Max(1, p1));
+                    return;
+            }
+        }
+
         switch (code)
         {
             case 'c':
@@ -597,7 +631,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 }
                 break;
             case 'n':
-                HandleDeviceStatusReport(p1);
+                HandleDeviceStatusReport(p1, decPrivate: privatePrefix == '?');
                 break;
             case 'h':
                 if (privatePrefix == '?')
@@ -619,6 +653,14 @@ public sealed class TerminalEmulator : ITerminalEmulator
                     SetModes(parameters, enabled: false);
                 }
                 break;
+            case 'p':
+                if (privatePrefix == '!')
+                {
+                    SoftReset();
+                    break;
+                }
+
+                goto default;
             case 't':
                 HandleWindowOps(parameters);
                 break;
@@ -629,7 +671,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 }
                 goto default;
             default:
-                UnhandledSequence?.Invoke(BuildCsiSequence(code, parameters, privatePrefix));
+                UnhandledSequence?.Invoke(BuildCsiSequence(code, parameters, privatePrefix, intermediate));
                 break;
         }
     }
@@ -695,13 +737,6 @@ public sealed class TerminalEmulator : ITerminalEmulator
             return;
         }
 
-        if (command == "10" && data == "?")
-        {
-            TerminalRgb fg = TerminalTheme.DefaultDark.Foreground;
-            ResponseRequested?.Invoke($"\x1B]10;rgb:{fg.R:X2}{fg.R:X2}/{fg.G:X2}{fg.G:X2}/{fg.B:X2}{fg.B:X2}\x1B\\");
-            return;
-        }
-
         if (command == "52")
         {
             HandleOsc52(data);
@@ -739,7 +774,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         }
     }
 
-    private static string BuildCsiSequence(char code, IReadOnlyList<int> parameters, char privatePrefix)
+    private static string BuildCsiSequence(char code, IReadOnlyList<int> parameters, char privatePrefix, char intermediate = '\0')
     {
         StringBuilder builder = new();
         builder.Append("CSI ");
@@ -761,6 +796,11 @@ public sealed class TerminalEmulator : ITerminalEmulator
             }
         }
 
+        if (intermediate != '\0')
+        {
+            builder.Append(intermediate);
+        }
+
         builder.Append(' ');
         builder.Append(code);
         return builder.ToString();
@@ -769,6 +809,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
     private void HandleWindowOps(IReadOnlyList<int> parameters)
     {
         int op = parameters.Count > 0 ? parameters[0] : 0;
+        int second = parameters.Count > 1 ? parameters[1] : 0;
         switch (op)
         {
             case 14:
@@ -780,7 +821,50 @@ public sealed class TerminalEmulator : ITerminalEmulator
             case 18:
                 ResponseRequested?.Invoke($"\x1B[8;{ActiveBuffer.Rows};{ActiveBuffer.Columns}t");
                 break;
+            case 21:
+                string title = _state.WindowTitle ?? string.Empty;
+                ResponseRequested?.Invoke($"\x1B]l{title}\x1B\\");
+                break;
+            case 22:
+                if (second == 0 || second == 2)
+                {
+                    PushWindowTitle();
+                }
+                break;
+            case 23:
+                if (second == 0 || second == 2)
+                {
+                    PopWindowTitle();
+                }
+                break;
         }
+    }
+
+    private void PushWindowTitle()
+    {
+        _windowTitleStack.Push(_state.WindowTitle ?? string.Empty);
+        while (_windowTitleStack.Count > TitleStackLimit)
+        {
+            // Stack<T> has no trim-from-bottom operation; rebuild bounded copy.
+            string[] entries = _windowTitleStack.ToArray();
+            _windowTitleStack.Clear();
+            for (int i = TitleStackLimit - 1; i >= 0; i--)
+            {
+                _windowTitleStack.Push(entries[i]);
+            }
+        }
+    }
+
+    private void PopWindowTitle()
+    {
+        if (_windowTitleStack.Count == 0)
+        {
+            return;
+        }
+
+        string title = _windowTitleStack.Pop();
+        _state.WindowTitle = title;
+        TitleChanged?.Invoke(title);
     }
 
     private void InitializeTabStops(int columns)
@@ -938,6 +1022,37 @@ public sealed class TerminalEmulator : ITerminalEmulator
         return _hyperlinks.TryGet(id.Value);
     }
 
+    private void SoftReset()
+    {
+        _state.Attributes = TerminalAttributes.Default;
+        _state.InsertMode = false;
+        _state.OriginMode = false;
+        _state.AutoWrap = true;
+        _state.ApplicationKeypad = false;
+        _state.ApplicationCursorKeys = false;
+        _state.MouseMode = TerminalMouseMode.None;
+        _state.MouseSgr = false;
+        _state.MouseProtocol = TerminalMouseProtocol.Vt200;
+        _state.MouseX10 = false;
+        _state.BracketedPaste = false;
+        _state.LineFeedNewLineMode = false;
+        _state.LeftRightMarginMode = false;
+        _state.ScrollTop = 0;
+        _state.ScrollBottom = ActiveBuffer.Rows - 1;
+        _state.ScrollLeft = 0;
+        _state.ScrollRight = ActiveBuffer.Columns - 1;
+        _state.CursorVisible = true;
+        _state.CursorBlink = true;
+        _state.CursorShape = TerminalCursorShape.Block;
+        _state.CharsetG0 = TerminalCharset.Ascii;
+        _state.CharsetG1 = TerminalCharset.Ascii;
+        _state.UseG1Charset = false;
+        _state.ActiveHyperlinkId = null;
+        _state.CursorRow = 0;
+        _state.CursorColumn = 0;
+        _state.WrapPending = false;
+    }
+
     public void Reset()
     {
         _state.Attributes = TerminalAttributes.Default;
@@ -956,6 +1071,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.BracketedPaste = false;
         _state.ApplicationKeypad = false;
         _state.ApplicationCursorKeys = false;
+        _state.LineFeedNewLineMode = false;
+        _state.Allow80To132Mode = false;
+        _state.Column132Mode = false;
         _state.Utf8Mode = true;
         _state.CursorVisible = true;
         _state.CursorBlink = true;
@@ -965,6 +1083,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.UseG1Charset = false;
         _state.InsertMode = false;
         _state.OriginMode = false;
+        _state.WindowTitle = null;
         _state.ActiveHyperlinkId = null;
         _state.WrapPending = false;
         _hasSavedCursor = false;
@@ -972,6 +1091,7 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _hasSavedPrivateModes = false;
         _savedPrivateModes = default;
         _savedPrivateModeParameters.Clear();
+        _windowTitleStack.Clear();
         InitializeTabStops(ActiveBuffer.Columns);
         _mainBuffer.Clear(TerminalAttributes.Default);
         _altBuffer.Clear(TerminalAttributes.Default);
@@ -1262,6 +1382,15 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.WrapPending = false;
     }
 
+    private void LineFeedWithMode()
+    {
+        LineFeed();
+        if (_state.LineFeedNewLineMode)
+        {
+            CarriageReturn();
+        }
+    }
+
     private void CarriageReturn()
     {
         if (_state.LeftRightMarginMode)
@@ -1359,17 +1488,122 @@ public sealed class TerminalEmulator : ITerminalEmulator
         _state.WrapPending = false;
     }
 
-    private void HandleDeviceStatusReport(int parameter)
+    private void ScrollLeft(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        if (_state.CursorRow < _state.ScrollTop || _state.CursorRow > _state.ScrollBottom)
+        {
+            _state.WrapPending = false;
+            return;
+        }
+
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        int effective = Math.Max(1, count);
+        for (int row = _state.ScrollTop; row <= _state.ScrollBottom; row++)
+        {
+            buffer.DeleteChars(row, marginLeft, effective, marginLeft, marginRight, _state.Attributes);
+        }
+
+        _state.WrapPending = false;
+    }
+
+    private void ScrollRight(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        if (_state.CursorRow < _state.ScrollTop || _state.CursorRow > _state.ScrollBottom)
+        {
+            _state.WrapPending = false;
+            return;
+        }
+
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        int effective = Math.Max(1, count);
+        for (int row = _state.ScrollTop; row <= _state.ScrollBottom; row++)
+        {
+            buffer.InsertChars(row, marginLeft, effective, marginLeft, marginRight, _state.Attributes);
+        }
+
+        _state.WrapPending = false;
+    }
+
+    private void InsertColumns(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        if (_state.CursorRow < _state.ScrollTop || _state.CursorRow > _state.ScrollBottom)
+        {
+            _state.WrapPending = false;
+            return;
+        }
+
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        int effective = Math.Max(1, count);
+        for (int row = _state.ScrollTop; row <= _state.ScrollBottom; row++)
+        {
+            buffer.InsertChars(row, _state.CursorColumn, effective, marginLeft, marginRight, _state.Attributes);
+        }
+
+        _state.WrapPending = false;
+    }
+
+    private void DeleteColumns(int count)
+    {
+        TerminalBuffer buffer = ActiveBuffer;
+        if (_state.CursorRow < _state.ScrollTop || _state.CursorRow > _state.ScrollBottom)
+        {
+            _state.WrapPending = false;
+            return;
+        }
+
+        GetMargins(buffer, out int marginLeft, out int marginRight);
+        int effective = Math.Max(1, count);
+        for (int row = _state.ScrollTop; row <= _state.ScrollBottom; row++)
+        {
+            buffer.DeleteChars(row, _state.CursorColumn, effective, marginLeft, marginRight, _state.Attributes);
+        }
+
+        _state.WrapPending = false;
+    }
+
+    private void SetCursorStyle(IReadOnlyList<int> parameters)
+    {
+        int style = parameters.Count == 0 || parameters[0] == 0 ? 1 : parameters[0];
+        _state.CursorShape = style switch
+        {
+            3 or 4 => TerminalCursorShape.Underline,
+            5 or 6 => TerminalCursorShape.Bar,
+            _ => TerminalCursorShape.Block
+        };
+        _state.CursorBlink = (style & 1) == 1;
+    }
+
+    private void HandleDeviceStatusReport(int parameter, bool decPrivate)
     {
         switch (parameter)
         {
             case 5:
-                ResponseRequested?.Invoke("\x1B[0n");
+                if (!decPrivate)
+                {
+                    ResponseRequested?.Invoke("\x1B[0n");
+                }
                 break;
             case 6:
-                int row = _state.CursorRow + 1;
-                int col = _state.CursorColumn + 1;
-                ResponseRequested?.Invoke($"\x1B[{row};{col}R");
+                int row = _state.CursorRow;
+                int col = _state.CursorColumn;
+                if (_state.OriginMode)
+                {
+                    row -= _state.ScrollTop;
+                    if (_state.LeftRightMarginMode)
+                    {
+                        GetMargins(ActiveBuffer, out int marginLeft, out _);
+                        col -= marginLeft;
+                    }
+                }
+
+                row = Math.Max(0, row) + 1;
+                col = Math.Max(0, col) + 1;
+                ResponseRequested?.Invoke(decPrivate
+                    ? $"\x1B[?{row};{col}R"
+                    : $"\x1B[{row};{col}R");
                 break;
         }
     }
@@ -1534,6 +1768,18 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
         if (mode == 2 && index + 2 < parameters.Count)
         {
+            // Accept colon-form variants such as 38:2::R:G:B where the
+            // parser normalizes ':' to ';' and yields an extra 0 slot.
+            if (index + 3 < parameters.Count && parameters[index] == 0)
+            {
+                index++;
+            }
+
+            if (index + 2 >= parameters.Count)
+            {
+                return false;
+            }
+
             byte r = (byte)Math.Clamp(parameters[index++], 0, 255);
             byte g = (byte)Math.Clamp(parameters[index++], 0, 255);
             byte b = (byte)Math.Clamp(parameters[index++], 0, 255);
@@ -1617,6 +1863,23 @@ public sealed class TerminalEmulator : ITerminalEmulator
         {
             switch (param)
             {
+                case 40:
+                    _state.Allow80To132Mode = enabled;
+                    if (!enabled)
+                    {
+                        _state.Column132Mode = false;
+                    }
+                    break;
+                case 3:
+                    if (!_state.Allow80To132Mode)
+                    {
+                        _state.Column132Mode = false;
+                        break;
+                    }
+
+                    _state.Column132Mode = enabled;
+                    ApplyDecColumnMode(enabled ? WideColumns : DefaultColumns);
+                    break;
                 case 1049:
                     if (enabled)
                     {
@@ -1736,6 +1999,26 @@ public sealed class TerminalEmulator : ITerminalEmulator
         }
     }
 
+    private void ApplyDecColumnMode(int targetColumns)
+    {
+        targetColumns = Math.Max(1, targetColumns);
+        int rows = ActiveBuffer.Rows;
+        if (rows <= 0)
+        {
+            return;
+        }
+
+        Resize(targetColumns, rows);
+        ActiveBuffer.Clear(_state.Attributes);
+        _state.CursorRow = 0;
+        _state.CursorColumn = 0;
+        _state.ScrollTop = 0;
+        _state.ScrollBottom = ActiveBuffer.Rows - 1;
+        _state.ScrollLeft = 0;
+        _state.ScrollRight = ActiveBuffer.Columns - 1;
+        _state.WrapPending = false;
+    }
+
     private void SetModes(IReadOnlyList<int> parameters, bool enabled)
     {
         foreach (int param in parameters)
@@ -1744,6 +2027,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
             {
                 case 4:
                     _state.InsertMode = enabled;
+                    break;
+                case 20:
+                    _state.LineFeedNewLineMode = enabled;
                     break;
             }
         }
@@ -1875,6 +2161,8 @@ public sealed class TerminalEmulator : ITerminalEmulator
             AutoWrap = _state.AutoWrap,
             CursorBlink = _state.CursorBlink,
             CursorVisible = _state.CursorVisible,
+            Allow80To132Mode = _state.Allow80To132Mode,
+            Column132Mode = _state.Column132Mode,
             LeftRightMarginMode = _state.LeftRightMarginMode,
             ScrollLeft = _state.ScrollLeft,
             ScrollRight = _state.ScrollRight,
@@ -1913,9 +2201,12 @@ public sealed class TerminalEmulator : ITerminalEmulator
 
         if (parameters.Count == 0)
         {
-            foreach (int parameter in _savedPrivateModeParameters)
+            foreach (int parameter in PrivateModeSaveRestoreSupportedParameters)
             {
-                ApplySavedPrivateMode(parameter);
+                if (_savedPrivateModeParameters.Contains(parameter))
+                {
+                    ApplySavedPrivateMode(parameter);
+                }
             }
         }
         else
@@ -1950,6 +2241,13 @@ public sealed class TerminalEmulator : ITerminalEmulator
             case 1:
                 _state.ApplicationCursorKeys = _savedPrivateModes.ApplicationCursorKeys;
                 break;
+            case 3:
+                _state.Column132Mode = _savedPrivateModes.Column132Mode;
+                if (_state.Allow80To132Mode)
+                {
+                    ApplyDecColumnMode(_state.Column132Mode ? WideColumns : DefaultColumns);
+                }
+                break;
             case 6:
                 _state.OriginMode = _savedPrivateModes.OriginMode;
                 break;
@@ -1971,6 +2269,9 @@ public sealed class TerminalEmulator : ITerminalEmulator
                 break;
             case 25:
                 _state.CursorVisible = _savedPrivateModes.CursorVisible;
+                break;
+            case 40:
+                _state.Allow80To132Mode = _savedPrivateModes.Allow80To132Mode;
                 break;
             case 69:
                 _state.LeftRightMarginMode = _savedPrivateModes.LeftRightMarginMode;
@@ -2006,6 +2307,8 @@ public sealed class TerminalEmulator : ITerminalEmulator
         public bool AutoWrap { get; init; }
         public bool CursorBlink { get; init; }
         public bool CursorVisible { get; init; }
+        public bool Allow80To132Mode { get; init; }
+        public bool Column132Mode { get; init; }
         public bool LeftRightMarginMode { get; init; }
         public int ScrollLeft { get; init; }
         public int ScrollRight { get; init; }

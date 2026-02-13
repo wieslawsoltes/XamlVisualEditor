@@ -502,6 +502,217 @@ public sealed class TerminalEmulatorTests
         Assert.Contains("\u001b[6;18;9t", responses);
     }
 
+    [Fact]
+    public void WindowOp21ReportsWindowTitle()
+    {
+        TerminalEmulator emulator = new(80, 24);
+        string? response = null;
+        emulator.ResponseRequested += data => response = data;
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b]2;demo-title\u0007"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[21t"));
+
+        Assert.Equal("\u001b]ldemo-title\u001b\\", response);
+    }
+
+    [Fact]
+    public void WindowOps22And23PushAndPopWindowTitle()
+    {
+        TerminalEmulator emulator = new(80, 24);
+        List<string> titles = new();
+        emulator.TitleChanged += title => titles.Add(title);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b]2;old\u0007"));
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[22;2t"));
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b]2;new\u0007"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[23;2t"));
+
+        Assert.Equal("old", emulator.State.WindowTitle);
+        Assert.NotEmpty(titles);
+        Assert.Equal("old", titles[^1]);
+    }
+
+    [Fact]
+    public void CsiSpaceQSetsCursorShapeAndBlink()
+    {
+        TerminalEmulator emulator = new(10, 3);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[6 q"));
+
+        Assert.Equal(TerminalCursorShape.Bar, emulator.State.CursorShape);
+        Assert.False(emulator.State.CursorBlink);
+    }
+
+    [Fact]
+    public void CsiPrivatePrefixSpaceQIsIgnored()
+    {
+        TerminalEmulator emulator = new(10, 3);
+        List<string> unhandled = new();
+        emulator.UnhandledSequence += data => unhandled.Add(data);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?0 q"));
+
+        Assert.Equal(TerminalCursorShape.Block, emulator.State.CursorShape);
+        Assert.True(emulator.State.CursorBlink);
+        Assert.Contains("CSI ?0  q", unhandled);
+    }
+
+    [Fact]
+    public void CsiSpaceAtScrollLeftShiftsWithinScrollRegion()
+    {
+        TerminalEmulator emulator = new(6, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("ABCDEF\r\n123456\u001b[1;1H"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2 @"));
+
+        TerminalLine row0 = emulator.ActiveBuffer.GetLine(0);
+        TerminalLine row1 = emulator.ActiveBuffer.GetLine(1);
+        Assert.Equal('C', (char)row0.Cells[0].Rune.Value);
+        Assert.Equal('D', (char)row0.Cells[1].Rune.Value);
+        Assert.Equal(' ', (char)row0.Cells[4].Rune.Value);
+        Assert.Equal('3', (char)row1.Cells[0].Rune.Value);
+        Assert.Equal('4', (char)row1.Cells[1].Rune.Value);
+        Assert.Equal(' ', (char)row1.Cells[4].Rune.Value);
+    }
+
+    [Fact]
+    public void CsiSpaceAScrollRightShiftsWithinScrollRegion()
+    {
+        TerminalEmulator emulator = new(6, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("ABCDEF\r\n123456\u001b[1;1H"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2 A"));
+
+        TerminalLine row0 = emulator.ActiveBuffer.GetLine(0);
+        TerminalLine row1 = emulator.ActiveBuffer.GetLine(1);
+        Assert.Equal(' ', (char)row0.Cells[0].Rune.Value);
+        Assert.Equal(' ', (char)row0.Cells[1].Rune.Value);
+        Assert.Equal('A', (char)row0.Cells[2].Rune.Value);
+        Assert.Equal(' ', (char)row1.Cells[0].Rune.Value);
+        Assert.Equal(' ', (char)row1.Cells[1].Rune.Value);
+        Assert.Equal('1', (char)row1.Cells[2].Rune.Value);
+    }
+
+    [Fact]
+    public void DecicInsertsColumnsAcrossScrollRegion()
+    {
+        TerminalEmulator emulator = new(6, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("ABCDEF\r\n123456\u001b[1;3H"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2'}"));
+
+        TerminalLine row0 = emulator.ActiveBuffer.GetLine(0);
+        TerminalLine row1 = emulator.ActiveBuffer.GetLine(1);
+        Assert.Equal('A', (char)row0.Cells[0].Rune.Value);
+        Assert.Equal('B', (char)row0.Cells[1].Rune.Value);
+        Assert.Equal(' ', (char)row0.Cells[2].Rune.Value);
+        Assert.Equal(' ', (char)row0.Cells[3].Rune.Value);
+        Assert.Equal('C', (char)row0.Cells[4].Rune.Value);
+        Assert.Equal('1', (char)row1.Cells[0].Rune.Value);
+        Assert.Equal('2', (char)row1.Cells[1].Rune.Value);
+        Assert.Equal(' ', (char)row1.Cells[2].Rune.Value);
+        Assert.Equal(' ', (char)row1.Cells[3].Rune.Value);
+        Assert.Equal('3', (char)row1.Cells[4].Rune.Value);
+    }
+
+    [Fact]
+    public void DecdcDeletesColumnsAcrossScrollRegion()
+    {
+        TerminalEmulator emulator = new(6, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("ABCDEF\r\n123456\u001b[1;3H"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2'~"));
+
+        TerminalLine row0 = emulator.ActiveBuffer.GetLine(0);
+        TerminalLine row1 = emulator.ActiveBuffer.GetLine(1);
+        Assert.Equal('A', (char)row0.Cells[0].Rune.Value);
+        Assert.Equal('B', (char)row0.Cells[1].Rune.Value);
+        Assert.Equal('E', (char)row0.Cells[2].Rune.Value);
+        Assert.Equal('F', (char)row0.Cells[3].Rune.Value);
+        Assert.Equal(' ', (char)row0.Cells[4].Rune.Value);
+        Assert.Equal('1', (char)row1.Cells[0].Rune.Value);
+        Assert.Equal('2', (char)row1.Cells[1].Rune.Value);
+        Assert.Equal('5', (char)row1.Cells[2].Rune.Value);
+        Assert.Equal('6', (char)row1.Cells[3].Rune.Value);
+        Assert.Equal(' ', (char)row1.Cells[4].Rune.Value);
+    }
+
+    [Fact]
+    public void Dsr6InOriginModeReportsRelativePosition()
+    {
+        TerminalEmulator emulator = new(10, 6);
+        string? response = null;
+        emulator.ResponseRequested += data => response = data;
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2;5r\u001b[?6h\u001b[1;1H"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[6n"));
+
+        Assert.Equal("\u001b[1;1R", response);
+    }
+
+    [Fact]
+    public void DecDsr6UsesQuestionMarkPrefixAndOriginRelativeMargins()
+    {
+        TerminalEmulator emulator = new(12, 6);
+        string? response = null;
+        emulator.ResponseRequested += data => response = data;
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[2;5r\u001b[?69h\u001b[3;8s\u001b[?6h\u001b[1;1H"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?6n"));
+
+        Assert.Equal("\u001b[?1;1R", response);
+    }
+
+    [Fact]
+    public void SgrColonFormRgbColorIsParsed()
+    {
+        TerminalEmulator emulator = new(4, 1);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[38:2::1:2:3mA"));
+
+        TerminalCell cell = emulator.ActiveBuffer.GetLine(0).Cells[0];
+        Assert.Equal(TerminalColor.FromRgb(1, 2, 3), cell.Attributes.Foreground);
+    }
+
+    [Fact]
+    public void DecMode3ResizesOnlyWhenMode40IsEnabled()
+    {
+        TerminalEmulator emulator = new(80, 4);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("ABCD"));
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?3h"));
+
+        Assert.Equal(80, emulator.ActiveBuffer.Columns);
+        Assert.False(emulator.State.Column132Mode);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?40h\u001b[?3h"));
+
+        Assert.Equal(132, emulator.ActiveBuffer.Columns);
+        Assert.True(emulator.State.Column132Mode);
+        Assert.Equal(0, emulator.State.CursorRow);
+        Assert.Equal(0, emulator.State.CursorColumn);
+        Assert.Equal(' ', (char)emulator.ActiveBuffer.GetLine(0).Cells[0].Rune.Value);
+
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[?3l"));
+
+        Assert.Equal(80, emulator.ActiveBuffer.Columns);
+        Assert.False(emulator.State.Column132Mode);
+    }
+
+    [Fact]
+    public void DecstrSoftResetRestoresCoreModesWithoutClearingBuffer()
+    {
+        TerminalEmulator emulator = new(8, 2);
+        emulator.ProcessInput(Encoding.UTF8.GetBytes("\u001b[31mX\u001b[4h\u001b[?6h\u001b[!p"));
+
+        TerminalCell cell = emulator.ActiveBuffer.GetLine(0).Cells[0];
+        Assert.Equal('X', (char)cell.Rune.Value);
+        Assert.False(emulator.State.InsertMode);
+        Assert.False(emulator.State.OriginMode);
+        Assert.True(emulator.State.AutoWrap);
+        Assert.Equal(TerminalAttributes.Default, emulator.State.Attributes);
+    }
+
     public static IEnumerable<object[]> NrcCharsetCases => new[]
     {
         new object[] { 'A', "£@[\\]^_`{|}~" },

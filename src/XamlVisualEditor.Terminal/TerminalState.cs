@@ -27,6 +27,9 @@ public sealed class TerminalState
     public bool BracketedPaste { get; set; }
     public bool ApplicationKeypad { get; set; }
     public bool ApplicationCursorKeys { get; set; }
+    public bool LineFeedNewLineMode { get; set; }
+    public bool Allow80To132Mode { get; set; }
+    public bool Column132Mode { get; set; }
     public bool Utf8Mode { get; set; } = true;
     public TerminalCharset CharsetG0 { get; set; } = TerminalCharset.Ascii;
     public TerminalCharset CharsetG1 { get; set; } = TerminalCharset.Ascii;

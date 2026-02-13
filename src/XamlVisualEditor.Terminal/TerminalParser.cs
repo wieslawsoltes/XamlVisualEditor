@@ -9,6 +9,7 @@ internal sealed class TerminalParser
     private ParserMode _mode = ParserMode.Ground;
     private readonly List<int> _params = new();
     private char _privatePrefix;
+    private char _intermediate;
     private readonly List<byte> _oscBytes = new();
     private bool _oscEscaped;
     private readonly Utf8Decoder _utf8 = new();
@@ -81,6 +82,7 @@ internal sealed class TerminalParser
                         _mode = ParserMode.Csi;
                         _params.Clear();
                         _privatePrefix = '\0';
+                        _intermediate = '\0';
                         continue;
                     }
 
@@ -142,7 +144,7 @@ internal sealed class TerminalParser
                     break;
 
                 case ParserMode.Csi:
-                    if (b == (byte)'?' || b == (byte)'>' || b == (byte)'!')
+                    if (b is (byte)'?' or (byte)'>' or (byte)'<' or (byte)'=' or (byte)'!')
                     {
                         _privatePrefix = (char)b;
                         continue;
@@ -163,7 +165,7 @@ internal sealed class TerminalParser
                         continue;
                     }
 
-                    if (b == (byte)';')
+                    if (b == (byte)';' || b == (byte)':')
                     {
                         if (_params.Count == 0)
                         {
@@ -173,11 +175,21 @@ internal sealed class TerminalParser
                         continue;
                     }
 
+                    if (b >= 0x20 && b <= 0x2F)
+                    {
+                        if (_intermediate == '\0')
+                        {
+                            _intermediate = (char)b;
+                        }
+                        continue;
+                    }
+
                     if (b >= 0x40 && b <= 0x7E)
                     {
-                        emulator.HandleCsi((char)b, _params, _privatePrefix);
+                        emulator.HandleCsi((char)b, _params, _privatePrefix, _intermediate);
                         _params.Clear();
                         _privatePrefix = '\0';
+                        _intermediate = '\0';
                         _mode = ParserMode.Ground;
                     }
                     break;
@@ -276,6 +288,7 @@ internal sealed class TerminalParser
                 _mode = ParserMode.Csi;
                 _params.Clear();
                 _privatePrefix = '\0';
+                _intermediate = '\0';
                 return true;
             case 0x9C:
                 return true;
