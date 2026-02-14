@@ -15,18 +15,29 @@ public sealed class ExtensionContext
         string extensionId,
         string extensionPath,
         ICommands commands,
+        ICommandMetadataRegistry commandMetadata,
         IExtensionContributionRegistry contributions,
         Debugging.IDebuggerServiceRegistry debuggerRegistry,
+        IDesignerHost designer,
         IWorkspace workspace,
+        IWorkspaceModel workspaceModel,
         IWorkspaceInfo workspaceInfo,
         IWindow window,
         IDialogHost dialogHost,
         IWorkspaceHost workspaceHost,
         IViews views,
         IExtensionLanguageServices languageServices,
+        ILanguageNavigationService navigation,
+        INavigationHistoryService navigationHistory,
+        IAnimationEditorHost animationEditor,
+        ICollaborationPanelHost collaborationPanel,
+        IDebugSettingsHost debugSettings,
+        ILspSettingsHost lspSettings,
         IEditorServices editor,
         IDiagnosticsService diagnostics,
+        IPropertyEditorRegistry propertyEditors,
         ITerminalBridge terminal,
+        IExtensionViewHost viewHost,
         ISettings settings,
         IExtensionStorage storage,
         IExtensionLogger logger,
@@ -35,18 +46,29 @@ public sealed class ExtensionContext
         ExtensionId = extensionId;
         ExtensionPath = extensionPath;
         Commands = commands;
+        CommandMetadata = commandMetadata;
         Contributions = contributions;
         DebuggerRegistry = debuggerRegistry;
+        Designer = designer;
         Workspace = workspace;
+        WorkspaceModel = workspaceModel;
         WorkspaceInfo = workspaceInfo;
         Window = window;
         DialogHost = dialogHost;
         WorkspaceHost = workspaceHost;
         Views = views;
         LanguageServices = languageServices;
+        Navigation = navigation;
+        NavigationHistory = navigationHistory;
+        AnimationEditor = animationEditor;
+        CollaborationPanel = collaborationPanel;
+        DebugSettings = debugSettings;
+        LspSettings = lspSettings;
         Editor = editor;
         Diagnostics = diagnostics;
+        PropertyEditors = propertyEditors;
         Terminal = terminal;
+        ViewHost = viewHost;
         Settings = settings;
         Storage = storage;
         Logger = logger;
@@ -62,14 +84,23 @@ public sealed class ExtensionContext
     /// <summary>Gets the command service.</summary>
     public ICommands Commands { get; }
 
+    /// <summary>Gets command metadata registration service.</summary>
+    public ICommandMetadataRegistry CommandMetadata { get; }
+
     /// <summary>Gets the contribution registry.</summary>
     public IExtensionContributionRegistry Contributions { get; }
 
     /// <summary>Gets the debugger registry.</summary>
     public Debugging.IDebuggerServiceRegistry DebuggerRegistry { get; }
 
+    /// <summary>Gets the designer host service.</summary>
+    public IDesignerHost Designer { get; }
+
     /// <summary>Gets the workspace service.</summary>
     public IWorkspace Workspace { get; }
+
+    /// <summary>Gets the workspace model service.</summary>
+    public IWorkspaceModel WorkspaceModel { get; }
 
     /// <summary>Gets the workspace info.</summary>
     public IWorkspaceInfo WorkspaceInfo { get; }
@@ -89,14 +120,38 @@ public sealed class ExtensionContext
     /// <summary>Gets the language services.</summary>
     public IExtensionLanguageServices LanguageServices { get; }
 
+    /// <summary>Gets the language navigation services.</summary>
+    public ILanguageNavigationService Navigation { get; }
+
+    /// <summary>Gets the navigation history services.</summary>
+    public INavigationHistoryService NavigationHistory { get; }
+
+    /// <summary>Gets the animation editor host services.</summary>
+    public IAnimationEditorHost AnimationEditor { get; }
+
+    /// <summary>Gets the collaboration panel host services.</summary>
+    public ICollaborationPanelHost CollaborationPanel { get; }
+
+    /// <summary>Gets the debug settings host services.</summary>
+    public IDebugSettingsHost DebugSettings { get; }
+
+    /// <summary>Gets the LSP settings host services.</summary>
+    public ILspSettingsHost LspSettings { get; }
+
     /// <summary>Gets the editor services.</summary>
     public IEditorServices Editor { get; }
 
     /// <summary>Gets the diagnostics service.</summary>
     public IDiagnosticsService Diagnostics { get; }
 
+    /// <summary>Gets the property editor registry.</summary>
+    public IPropertyEditorRegistry PropertyEditors { get; }
+
     /// <summary>Gets the terminal bridge service.</summary>
     public ITerminalBridge Terminal { get; }
+
+    /// <summary>Gets the extension view host service.</summary>
+    public IExtensionViewHost ViewHost { get; }
 
     /// <summary>Gets the settings service.</summary>
     public ISettings Settings { get; }

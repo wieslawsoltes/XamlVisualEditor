@@ -9,18 +9,29 @@ public sealed class BuiltInExtensionHost : IDisposable
 {
     private readonly IEnumerable<IXveExtension> _extensions;
     private readonly ICommands _commands;
+    private readonly ICommandMetadataRegistry _commandMetadata;
     private readonly IExtensionContributionRegistry _contributions;
     private readonly Debugging.IDebuggerServiceRegistry _debuggerRegistry;
+    private readonly IDesignerHost _designer;
     private readonly IWorkspace _workspace;
+    private readonly IWorkspaceModel _workspaceModel;
     private readonly IWorkspaceInfo _workspaceInfo;
     private readonly IWindow _window;
     private readonly IDialogHost _dialogHost;
     private readonly IWorkspaceHost _workspaceHost;
     private readonly IViews _views;
     private readonly IExtensionLanguageServices _languageServices;
+    private readonly ILanguageNavigationService _navigation;
+    private readonly INavigationHistoryService _navigationHistory;
+    private readonly IAnimationEditorHost _animationEditor;
+    private readonly ICollaborationPanelHost _collaborationPanel;
+    private readonly IDebugSettingsHost _debugSettings;
+    private readonly ILspSettingsHost _lspSettings;
     private readonly IEditorServices _editor;
     private readonly IDiagnosticsService _diagnostics;
+    private readonly IPropertyEditorRegistry _propertyEditors;
     private readonly ITerminalBridge _terminal;
+    private readonly IExtensionViewHost _viewHost;
     private readonly ISettings _settings;
     private readonly List<IList<IDisposable>> _extensionSubscriptions = new();
     private bool _activated;
@@ -28,34 +39,56 @@ public sealed class BuiltInExtensionHost : IDisposable
     public BuiltInExtensionHost(
         IEnumerable<IXveExtension> extensions,
         ICommands commands,
+        ICommandMetadataRegistry commandMetadata,
         IExtensionContributionRegistry contributions,
         Debugging.IDebuggerServiceRegistry debuggerRegistry,
+        IDesignerHost designer,
         IWorkspace workspace,
+        IWorkspaceModel workspaceModel,
         IWorkspaceInfo workspaceInfo,
         IWindow window,
         IDialogHost dialogHost,
         IWorkspaceHost workspaceHost,
         IViews views,
         IExtensionLanguageServices languageServices,
+        ILanguageNavigationService navigation,
+        INavigationHistoryService navigationHistory,
+        IAnimationEditorHost animationEditor,
+        ICollaborationPanelHost collaborationPanel,
+        IDebugSettingsHost debugSettings,
+        ILspSettingsHost lspSettings,
         IEditorServices editor,
         IDiagnosticsService diagnostics,
+        IPropertyEditorRegistry propertyEditors,
         ITerminalBridge terminal,
+        IExtensionViewHost viewHost,
         ISettings settings)
     {
         _extensions = extensions;
         _commands = commands;
+        _commandMetadata = commandMetadata;
         _contributions = contributions;
         _debuggerRegistry = debuggerRegistry;
+        _designer = designer;
         _workspace = workspace;
+        _workspaceModel = workspaceModel;
         _workspaceInfo = workspaceInfo;
         _window = window;
         _dialogHost = dialogHost;
         _workspaceHost = workspaceHost;
         _views = views;
         _languageServices = languageServices;
+        _navigation = navigation;
+        _navigationHistory = navigationHistory;
+        _animationEditor = animationEditor;
+        _collaborationPanel = collaborationPanel;
+        _debugSettings = debugSettings;
+        _lspSettings = lspSettings;
         _editor = editor;
         _diagnostics = diagnostics;
+        _propertyEditors = propertyEditors;
         _terminal = terminal;
+        _viewHost = viewHost;
         _settings = settings;
     }
 
@@ -101,18 +134,29 @@ public sealed class BuiltInExtensionHost : IDisposable
             extensionId,
             extensionPath,
             _commands,
+            _commandMetadata,
             _contributions,
             _debuggerRegistry,
+            _designer,
             _workspace,
+            _workspaceModel,
             _workspaceInfo,
             _window,
             _dialogHost,
             _workspaceHost,
             _views,
             _languageServices,
+            _navigation,
+            _navigationHistory,
+            _animationEditor,
+            _collaborationPanel,
+            _debugSettings,
+            _lspSettings,
             _editor,
             _diagnostics,
+            _propertyEditors,
             _terminal,
+            _viewHost,
             _settings,
             storage,
             logger,

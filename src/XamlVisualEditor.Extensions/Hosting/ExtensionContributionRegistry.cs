@@ -9,10 +9,12 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     private readonly Dictionary<string, List<ExtensionMenuContribution>> _menuByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ExtensionToolbarContribution>> _toolbarByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ExtensionCommandPaletteContribution>> _paletteByExtension = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<ExtensionPropertyEditorContribution>> _propertyEditorsByExtension = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ExtensionViewContribution>> _viewsByExtension = new(StringComparer.Ordinal);
     private List<ExtensionMenuContribution> _menuItems = new();
     private List<ExtensionToolbarContribution> _toolbarItems = new();
     private List<ExtensionCommandPaletteContribution> _paletteItems = new();
+    private List<ExtensionPropertyEditorContribution> _propertyEditorItems = new();
     private List<ExtensionViewContribution> _viewItems = new();
 
     public event EventHandler? Changed;
@@ -22,6 +24,8 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     public IReadOnlyList<ExtensionToolbarContribution> ToolbarItems => _toolbarItems;
 
     public IReadOnlyList<ExtensionCommandPaletteContribution> CommandPaletteItems => _paletteItems;
+
+    public IReadOnlyList<ExtensionPropertyEditorContribution> PropertyEditors => _propertyEditorItems;
 
     public IReadOnlyList<ExtensionViewContribution> ViewContributions => _viewItems;
 
@@ -38,6 +42,11 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     public IDisposable RegisterCommandPaletteItems(string extensionId, IReadOnlyList<ExtensionCommandPaletteContribution> items)
     {
         return RegisterItems(extensionId, items, _paletteByExtension, RebuildPalette);
+    }
+
+    public IDisposable RegisterPropertyEditors(string extensionId, IReadOnlyList<ExtensionPropertyEditorContribution> editors)
+    {
+        return RegisterItems(extensionId, editors, _propertyEditorsByExtension, RebuildPropertyEditors);
     }
 
     public IDisposable RegisterViews(string extensionId, IReadOnlyList<ExtensionViewContribution> views)
@@ -97,6 +106,11 @@ public sealed class ExtensionContributionRegistry : IExtensionContributionRegist
     private void RebuildPalette()
     {
         _paletteItems = BuildList(_paletteByExtension);
+    }
+
+    private void RebuildPropertyEditors()
+    {
+        _propertyEditorItems = BuildList(_propertyEditorsByExtension);
     }
 
     private void RebuildViews()

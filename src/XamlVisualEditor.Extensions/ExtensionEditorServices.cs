@@ -17,6 +17,9 @@ public interface IEditorServices
     /// <summary>Opens a document in the editor with the specified behavior.</summary>
     Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct);
 
+    /// <summary>Opens a document and navigates to a location.</summary>
+    Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct);
+
     /// <summary>Raised when the active document changes.</summary>
     event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
 }

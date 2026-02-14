@@ -24,6 +24,21 @@ public interface IWindow
     /// <summary>Creates an output channel.</summary>
     IOutputChannel CreateOutputChannel(string name);
 
+    /// <summary>Gets available output channels.</summary>
+    Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Raised when an output channel is created.</summary>
+    event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+    /// <summary>Raised when an output channel is removed.</summary>
+    event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+    /// <summary>Raised when output is appended to a channel.</summary>
+    event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+    /// <summary>Raised when an output channel is cleared.</summary>
+    event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
     /// <summary>Creates a status bar item.</summary>
     IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority);
 }
@@ -36,6 +51,56 @@ public sealed record QuickPickOptions(string? Title, bool CanPickMany);
 
 /// <summary>Represents a quick pick item.</summary>
 public sealed record QuickPickItem(string Label, string? Description, string? Detail);
+
+/// <summary>Describes an output channel.</summary>
+public sealed record OutputChannelInfo(string Name);
+
+/// <summary>Output channel creation/removal event args.</summary>
+public sealed class OutputChannelEventArgs : EventArgs
+{
+    /// <summary>Creates event args.</summary>
+    public OutputChannelEventArgs(OutputChannelInfo channel)
+    {
+        Channel = channel;
+    }
+
+    /// <summary>Gets the channel info.</summary>
+    public OutputChannelInfo Channel { get; }
+}
+
+/// <summary>Output channel message event args.</summary>
+public sealed class OutputChannelMessageEventArgs : EventArgs
+{
+    /// <summary>Creates event args.</summary>
+    public OutputChannelMessageEventArgs(OutputChannelInfo channel, string message, bool isLine)
+    {
+        Channel = channel;
+        Message = message;
+        IsLine = isLine;
+    }
+
+    /// <summary>Gets the channel info.</summary>
+    public OutputChannelInfo Channel { get; }
+
+    /// <summary>Gets the message.</summary>
+    public string Message { get; }
+
+    /// <summary>Gets whether the message ended with a newline.</summary>
+    public bool IsLine { get; }
+}
+
+/// <summary>Output channel cleared event args.</summary>
+public sealed class OutputChannelClearedEventArgs : EventArgs
+{
+    /// <summary>Creates event args.</summary>
+    public OutputChannelClearedEventArgs(OutputChannelInfo channel)
+    {
+        Channel = channel;
+    }
+
+    /// <summary>Gets the channel info.</summary>
+    public OutputChannelInfo Channel { get; }
+}
 
 /// <summary>Represents an output channel.</summary>
 public interface IOutputChannel : IDisposable

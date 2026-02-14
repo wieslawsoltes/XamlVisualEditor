@@ -83,7 +83,9 @@ public sealed class McpPromptsHandler : IMcpRequestHandler
 
         if (includeDiagnostics)
         {
-            IReadOnlyList<LanguageDiagnostic> diagnostics = await _diagnostics.GetDiagnosticsAsync(null, ct).ConfigureAwait(false);
+            IReadOnlyList<LanguageDiagnostic> diagnostics = await _diagnostics
+                .GetDiagnosticsAsync(new DiagnosticsQuery(null, null), ct)
+                .ConfigureAwait(false);
             builder.AppendLine("Diagnostics: " + diagnostics.Count);
             foreach (LanguageDiagnostic diag in diagnostics.Take(20))
             {

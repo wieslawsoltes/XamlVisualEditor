@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace XamlVisualEditor.Extensions.Hosting;
@@ -6,6 +7,7 @@ namespace XamlVisualEditor.Extensions.Hosting;
 public sealed class InMemoryWindow : IWindow
 {
     private readonly List<string> _messages = new();
+    private readonly Dictionary<string, InMemoryOutputChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Gets recorded messages.</summary>
     public IReadOnlyList<string> Messages => _messages;
@@ -49,13 +51,54 @@ public sealed class InMemoryWindow : IWindow
     /// <inheritdoc />
     public IOutputChannel CreateOutputChannel(string name)
     {
-        return new InMemoryOutputChannel(name);
+        if (_channels.TryGetValue(name, out InMemoryOutputChannel? existing))
+        {
+            return existing;
+        }
+
+        OutputChannelInfo info = new(name);
+        InMemoryOutputChannel channel = new(
+            name,
+            message => OutputChannelMessage?.Invoke(this, message),
+            cleared => OutputChannelCleared?.Invoke(this, cleared),
+            () => RemoveChannel(info));
+
+        _channels[name] = channel;
+        OutputChannelCreated?.Invoke(this, new OutputChannelEventArgs(info));
+        return channel;
     }
+
+    public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+    {
+        List<OutputChannelInfo> results = new(_channels.Count);
+        foreach (InMemoryOutputChannel channel in _channels.Values)
+        {
+            results.Add(new OutputChannelInfo(channel.Name));
+        }
+
+        return Task.FromResult<IReadOnlyList<OutputChannelInfo>>(results);
+    }
+
+#pragma warning disable CS0067
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+    public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+    public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+#pragma warning restore CS0067
 
     /// <inheritdoc />
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
     {
         return new InMemoryStatusBarItem();
+    }
+
+    private void RemoveChannel(OutputChannelInfo info)
+    {
+        _channels.Remove(info.Name);
+        OutputChannelRemoved?.Invoke(this, new OutputChannelEventArgs(info));
     }
 }
 
@@ -102,11 +145,23 @@ public sealed class InMemoryWorkspaceHost : IWorkspaceHost
 public sealed class InMemoryOutputChannel : IOutputChannel
 {
     private readonly List<string> _lines = new();
+    private readonly OutputChannelInfo _info;
+    private readonly Action<OutputChannelMessageEventArgs>? _messageCallback;
+    private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
+    private readonly Action? _disposedCallback;
 
     /// <summary>Creates a channel.</summary>
-    public InMemoryOutputChannel(string name)
+    public InMemoryOutputChannel(
+        string name,
+        Action<OutputChannelMessageEventArgs>? messageCallback = null,
+        Action<OutputChannelClearedEventArgs>? clearedCallback = null,
+        Action? disposedCallback = null)
     {
         Name = name;
+        _info = new OutputChannelInfo(name);
+        _messageCallback = messageCallback;
+        _clearedCallback = clearedCallback;
+        _disposedCallback = disposedCallback;
     }
 
     /// <inheritdoc />
@@ -121,17 +176,21 @@ public sealed class InMemoryOutputChannel : IOutputChannel
         if (_lines.Count == 0)
         {
             _lines.Add(value);
-            return;
+        }
+        else
+        {
+            int last = _lines.Count - 1;
+            _lines[last] = _lines[last] + value;
         }
 
-        int last = _lines.Count - 1;
-        _lines[last] = _lines[last] + value;
+        _messageCallback?.Invoke(new OutputChannelMessageEventArgs(_info, value, false));
     }
 
     /// <inheritdoc />
     public void AppendLine(string value)
     {
         _lines.Add(value);
+        _messageCallback?.Invoke(new OutputChannelMessageEventArgs(_info, value, true));
     }
 
     /// <inheritdoc />
@@ -148,11 +207,13 @@ public sealed class InMemoryOutputChannel : IOutputChannel
     public void Clear()
     {
         _lines.Clear();
+        _clearedCallback?.Invoke(new OutputChannelClearedEventArgs(_info));
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        _disposedCallback?.Invoke();
     }
 }
 
@@ -247,6 +308,21 @@ internal sealed class NullWindow : IWindow
     {
         return new InMemoryOutputChannel(name);
     }
+
+    public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
+    }
+
+#pragma warning disable CS0067
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+    public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+    public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+#pragma warning restore CS0067
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
     {
