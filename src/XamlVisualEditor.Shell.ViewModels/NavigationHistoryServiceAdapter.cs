@@ -1,9 +1,6 @@
 using System;
-using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
-using System.Reactive.Threading.Tasks;
-using System.Windows.Input;
 using Avalonia.Threading;
 using ReactiveUI;
 using XamlVisualEditor.Extensions;
@@ -45,14 +42,14 @@ public sealed class NavigationHistoryServiceAdapter : INavigationHistoryService,
 
         if (Dispatcher.UIThread.CheckAccess())
         {
-            await ExecuteCommandAsync(_mainViewModel.NavigateBackCommand, ct).ConfigureAwait(false);
+            await _mainViewModel.NavigateBackFromHistoryAsync(ct).ConfigureAwait(false);
             return true;
         }
 
         bool result = false;
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            await ExecuteCommandAsync(_mainViewModel.NavigateBackCommand, ct).ConfigureAwait(false);
+            await _mainViewModel.NavigateBackFromHistoryAsync(ct).ConfigureAwait(false);
             result = true;
         }, DispatcherPriority.Background, ct);
         return result;
@@ -67,14 +64,14 @@ public sealed class NavigationHistoryServiceAdapter : INavigationHistoryService,
 
         if (Dispatcher.UIThread.CheckAccess())
         {
-            await ExecuteCommandAsync(_mainViewModel.NavigateForwardCommand, ct).ConfigureAwait(false);
+            await _mainViewModel.NavigateForwardFromHistoryAsync(ct).ConfigureAwait(false);
             return true;
         }
 
         bool result = false;
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            await ExecuteCommandAsync(_mainViewModel.NavigateForwardCommand, ct).ConfigureAwait(false);
+            await _mainViewModel.NavigateForwardFromHistoryAsync(ct).ConfigureAwait(false);
             result = true;
         }, DispatcherPriority.Background, ct);
         return result;
@@ -83,15 +80,5 @@ public sealed class NavigationHistoryServiceAdapter : INavigationHistoryService,
     public void Dispose()
     {
         _disposables.Dispose();
-    }
-
-    private static Task ExecuteCommandAsync(ReactiveCommand<Unit, Unit> command, CancellationToken ct)
-    {
-        if (!((ICommand)command).CanExecute(Unit.Default))
-        {
-            return Task.CompletedTask;
-        }
-
-        return command.Execute().ToTask(ct);
     }
 }

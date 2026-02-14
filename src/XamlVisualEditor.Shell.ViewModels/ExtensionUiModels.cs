@@ -26,7 +26,8 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
         string? location,
         string? group,
         int priority,
-        ICommand command)
+        ICommand command,
+        string? inputGesture = null)
     {
         CommandId = commandId;
         Title = title;
@@ -34,6 +35,7 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
         Group = group;
         Priority = priority;
         Command = command;
+        InputGesture = inputGesture;
     }
 
     public string CommandId { get; }
@@ -47,6 +49,8 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
     public int Priority { get; }
 
     public ICommand Command { get; }
+
+    public string? InputGesture { get; }
 }
 
 
@@ -99,6 +103,60 @@ public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject
     public string Title { get; }
 
     public string? Category { get; }
+}
+
+public sealed class ExtensionKeyBindingViewModel : ReactiveObject
+{
+    public ExtensionKeyBindingViewModel(string commandId, string gesture, ICommand command)
+    {
+        CommandId = commandId;
+        Gesture = gesture;
+        Command = command;
+    }
+
+    public string CommandId { get; }
+
+    public string Gesture { get; }
+
+    public ICommand Command { get; }
+}
+
+public sealed class ExtensionAsyncCommand : ICommand
+{
+    private readonly Func<Task> _executeAsync;
+    private readonly Func<bool>? _canExecute;
+
+    public ExtensionAsyncCommand(Func<Task> executeAsync, Func<bool>? canExecute = null)
+    {
+        _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
+        _canExecute = canExecute;
+    }
+
+    public event EventHandler? CanExecuteChanged;
+
+    public bool CanExecute(object? parameter)
+    {
+        return _canExecute?.Invoke() ?? true;
+    }
+
+    public void Execute(object? parameter)
+    {
+        if (!CanExecute(parameter))
+        {
+            return;
+        }
+
+        _ = _executeAsync().ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    public void NotifyCanExecuteChanged()
+    {
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
 }
 
 public sealed record CommandPaletteRequest(string Title, IReadOnlyList<ExtensionCommandPaletteItemViewModel> Items);

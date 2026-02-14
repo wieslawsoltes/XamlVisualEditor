@@ -38,25 +38,39 @@ public sealed class NavigationExtension : IXveExtension
             new CommandMetadata(
                 Title: "Navigation: Find References",
                 Category: "Navigation",
+                When: "hasTextDocument",
+                Keybinding: "Shift+F12",
                 Priority: 50)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             GoToDefinitionCommandId,
             new CommandMetadata(
                 Title: "Navigation: Go To Definition",
                 Category: "Navigation",
+                When: "hasTextDocument",
+                Keybinding: "F12",
                 Priority: 40)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             NavigateBackCommandId,
             new CommandMetadata(
                 Title: "Navigation: Back",
                 Category: "Navigation",
+                When: "canNavigateBack",
+                Keybinding: "Alt+Left",
                 Priority: 10)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             NavigateForwardCommandId,
             new CommandMetadata(
                 Title: "Navigation: Forward",
                 Category: "Navigation",
+                When: "canNavigateForward",
+                Keybinding: "Alt+Right",
                 Priority: 20)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ToggleReferencesCommandId,
+            new CommandMetadata(
+                Title: "View: Toggle References",
+                Category: "View",
+                Priority: 60)));
 
         context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
             context.ExtensionId,
@@ -72,6 +86,30 @@ public sealed class NavigationExtension : IXveExtension
             context.ExtensionId,
             new[]
             {
+                new ExtensionMenuContribution(
+                    NavigateBackCommandId,
+                    "Navigate Back",
+                    ExtensionMenuLocations.Edit,
+                    "navigation",
+                    60),
+                new ExtensionMenuContribution(
+                    NavigateForwardCommandId,
+                    "Navigate Forward",
+                    ExtensionMenuLocations.Edit,
+                    "navigation",
+                    65),
+                new ExtensionMenuContribution(
+                    GoToDefinitionCommandId,
+                    "Go To Definition",
+                    ExtensionMenuLocations.Edit,
+                    "navigation",
+                    70),
+                new ExtensionMenuContribution(
+                    FindReferencesCommandId,
+                    "Find References",
+                    ExtensionMenuLocations.Edit,
+                    "navigation",
+                    75),
                 new ExtensionMenuContribution(
                     ToggleReferencesCommandId,
                     "References",

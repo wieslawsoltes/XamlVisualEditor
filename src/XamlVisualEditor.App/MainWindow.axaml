@@ -31,7 +31,8 @@
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}" />
+                                      Command="{CompiledBinding Command}"
+                                      InputGesture="{CompiledBinding InputGesture}" />
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
@@ -62,7 +63,8 @@
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}" />
+                                      Command="{CompiledBinding Command}"
+                                      InputGesture="{CompiledBinding InputGesture}" />
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
@@ -94,9 +96,6 @@
                 <MenuItem Header="_Delete" Command="{CompiledBinding DeleteCommand}" InputGesture="Delete" />
                 <Separator />
                 <MenuItem Header="Select _All" Command="{CompiledBinding SelectAllCommand}" InputGesture="Ctrl+A" />
-                <Separator />
-                <MenuItem Header="Go To _Definition" Command="{CompiledBinding GoToDefinitionCommand}" InputGesture="F12" />
-                <MenuItem Header="Find _References" Command="{CompiledBinding FindReferencesCommand}" InputGesture="Shift+F12" />
                 <MenuItem Header="_Rename" Command="{CompiledBinding RenameSymbolCommand}" InputGesture="F2" />
                 <MenuItem Header="_Format Document" Command="{CompiledBinding FormatDocumentCommand}" />
                 <MenuItem Header="Code _Actions" Command="{CompiledBinding CodeActionsCommand}" />
@@ -104,14 +103,12 @@
                 <MenuItem Header="Document _Symbols" Command="{CompiledBinding DocumentSymbolsCommand}" />
                 <MenuItem Header="Workspace _Symbols" Command="{CompiledBinding WorkspaceSymbolsCommand}" />
                 <Separator />
-                <MenuItem Header="Navigate _Back" Command="{CompiledBinding NavigateBackCommand}" InputGesture="Alt+Left" />
-                <MenuItem Header="Navigate _Forward" Command="{CompiledBinding NavigateForwardCommand}" InputGesture="Alt+Right" />
-                <Separator />
                 <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding EditMenuItems}">
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}" />
+                                      Command="{CompiledBinding Command}"
+                                      InputGesture="{CompiledBinding InputGesture}" />
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
@@ -121,7 +118,8 @@
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}" />
+                                      Command="{CompiledBinding Command}"
+                                      InputGesture="{CompiledBinding InputGesture}" />
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
@@ -160,13 +158,12 @@
                 <Separator />
                 <MenuItem Header="Command _Palette..." Command="{CompiledBinding ShowCommandPaletteCommand}" InputGesture="Ctrl+Shift+P" />
                 <Separator />
-                <MenuItem Header="_Collaboration" Command="{CompiledBinding ToggleCollaborationCommand}" />
-                <Separator />
                 <MenuItem Header="_Workspace" ItemsSource="{CompiledBinding WorkspaceMenuItems}">
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}" />
+                                      Command="{CompiledBinding Command}"
+                                      InputGesture="{CompiledBinding InputGesture}" />
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
@@ -174,7 +171,8 @@
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}" />
+                                      Command="{CompiledBinding Command}"
+                                      InputGesture="{CompiledBinding InputGesture}" />
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
@@ -183,7 +181,8 @@
                 <MenuItem.ItemTemplate>
                     <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                         <MenuItem Header="{CompiledBinding Title}"
-                                  Command="{CompiledBinding Command}" />
+                                  Command="{CompiledBinding Command}"
+                                  InputGesture="{CompiledBinding InputGesture}" />
                     </DataTemplate>
                 </MenuItem.ItemTemplate>
             </MenuItem>

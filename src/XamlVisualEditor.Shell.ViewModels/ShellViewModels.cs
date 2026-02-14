@@ -12,6 +12,7 @@ using System.Reactive.Threading.Tasks;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Windows.Input;
 using System.Xml.Linq;
 using System.Diagnostics;
 using System.IO;
@@ -2124,8 +2125,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private readonly IExtensionContributionRegistry? _extensionContributions;
     private readonly IExtensionViewRegistry? _extensionViewRegistry;
     private readonly ICommands? _extensionCommands;
+    private readonly ICommandMetadataRegistry? _commandMetadata;
     private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ICommand> _extensionCommandsById = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Gets the open documents.
@@ -2233,6 +2236,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets extension-provided command palette items.
     /// </summary>
     public ObservableCollection<ExtensionCommandPaletteItemViewModel> CommandPaletteItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided keybinding items.
+    /// </summary>
+    public ObservableCollection<ExtensionKeyBindingViewModel> ExtensionKeyBindings { get; } = new();
 
     /// <summary>
     /// Gets extension-provided view models.
@@ -2516,25 +2524,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     public ReactiveCommand<Unit, Unit> PasteCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> SelectAllCommand { get; }
-    public ReactiveCommand<Unit, Unit> GoToDefinitionCommand { get; }
-    public ReactiveCommand<Unit, Unit> FindReferencesCommand { get; }
     public ReactiveCommand<Unit, Unit> RenameSymbolCommand { get; }
     public ReactiveCommand<Unit, Unit> FormatDocumentCommand { get; }
     public ReactiveCommand<Unit, Unit> CodeActionsCommand { get; }
     public ReactiveCommand<Unit, Unit> DocumentSymbolsCommand { get; }
     public ReactiveCommand<Unit, Unit> WorkspaceSymbolsCommand { get; }
-    public ReactiveCommand<Unit, Unit> NavigateBackCommand { get; }
-    public ReactiveCommand<Unit, Unit> NavigateForwardCommand { get; }
 
     // View Commands
-    public ReactiveCommand<Unit, Unit> ToggleToolboxCommand { get; }
-    public ReactiveCommand<Unit, Unit> TogglePropertiesCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleVisualTreeCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleLogicalTreeCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleOutputCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleReferencesCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleCollaborationCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleAnimationEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleBreakpointsCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleCallStackCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleLocalsCommand { get; }
@@ -2586,6 +2582,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         XamlVisualEditor.Terminal.ITerminalService? terminalService = null,
         ILspSettingsStore? lspSettingsStore = null,
         ICommands? extensionCommands = null,
+        ICommandMetadataRegistry? commandMetadata = null,
         IExtensionContributionRegistry? extensionContributionRegistry = null,
         IExtensionViewRegistry? extensionViewRegistry = null,
         IExtensionManager? extensionManager = null,
@@ -2605,6 +2602,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MainWindowViewModel>.Instance;
         _loggerFactory = loggerFactory;
         _extensionCommands = extensionCommands;
+        _commandMetadata = commandMetadata;
         _extensionContributions = extensionContributionRegistry;
         _extensionViewRegistry = extensionViewRegistry;
         ExtensionManager = new ExtensionManagerViewModel(
@@ -2614,6 +2612,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         if (_extensionContributions is not null)
         {
             _extensionContributions.Changed += OnExtensionContributionsChanged;
+        }
+
+        if (_commandMetadata is not null)
+        {
+            _commandMetadata.Changed += OnCommandMetadataChanged;
         }
 
         if (_extensionViewRegistry is not null)
@@ -2760,17 +2763,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             StatusText = "Theme variant: Dark";
         });
 
-        GoToDefinitionCommand = ReactiveCommand.CreateFromTask(GoToDefinitionAsync, hasTextDoc);
-        FindReferencesCommand = ReactiveCommand.CreateFromTask(FindReferencesAsync, hasTextDoc);
         RenameSymbolCommand = ReactiveCommand.CreateFromTask(RenameSymbolAsync, hasTextDoc);
         FormatDocumentCommand = ReactiveCommand.CreateFromTask(FormatDocumentAsync, hasTextDoc);
         CodeActionsCommand = ReactiveCommand.CreateFromTask(ShowCodeActionsAsync, hasTextDoc);
         DocumentSymbolsCommand = ReactiveCommand.CreateFromTask(ShowDocumentSymbolsAsync, hasTextDoc);
         WorkspaceSymbolsCommand = ReactiveCommand.CreateFromTask(ShowWorkspaceSymbolsAsync, hasTextDoc);
-        NavigateBackCommand = ReactiveCommand.CreateFromTask(NavigateBackAsync,
-            this.WhenAnyValue(x => x.CanNavigateBack));
-        NavigateForwardCommand = ReactiveCommand.CreateFromTask(NavigateForwardAsync,
-            this.WhenAnyValue(x => x.CanNavigateForward));
 
         // Edit commands
         UndoCommand = ReactiveCommand.Create(() =>
@@ -2866,47 +2863,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }, hasDesignerDoc);
 
         // View commands
-        ToggleToolboxCommand = ReactiveCommand.Create(() =>
-        {
-            IsToolboxVisible = !IsToolboxVisible;
-            SetDockableVisibility("Toolbox", IsToolboxVisible);
-            SetDockableVisibility("SolutionExplorer", IsToolboxVisible);
-        });
-        TogglePropertiesCommand = ReactiveCommand.Create(() =>
-        {
-            IsPropertiesVisible = !IsPropertiesVisible;
-            SetDockableVisibility("Properties", IsPropertiesVisible);
-        });
-        ToggleVisualTreeCommand = ReactiveCommand.Create(() =>
-        {
-            IsVisualTreeVisible = !IsVisualTreeVisible;
-            SetDockableVisibility("VisualTree", IsVisualTreeVisible);
-        });
-        ToggleLogicalTreeCommand = ReactiveCommand.Create(() =>
-        {
-            IsLogicalTreeVisible = !IsLogicalTreeVisible;
-            SetDockableVisibility("LogicalTree", IsLogicalTreeVisible);
-        });
-        ToggleOutputCommand = ReactiveCommand.Create(() =>
-        {
-            IsOutputVisible = !IsOutputVisible;
-            SetDockableVisibility("Output", IsOutputVisible);
-        });
-        ToggleReferencesCommand = ReactiveCommand.Create(() =>
-        {
-            IsReferencesVisible = !IsReferencesVisible;
-            SetDockableVisibility("References", IsReferencesVisible);
-        });
-        ToggleCollaborationCommand = ReactiveCommand.Create(() =>
-        {
-            IsCollaborationVisible = !IsCollaborationVisible;
-            SetDockableVisibility("Collaboration", IsCollaborationVisible);
-        });
-        ToggleAnimationEditorCommand = ReactiveCommand.Create(() =>
-        {
-            IsAnimationEditorVisible = !IsAnimationEditorVisible;
-            SetDockableVisibility("AnimationEditor", IsAnimationEditorVisible);
-        });
         ToggleBreakpointsCommand = ReactiveCommand.Create(() =>
         {
             IsBreakpointsVisible = !IsBreakpointsVisible;
@@ -2975,6 +2931,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         NewTerminalCommand = ReactiveCommand.Create(CreateTerminalSession);
 
         ShowCommandPaletteCommand = ReactiveCommand.CreateFromTask(ShowCommandPaletteAsync);
+        IDisposable extensionCommandEnablementSubscription = Observable.Merge(
+                this.WhenAnyValue(x => x.ActiveDocument).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.ActiveTextDocument).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.HasWorkspace).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.CanNavigateBack).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.CanNavigateForward).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.IsRunActive).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.Debugger.State).Select(_ => Unit.Default))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(_ => RefreshExtensionCommandEnablement());
+        _disposables.Add(extensionCommandEnablementSubscription);
 
         // Close document command (used by tab close buttons)
         CloseDocumentCommand = ReactiveCommand.Create<IEditorDocumentViewModel>(doc =>
@@ -3379,81 +3347,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         };
     }
 
-    private async System.Threading.Tasks.Task GoToDefinitionAsync()
-    {
-        if (ActiveTextDocument is null)
-        {
-            return;
-        }
-
-        IReadOnlyList<LanguageLocation> locations =
-            await ActiveTextDocument.FindDefinitionsAsync(ActiveTextDocument.CaretOffset);
-
-        if (locations.Count == 0)
-        {
-            StatusText = "No definition found";
-            return;
-        }
-
-        if (locations.Count == 1)
-        {
-            await NavigateToLocationAsync(locations[0]);
-            return;
-        }
-
-        List<ReferenceLocationViewModel> items = locations
-            .Select(location => new ReferenceLocationViewModel(
-                location.FilePath,
-                location.Range.Start.Line,
-                location.Range.Start.Column))
-            .ToList();
-
-        DefinitionPickerRequest request = new("Select Definition", items);
-        ReferenceLocationViewModel? selection = await SelectDefinitionInteraction.Handle(request);
-        if (selection is null)
-        {
-            return;
-        }
-
-        LanguageLocation target = new()
-        {
-            FilePath = selection.FilePath,
-            Range = new LanguageTextRange(
-                new LanguageTextPosition(selection.Line, selection.Column),
-                new LanguageTextPosition(selection.Line, selection.Column))
-        };
-
-        await NavigateToLocationAsync(target);
-    }
-
-    private async System.Threading.Tasks.Task FindReferencesAsync()
-    {
-        if (ActiveTextDocument is null)
-        {
-            return;
-        }
-
-        IReadOnlyList<LanguageLocation> locations =
-            await ActiveTextDocument.FindReferencesAsync(ActiveTextDocument.CaretOffset);
-
-        LogOutput("Info", $"Refs: Found {locations.Count} reference(s)");
-        References.ReplaceItems(locations.Select(location =>
-            new ReferenceLocationViewModel(
-                location.FilePath,
-                location.Range.Start.Line,
-                location.Range.Start.Column)));
-
-        foreach (LanguageLocation location in locations)
-        {
-            LogOutput(
-                "Info",
-                $"Refs: {location.FilePath} ({location.Range.Start.Line},{location.Range.Start.Column})");
-        }
-
-        IsReferencesVisible = true;
-        SetDockableVisibility("References", true);
-    }
-
     private async System.Threading.Tasks.Task RenameSymbolAsync()
     {
         if (ActiveTextDocument is null)
@@ -3731,6 +3624,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         CanNavigateForward = _forwardNavigation.Count > 0;
     }
 
+    internal async Task NavigateBackFromHistoryAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await NavigateBackAsync();
+    }
+
+    internal async Task NavigateForwardFromHistoryAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await NavigateForwardAsync();
+    }
+
     private async System.Threading.Tasks.Task NavigateBackAsync()
     {
         if (_backNavigation.Count == 0)
@@ -3905,24 +3810,46 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private async System.Threading.Tasks.Task ExecuteExtensionCommandAsync(string commandId)
     {
+        bool executed = await TryExecuteExtensionCommandAsync(commandId);
+        if (executed)
+        {
+            return;
+        }
+
+        StatusText = $"Extension command unavailable: {commandId}";
+    }
+
+    private async System.Threading.Tasks.Task<bool> TryExecuteExtensionCommandAsync(string commandId)
+    {
         if (_extensionCommands is null)
         {
-            StatusText = "Extension commands unavailable.";
-            return;
+            return false;
         }
 
         try
         {
             await _extensionCommands.ExecuteAsync(commandId, null, CancellationToken.None);
+            return true;
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.StartsWith("Command not found:", StringComparison.Ordinal))
+        {
+            return false;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("Extension command failed: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Extension command failed: {CommandId}", commandId);
             StatusText = $"Extension command failed: {ex.Message}";
+            return true;
         }
     }
 
     private void OnExtensionContributionsChanged(object? sender, EventArgs e)
+    {
+        RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
+    }
+
+    private void OnCommandMetadataChanged(object? sender, EventArgs e)
     {
         RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
     }
@@ -3937,8 +3864,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         if (_extensionContributions is null)
         {
             ExtensionMenuItems.Clear();
+            FileMenuItems.Clear();
+            FileNewMenuItems.Clear();
+            FileNewMenuEntries.Clear();
+            ToolsMenuItems.Clear();
+            ViewMenuItems.Clear();
+            EditMenuItems.Clear();
+            WorkspaceMenuItems.Clear();
             ExtensionToolbarItems.Clear();
+            MainToolbarItems.Clear();
             CommandPaletteItems.Clear();
+            ExtensionKeyBindings.Clear();
+            _extensionCommandsById.Clear();
+            RefreshExtensionCommandEnablement();
             RefreshExtensionViews();
             return;
         }
@@ -3946,6 +3884,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         UpdateExtensionMenuItems();
         UpdateExtensionToolbarItems();
         UpdateCommandPaletteItems();
+        UpdateExtensionKeyBindings();
+        PruneExtensionCommandCache();
+        RefreshExtensionCommandEnablement();
         RefreshExtensionViews();
     }
 
@@ -4067,7 +4008,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 location,
                 item.Group,
                 item.Priority,
-                CreateExtensionCommand(item.CommandId)));
+                CreateExtensionCommand(item.CommandId),
+                GetExtensionCommandInputGesture(item.CommandId)));
         }
 
         UpdateFileNewMenuEntries();
@@ -4088,7 +4030,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             ExtensionMenuLocations.FileNew,
             "builtin",
             -100,
-            NewDocumentCommand));
+            NewDocumentCommand,
+            "Ctrl+N"));
 
         foreach (ExtensionMenuItemViewModel item in FileNewMenuItems)
         {
@@ -4151,9 +4094,261 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
     }
 
-    private ReactiveCommand<object?, Unit> CreateExtensionCommand(string commandId)
+    private void UpdateExtensionKeyBindings()
     {
-        return ReactiveCommand.CreateFromTask<object?>(_ => ExecuteExtensionCommandAsync(commandId));
+        ExtensionKeyBindings.Clear();
+
+        if (_commandMetadata is null)
+        {
+            return;
+        }
+
+        HashSet<string> registeredGestures = new(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, CommandMetadata> entry in _commandMetadata.GetAll()
+            .OrderBy(item => item.Value.Priority)
+            .ThenBy(item => item.Value.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            string? gesture = GetCommandInputGesture(entry.Key);
+            if (string.IsNullOrWhiteSpace(gesture))
+            {
+                continue;
+            }
+
+            if (!registeredGestures.Add(gesture))
+            {
+                continue;
+            }
+
+            ExtensionKeyBindings.Add(new ExtensionKeyBindingViewModel(
+                entry.Key,
+                gesture,
+                CreateExtensionCommand(entry.Key)));
+        }
+    }
+
+    private ICommand CreateExtensionCommand(string commandId)
+    {
+        if (_extensionCommandsById.TryGetValue(commandId, out ICommand? existing))
+        {
+            return existing;
+        }
+
+        ExtensionAsyncCommand command = new(
+            () => ExecuteExtensionCommandAsync(commandId),
+            () => IsExtensionCommandEnabled(commandId));
+        _extensionCommandsById[commandId] = command;
+        return command;
+    }
+
+    private void RefreshExtensionCommandEnablement()
+    {
+        foreach (ICommand command in _extensionCommandsById.Values)
+        {
+            if (command is ExtensionAsyncCommand extensionCommand)
+            {
+                extensionCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private void PruneExtensionCommandCache()
+    {
+        HashSet<string> activeCommandIds = new(StringComparer.Ordinal);
+
+        foreach (ExtensionMenuItemViewModel item in ExtensionMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in FileMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in FileNewMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in ViewMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in EditMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in ToolsMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in WorkspaceMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionToolbarItemViewModel item in MainToolbarItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionToolbarItemViewModel item in ExtensionToolbarItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionCommandPaletteItemViewModel item in CommandPaletteItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionKeyBindingViewModel item in ExtensionKeyBindings)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        List<string> staleKeys = _extensionCommandsById.Keys
+            .Where(key => !activeCommandIds.Contains(key))
+            .ToList();
+
+        foreach (string key in staleKeys)
+        {
+            _extensionCommandsById.Remove(key);
+        }
+    }
+
+    private bool IsExtensionCommandEnabled(string commandId)
+    {
+        if (_commandMetadata is null || !_commandMetadata.TryGet(commandId, out CommandMetadata metadata))
+        {
+            return true;
+        }
+
+        return EvaluateWhenExpressionForContext(metadata.When);
+    }
+
+    private bool EvaluateWhenExpressionForContext(string? when)
+    {
+        if (string.IsNullOrWhiteSpace(when))
+        {
+            return true;
+        }
+
+        foreach (string orTerm in when.Split("||", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            bool andResult = true;
+            foreach (string rawCondition in orTerm.Split("&&", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                bool negate = rawCondition.StartsWith("!", StringComparison.Ordinal);
+                string condition = negate ? rawCondition[1..].Trim() : rawCondition.Trim();
+                condition = condition.Trim('(', ')');
+
+                if (!TryGetWhenContextValue(condition, out bool value))
+                {
+                    andResult = false;
+                    break;
+                }
+
+                bool evaluated = negate ? !value : value;
+                if (!evaluated)
+                {
+                    andResult = false;
+                    break;
+                }
+            }
+
+            if (andResult)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryGetWhenContextValue(string condition, out bool value)
+    {
+        switch (condition.Trim().ToLowerInvariant())
+        {
+            case "true":
+                value = true;
+                return true;
+            case "false":
+                value = false;
+                return true;
+            case "hasactivedocument":
+            case "editor.hasactivedocument":
+                value = ActiveDocument is not null;
+                return true;
+            case "hasdesignerdocument":
+            case "editor.hasdesignerdocument":
+                value = ActiveDesignerDocument is not null;
+                return true;
+            case "hastextdocument":
+            case "editor.hastextdocument":
+                value = ActiveTextDocument is not null;
+                return true;
+            case "hasworkspace":
+            case "workspace.loaded":
+                value = HasWorkspace;
+                return true;
+            case "cannavigateback":
+            case "navigation.cannavigateback":
+                value = CanNavigateBack;
+                return true;
+            case "cannavigateforward":
+            case "navigation.cannavigateforward":
+                value = CanNavigateForward;
+                return true;
+            case "isrunactive":
+            case "run.active":
+                value = IsRunActive;
+                return true;
+            case "debug.active":
+            case "isdebugactive":
+                value = Debugger.State is DebugSessionState.Initializing
+                    or DebugSessionState.Running
+                    or DebugSessionState.Paused;
+                return true;
+            case "debug.running":
+            case "isdebugrunning":
+                value = Debugger.State == DebugSessionState.Running;
+                return true;
+            case "debug.paused":
+            case "isdebugpaused":
+                value = Debugger.State == DebugSessionState.Paused;
+                return true;
+            case "debug.idle":
+            case "isdebugidle":
+                value = IsDebugIdle(Debugger.State);
+                return true;
+            default:
+                value = false;
+                return false;
+        }
+    }
+
+    private string? GetExtensionCommandInputGesture(string commandId)
+    {
+        return GetCommandInputGesture(commandId);
+    }
+
+    private string? GetCommandInputGesture(string commandId)
+    {
+        if (_commandMetadata is null || !_commandMetadata.TryGet(commandId, out CommandMetadata metadata))
+        {
+            return null;
+        }
+
+        string? gesture = OperatingSystem.IsMacOS()
+            ? (metadata.MacKeybinding ?? metadata.Keybinding)
+            : (metadata.Keybinding ?? metadata.MacKeybinding);
+
+        return string.IsNullOrWhiteSpace(gesture) ? null : gesture.Trim();
     }
 
     private void SyncExtensionDockables()
@@ -6627,6 +6822,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         if (_outputLogSinkAccessor is not null)
         {
             _outputLogSinkAccessor.Sink = null;
+        }
+
+        if (_extensionContributions is not null)
+        {
+            _extensionContributions.Changed -= OnExtensionContributionsChanged;
+        }
+
+        if (_commandMetadata is not null)
+        {
+            _commandMetadata.Changed -= OnCommandMetadataChanged;
+        }
+
+        if (_extensionViewRegistry is not null)
+        {
+            _extensionViewRegistry.Changed -= OnExtensionViewsChanged;
         }
 
         _outputChannel?.Dispose();

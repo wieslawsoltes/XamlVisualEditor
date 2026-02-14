@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Reactive;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using ReactiveUI;
@@ -25,6 +28,8 @@ public sealed partial class MainWindow : Window
     private IDisposable? _extensionPackageOpenHandler;
     private IDisposable? _previewerTrustHandler;
     private IDisposable? _debugToolConsentHandler;
+    private MainWindowViewModel? _keyBindingsSource;
+    private readonly List<KeyBinding> _extensionKeyBindings = new();
 
     public MainWindow()
         : this(null)
@@ -62,6 +67,7 @@ public sealed partial class MainWindow : Window
             _extensionPackageOpenHandler?.Dispose();
             _previewerTrustHandler?.Dispose();
             _debugToolConsentHandler?.Dispose();
+            UnbindExtensionKeyBindings();
         };
 
         if (DataContext is MainWindowViewModel vm)
@@ -80,7 +86,6 @@ public sealed partial class MainWindow : Window
         _codeActionPickerHandler?.Dispose();
         _workspaceSymbolQueryHandler?.Dispose();
         _commandPaletteHandler?.Dispose();
-        _extensionPackageOpenHandler?.Dispose();
         _extensionPackageOpenHandler?.Dispose();
         _previewerTrustHandler?.Dispose();
         _debugToolConsentHandler?.Dispose();
@@ -250,6 +255,93 @@ public sealed partial class MainWindow : Window
             bool result = await dialog.ShowDialog<bool>(this);
             interaction.SetOutput(result);
         });
+        BindExtensionKeyBindings(vm);
+    }
 
+    private void BindExtensionKeyBindings(MainWindowViewModel vm)
+    {
+        if (_keyBindingsSource is not null)
+        {
+            _keyBindingsSource.ExtensionKeyBindings.CollectionChanged -= OnExtensionKeyBindingsChanged;
+        }
+
+        ClearExtensionKeyBindings();
+        _keyBindingsSource = vm;
+        _keyBindingsSource.ExtensionKeyBindings.CollectionChanged += OnExtensionKeyBindingsChanged;
+        ApplyExtensionKeyBindings(vm);
+    }
+
+    private void UnbindExtensionKeyBindings()
+    {
+        if (_keyBindingsSource is not null)
+        {
+            _keyBindingsSource.ExtensionKeyBindings.CollectionChanged -= OnExtensionKeyBindingsChanged;
+            _keyBindingsSource = null;
+        }
+
+        ClearExtensionKeyBindings();
+    }
+
+    private void OnExtensionKeyBindingsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_keyBindingsSource is null)
+        {
+            return;
+        }
+
+        ApplyExtensionKeyBindings(_keyBindingsSource);
+    }
+
+    private void ApplyExtensionKeyBindings(MainWindowViewModel vm)
+    {
+        ClearExtensionKeyBindings();
+        HashSet<string> seenGestures = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (ExtensionKeyBindingViewModel entry in vm.ExtensionKeyBindings)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Gesture) || !seenGestures.Add(entry.Gesture))
+            {
+                continue;
+            }
+
+            if (!TryParseKeyGesture(entry.Gesture, out KeyGesture? gesture) || gesture is null)
+            {
+                continue;
+            }
+
+            KeyBinding binding = new()
+            {
+                Gesture = gesture,
+                Command = entry.Command
+            };
+
+            KeyBindings.Add(binding);
+            _extensionKeyBindings.Add(binding);
+        }
+    }
+
+    private void ClearExtensionKeyBindings()
+    {
+        foreach (KeyBinding binding in _extensionKeyBindings)
+        {
+            KeyBindings.Remove(binding);
+        }
+
+        _extensionKeyBindings.Clear();
+    }
+
+    private static bool TryParseKeyGesture(string value, out KeyGesture? gesture)
+    {
+        gesture = null;
+
+        try
+        {
+            gesture = KeyGesture.Parse(value);
+            return gesture is not null;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
