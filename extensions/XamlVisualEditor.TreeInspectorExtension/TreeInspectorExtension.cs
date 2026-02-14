@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
@@ -122,15 +121,16 @@ public sealed class TreeInspectorExtension : IXveExtension
                     25)
             }));
 
-        EventHandler<DesignerSelectionChangedEventArgs> selectionHandler = (_, _) =>
+        EventHandler<DesignerSelectionChangedEventArgs> selectionHandler = (_, e) =>
         {
-            _ = RefreshSelectionAsync(context, visualViewModel, logicalViewModel, CancellationToken.None);
+            RunBackground(visualViewModel.HandleSelectionChangedAsync(e.SelectedNodes, CancellationToken.None));
+            RunBackground(logicalViewModel.HandleSelectionChangedAsync(e.SelectedNodes, CancellationToken.None));
         };
 
-        EventHandler<DesignerDocumentChangedEventArgs> documentHandler = (_, _) =>
+        EventHandler<DesignerDocumentChangedEventArgs> documentHandler = (_, e) =>
         {
-            _ = visualViewModel.RefreshAsync(CancellationToken.None);
-            _ = logicalViewModel.RefreshAsync(CancellationToken.None);
+            RunBackground(visualViewModel.HandleDocumentChangedAsync(e.DocumentPath, CancellationToken.None));
+            RunBackground(logicalViewModel.HandleDocumentChangedAsync(e.DocumentPath, CancellationToken.None));
         };
 
         context.Designer.SelectionChanged += selectionHandler;
@@ -147,15 +147,13 @@ public sealed class TreeInspectorExtension : IXveExtension
         await logicalViewModel.InitializeAsync(cancellationToken);
     }
 
-    private static async Task RefreshSelectionAsync(
-        ExtensionContext context,
-        TreeInspectorPanelViewModel visualViewModel,
-        TreeInspectorPanelViewModel logicalViewModel,
-        CancellationToken cancellationToken)
+    private static void RunBackground(Task task)
     {
-        IReadOnlyList<DesignerNodeSummary> selected = await context.Designer.GetSelectedNodesAsync(cancellationToken);
-        visualViewModel.UpdateSelection(selected);
-        logicalViewModel.UpdateSelection(selected);
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private static Task RefreshTreeAsync(TreeInspectorPanelViewModel viewModel)

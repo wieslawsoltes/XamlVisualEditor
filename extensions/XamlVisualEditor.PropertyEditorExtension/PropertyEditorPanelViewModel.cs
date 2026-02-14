@@ -53,6 +53,24 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         "System.Double",
         "System.Decimal"
     };
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> WellKnownEnumOptions = new Dictionary<string, IReadOnlyList<string>>(
+        StringComparer.OrdinalIgnoreCase)
+    {
+        ["HorizontalAlignment"] = new[] { "Stretch", "Left", "Center", "Right" },
+        ["VerticalAlignment"] = new[] { "Stretch", "Top", "Center", "Bottom" },
+        ["HorizontalContentAlignment"] = new[] { "Stretch", "Left", "Center", "Right" },
+        ["VerticalContentAlignment"] = new[] { "Stretch", "Top", "Center", "Bottom" },
+        ["TextAlignment"] = new[] { "Left", "Center", "Right", "Justify" },
+        ["TextWrapping"] = new[] { "NoWrap", "Wrap", "WrapWithOverflow" },
+        ["TextTrimming"] = new[] { "None", "CharacterEllipsis", "WordEllipsis" },
+        ["FontWeight"] = new[] { "Thin", "ExtraLight", "Light", "Normal", "Medium", "SemiBold", "Bold", "ExtraBold", "Black" },
+        ["FontStyle"] = new[] { "Normal", "Italic", "Oblique" },
+        ["Orientation"] = new[] { "Horizontal", "Vertical" },
+        ["DockPanel.Dock"] = new[] { "Left", "Top", "Right", "Bottom" },
+        ["Dock"] = new[] { "Left", "Top", "Right", "Bottom" },
+        ["HorizontalScrollBarVisibility"] = new[] { "Disabled", "Auto", "Hidden", "Visible" },
+        ["VerticalScrollBarVisibility"] = new[] { "Disabled", "Auto", "Hidden", "Visible" }
+    };
     private string? _value;
     private string? _committedValue;
     private bool _isSet;
@@ -87,9 +105,10 @@ public sealed class PropertyEntryViewModel : ReactiveObject
         IsAttached = isAttached;
         OwnerType = ownerType;
         Descriptor = descriptor;
-        EnumOptions = descriptor?.EnumOptions ?? enumOptions;
+        IReadOnlyList<string>? resolvedEnumOptions = descriptor?.EnumOptions ?? enumOptions ?? ResolveWellKnownEnumOptions(name);
+        EnumOptions = resolvedEnumOptions;
         BrushPresets = descriptor?.BrushPresets;
-        EditorKind = GetEditorKind(propertyType, EnumOptions, descriptor);
+        EditorKind = GetEditorKind(name, propertyType, resolvedEnumOptions, descriptor);
         SetValueInternal(value);
         _committedValue = _value;
         ApplyPresetCommand = ReactiveCommand.Create<string?>(preset => Value = preset);
@@ -251,6 +270,7 @@ public sealed class PropertyEntryViewModel : ReactiveObject
     }
 
     private static PropertyEditorKind GetEditorKind(
+        string propertyName,
         string propertyType,
         IReadOnlyList<string>? enumOptions,
         PropertyEditorDescriptor? descriptor)
@@ -343,6 +363,11 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             return PropertyEditorKind.Thickness;
         }
 
+        if (IsColorType(normalizedType) || IsColorType(simpleType))
+        {
+            return PropertyEditorKind.Color;
+        }
+
         if (IsBrushType(normalizedType) || IsBrushType(simpleType))
         {
             return PropertyEditorKind.Brush;
@@ -358,7 +383,37 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             return PropertyEditorKind.Number;
         }
 
+        if (IsThicknessPropertyName(propertyName))
+        {
+            return PropertyEditorKind.Thickness;
+        }
+
+        if (IsCornerRadiusPropertyName(propertyName))
+        {
+            return PropertyEditorKind.CornerRadius;
+        }
+
+        if (IsBrushPropertyName(propertyName))
+        {
+            return PropertyEditorKind.Brush;
+        }
+
+        if (IsBooleanPropertyName(propertyName))
+        {
+            return PropertyEditorKind.Boolean;
+        }
+
+        if (IsNumericPropertyName(propertyName))
+        {
+            return PropertyEditorKind.Number;
+        }
+
         return PropertyEditorKind.Text;
+    }
+
+    private static bool IsColorType(string propertyType)
+    {
+        return IsKnownType(propertyType, "Color", "System.Drawing.Color", "Avalonia.Media.Color");
     }
 
     private static bool IsBrushType(string propertyType)
@@ -381,9 +436,93 @@ public sealed class PropertyEntryViewModel : ReactiveObject
             return true;
         }
 
-        return normalized.Equals("Color", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("System.Drawing.Color", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("Avalonia.Media.Color", StringComparison.OrdinalIgnoreCase);
+        return false;
+    }
+
+    private static bool IsBooleanPropertyName(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return false;
+        }
+
+        return propertyName switch
+        {
+            "IsVisible" or "ClipToBounds" or "IsEnabled" or "IsHitTestVisible"
+                or "IsChecked" or "IsReadOnly" or "AcceptsReturn" or "AcceptsTab"
+                or "ShowButtonSpinner" or "IsThreeState" or "CanDrag"
+                or "AllowAutoHide" or "IsDefault" or "IsCancel"
+                => true,
+            _ => false
+        };
+    }
+
+    private static bool IsNumericPropertyName(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return false;
+        }
+
+        return propertyName switch
+        {
+            "Width" or "Height" or "MinWidth" or "MinHeight" or "MaxWidth" or "MaxHeight"
+                or "FontSize" or "Opacity" or "Spacing" or "Row" or "Column"
+                or "RowSpan" or "ColumnSpan" or "Canvas.Left" or "Canvas.Top"
+                or "Canvas.Right" or "Canvas.Bottom" or "ZIndex"
+                or "SelectedIndex" or "Minimum" or "Maximum" or "Value"
+                or "Increment" or "TabIndex"
+                => true,
+            _ => false
+        };
+    }
+
+    private static bool IsBrushPropertyName(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return false;
+        }
+
+        return propertyName switch
+        {
+            "Background" or "Foreground" or "BorderBrush" or "Fill" or "Stroke"
+                or "OpacityMask" or "CaretBrush" or "SelectionBrush"
+                => true,
+            _ => false
+        };
+    }
+
+    private static bool IsThicknessPropertyName(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return false;
+        }
+
+        return propertyName is "Margin" or "Padding" or "BorderThickness";
+    }
+
+    private static bool IsCornerRadiusPropertyName(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return false;
+        }
+
+        return propertyName.Equals("CornerRadius", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string>? ResolveWellKnownEnumOptions(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+        {
+            return null;
+        }
+
+        return WellKnownEnumOptions.TryGetValue(propertyName, out IReadOnlyList<string>? options)
+            ? options
+            : null;
     }
 
     private static bool IsThicknessType(string propertyType)
@@ -714,8 +853,9 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     private bool _showLocalValuesOnly;
     private bool _groupedViewDirty = true;
     private string _lastSelectionKey = string.Empty;
+    private string _lastActiveDocumentPath = string.Empty;
     private DateTime _lastSelectionUpdateUtc = DateTime.MinValue;
-    private static readonly TimeSpan SelectionPollInterval = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan SelectionPollInterval = TimeSpan.FromMilliseconds(500);
     private const string LocalValuesGroupName = "Local Values";
     private static readonly IReadOnlyDictionary<string, int> CategorySortOrder = new Dictionary<string, int>(
         StringComparer.OrdinalIgnoreCase)
@@ -770,18 +910,20 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             }));
 
         _disposables.Add(Observable.Interval(SelectionPollInterval, RxApp.TaskpoolScheduler)
+            .Where(_ => !string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
             .Where(_ => DateTime.UtcNow - _lastSelectionUpdateUtc >= SelectionPollInterval)
             .SelectMany(_ => Observable.FromAsync(PollSelectedNodesAsync))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(nodes =>
             {
-                string selectionKey = BuildSelectionKey(nodes);
+                string activeDocumentPath = _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;
+                string selectionKey = BuildSelectionKey(activeDocumentPath, nodes);
                 if (string.Equals(selectionKey, _lastSelectionKey, StringComparison.Ordinal))
                 {
                     return;
                 }
 
-                _ = UpdateSelectionAsync(nodes, CancellationToken.None);
+                RunBackground(UpdateSelectionAsync(nodes, CancellationToken.None, activeDocumentPath: activeDocumentPath));
             }));
     }
 
@@ -828,18 +970,58 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         IReadOnlyList<DesignerNodeSummary> selected = await _designer.GetSelectedNodesAsync(cancellationToken);
+        string activeDocumentPath = _designer.ActiveDocumentPath ?? string.Empty;
+        _lastActiveDocumentPath = activeDocumentPath;
         _lastSelectionUpdateUtc = DateTime.UtcNow;
-        _lastSelectionKey = BuildSelectionKey(selected);
-        await UpdateSelectionAsync(selected, cancellationToken, forceReload: true);
+        _lastSelectionKey = BuildSelectionKey(activeDocumentPath, selected);
+        await UpdateSelectionAsync(selected, cancellationToken, forceReload: true, activeDocumentPath: activeDocumentPath);
+    }
+
+    public async Task HandleSelectionChangedAsync(
+        IReadOnlyList<DesignerNodeSummary> selectedNodes,
+        CancellationToken cancellationToken)
+    {
+        string activeDocumentPath = _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;
+        if (selectedNodes.Count == 0 && !string.IsNullOrWhiteSpace(activeDocumentPath))
+        {
+            try
+            {
+                IReadOnlyList<DesignerNodeSummary> refreshed = await _designer.GetSelectedNodesAsync(cancellationToken);
+                if (refreshed.Count > 0)
+                {
+                    selectedNodes = refreshed;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        await UpdateSelectionAsync(selectedNodes, cancellationToken, activeDocumentPath: activeDocumentPath);
+    }
+
+    public async Task HandleDocumentChangedAsync(string? documentPath, CancellationToken cancellationToken)
+    {
+        string normalizedDocumentPath = documentPath ?? string.Empty;
+        _lastActiveDocumentPath = normalizedDocumentPath;
+
+        IReadOnlyList<DesignerNodeSummary> selectedNodes = await _designer.GetSelectedNodesAsync(cancellationToken);
+        await UpdateSelectionAsync(
+            selectedNodes,
+            cancellationToken,
+            forceReload: true,
+            activeDocumentPath: normalizedDocumentPath);
     }
 
     public async Task UpdateSelectionAsync(
         IReadOnlyList<DesignerNodeSummary> selectedNodes,
         CancellationToken cancellationToken,
-        bool forceReload = false)
+        bool forceReload = false,
+        string? activeDocumentPath = null)
     {
+        _lastActiveDocumentPath = activeDocumentPath ?? _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;
         _lastSelectionUpdateUtc = DateTime.UtcNow;
-        string selectionKey = BuildSelectionKey(selectedNodes);
+        string selectionKey = BuildSelectionKey(_lastActiveDocumentPath, selectedNodes);
         if (!forceReload && string.Equals(selectionKey, _lastSelectionKey, StringComparison.Ordinal))
         {
             return;
@@ -861,6 +1043,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 SelectedNodeId = null;
                 SelectedTypeName = null;
                 ClearProperties();
+                ClearEvents();
                 return;
             }
 
@@ -873,40 +1056,17 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             await Task.WhenAll(propertiesTask, eventsTask);
             IReadOnlyList<DesignerPropertyInfo> properties = propertiesTask.Result;
             IReadOnlyList<DesignerEventInfo> events = eventsTask.Result;
-            ClearProperties();
-            ClearEvents();
-            foreach (DesignerPropertyInfo property in properties
-                .OrderBy(p => p.Category ?? string.Empty)
-                .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                PropertyEntryViewModel entry = new(
-                    node.NodeId,
-                    property.Name,
-                    property.PropertyType,
-                    property.Value,
-                    property.IsReadOnly,
-                    property.Category,
-                    property.Description,
-                    property.DefaultValue,
-                    property.IsAttached,
-                    property.OwnerType,
-                    property.EnumOptions,
-                    ResolveDescriptor(property.PropertyType));
 
-                HookPropertyEntry(entry);
-                _properties.Add(entry);
-            }
-
-            foreach (DesignerEventInfo evt in events.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                EventEntryViewModel entry = new(node.NodeId, evt.Name, evt.HandlerName, evt.Description);
-                HookEventEntry(entry);
-                _events.Add(entry);
-            }
-
-            RebuildGroupedView();
+            UpdatePropertyEntries(node, properties);
+            UpdateEventEntries(node, events);
+            PropertiesView.Refresh();
+            EventsView.Refresh();
+            RequestGroupedRefresh();
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch
         {
         }
         finally
@@ -1055,7 +1215,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             property.IsAttached,
             property.OwnerType,
             property.EnumOptions,
-            ResolveDescriptor(property.PropertyType));
+            ResolveDescriptor(property.Name, property.PropertyType));
     }
 
     private static bool CanReusePropertyEntry(PropertyEntryViewModel entry, string nodeId, DesignerPropertyInfo property)
@@ -1101,9 +1261,8 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         return true;
     }
 
-    private string BuildSelectionKey(IReadOnlyList<DesignerNodeSummary> selectedNodes)
+    private static string BuildSelectionKey(string documentPath, IReadOnlyList<DesignerNodeSummary> selectedNodes)
     {
-        string documentPath = _designer.ActiveDocumentPath ?? string.Empty;
         if (selectedNodes.Count == 0)
         {
             return documentPath;
@@ -1119,7 +1278,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             .DistinctUntilChanged()
             .Subscribe(value =>
             {
-                _ = ApplyPropertyChangeAsync(entry, value);
+                RunBackground(ApplyPropertyChangeAsync(entry, value));
                 if (!string.IsNullOrWhiteSpace(SearchText))
                 {
                     PropertiesView.Refresh();
@@ -1150,7 +1309,7 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             .DistinctUntilChanged()
             .Subscribe(value =>
             {
-                _ = ApplyEventChangeAsync(entry, value);
+                RunBackground(ApplyEventChangeAsync(entry, value));
                 if (!string.IsNullOrWhiteSpace(SearchText))
                 {
                     EventsView.Refresh();
@@ -1413,9 +1572,20 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
         return item is PropertyRowViewModel row && FilterProperty(row.Property);
     }
 
-    private Task<IReadOnlyList<DesignerNodeSummary>> PollSelectedNodesAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<DesignerNodeSummary>> PollSelectedNodesAsync(CancellationToken cancellationToken)
     {
-        return _designer.GetSelectedNodesAsync(cancellationToken);
+        try
+        {
+            return await _designer.GetSelectedNodesAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return Array.Empty<DesignerNodeSummary>();
+        }
+        catch
+        {
+            return Array.Empty<DesignerNodeSummary>();
+        }
     }
 
     private bool MatchesPropertyFilter(PropertyEntryViewModel entry)
@@ -1436,146 +1606,27 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
             || entry.Category.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
     }
 
-    private PropertyEditorDescriptor? ResolveDescriptor(string propertyType)
+    private PropertyEditorDescriptor? ResolveDescriptor(string propertyName, string propertyType)
     {
-        if (string.IsNullOrWhiteSpace(propertyType))
-        {
-            return null;
-        }
-
-        if (_descriptorCache.TryGetValue(propertyType, out PropertyEditorDescriptor? cached))
+        string cacheKey = (propertyType ?? string.Empty).Trim()
+            + "||"
+            + (propertyName ?? string.Empty).Trim();
+        if (_descriptorCache.TryGetValue(cacheKey, out PropertyEditorDescriptor? cached))
         {
             return cached;
         }
 
-        PropertyEditorDescriptor? descriptor = null;
-        foreach (string candidate in EnumerateDescriptorLookupKeys(propertyType))
-        {
-            if (_propertyEditors.TryGet(candidate, out descriptor))
-            {
-                break;
-            }
-        }
-
-        _descriptorCache[propertyType] = descriptor;
+        _propertyEditors.TryResolve(propertyName, propertyType, out PropertyEditorDescriptor? descriptor);
+        _descriptorCache[cacheKey] = descriptor;
         return descriptor;
     }
 
-    private static IEnumerable<string> EnumerateDescriptorLookupKeys(string propertyType)
+    private static void RunBackground(Task task)
     {
-        string trimmed = propertyType.Trim();
-        if (!string.IsNullOrWhiteSpace(trimmed))
-        {
-            yield return trimmed;
-        }
-
-        string normalized = NormalizeDescriptorTypeName(propertyType);
-        if (!string.IsNullOrWhiteSpace(normalized)
-            && !string.Equals(normalized, trimmed, StringComparison.OrdinalIgnoreCase))
-        {
-            yield return normalized;
-        }
-
-        string simple = GetSimpleTypeName(normalized);
-        if (!string.IsNullOrWhiteSpace(simple)
-            && !string.Equals(simple, normalized, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(simple, trimmed, StringComparison.OrdinalIgnoreCase))
-        {
-            yield return simple;
-        }
-    }
-
-    private static string GetSimpleTypeName(string propertyType)
-    {
-        if (string.IsNullOrWhiteSpace(propertyType))
-        {
-            return string.Empty;
-        }
-
-        string normalized = propertyType.Trim();
-        if (normalized.EndsWith("[]", StringComparison.Ordinal))
-        {
-            normalized = normalized[..^2];
-        }
-
-        int genericTick = normalized.IndexOf('`');
-        if (genericTick > 0)
-        {
-            normalized = normalized[..genericTick];
-        }
-
-        int genericStart = normalized.IndexOf('<');
-        if (genericStart > 0)
-        {
-            normalized = normalized[..genericStart];
-        }
-
-        int lastDot = normalized.LastIndexOf('.');
-        if (lastDot >= 0 && lastDot < normalized.Length - 1)
-        {
-            normalized = normalized[(lastDot + 1)..];
-        }
-
-        int lastPlus = normalized.LastIndexOf('+');
-        if (lastPlus >= 0 && lastPlus < normalized.Length - 1)
-        {
-            normalized = normalized[(lastPlus + 1)..];
-        }
-
-        return normalized;
-    }
-
-    private static string NormalizeDescriptorTypeName(string propertyType)
-    {
-        if (string.IsNullOrWhiteSpace(propertyType))
-        {
-            return string.Empty;
-        }
-
-        string normalized = propertyType.Trim();
-        if (normalized.StartsWith("global::", StringComparison.Ordinal))
-        {
-            normalized = normalized["global::".Length..];
-        }
-
-        normalized = normalized.TrimEnd('?');
-        if (normalized.StartsWith("System.Nullable<", StringComparison.OrdinalIgnoreCase)
-            && normalized.EndsWith(">", StringComparison.Ordinal))
-        {
-            normalized = normalized["System.Nullable<".Length..^1].Trim();
-        }
-        else if (normalized.StartsWith("Nullable<", StringComparison.OrdinalIgnoreCase)
-                 && normalized.EndsWith(">", StringComparison.Ordinal))
-        {
-            normalized = normalized["Nullable<".Length..^1].Trim();
-        }
-        else if (normalized.StartsWith("System.Nullable`1", StringComparison.OrdinalIgnoreCase)
-                 || normalized.StartsWith("Nullable`1", StringComparison.OrdinalIgnoreCase))
-        {
-            int start = normalized.IndexOf('[');
-            int end = normalized.LastIndexOf(']');
-            if (start >= 0 && end > start)
-            {
-                string inner = normalized[(start + 1)..end].Trim();
-                inner = inner.Trim('[', ']');
-                int comma = inner.IndexOf(',');
-                if (comma > 0)
-                {
-                    inner = inner[..comma];
-                }
-
-                if (!string.IsNullOrWhiteSpace(inner))
-                {
-                    normalized = inner.Trim();
-                }
-            }
-        }
-
-        if (normalized.StartsWith("global::", StringComparison.Ordinal))
-        {
-            normalized = normalized["global::".Length..];
-        }
-
-        return normalized.Trim();
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

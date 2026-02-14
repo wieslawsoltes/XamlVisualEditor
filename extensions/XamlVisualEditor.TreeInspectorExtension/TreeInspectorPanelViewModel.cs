@@ -139,7 +139,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
     private bool _isPolling;
     private readonly string _nodeGlyph;
     private DateTime _lastSelectionUpdateUtc = DateTime.MinValue;
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
 
     public TreeInspectorPanelViewModel(IDesignerHost designer, TreeKind kind)
     {
@@ -159,12 +159,12 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
                     return;
                 }
 
-                _ = SelectNodeAsync(node.NodeId);
+                RunBackground(SelectNodeAsync(node.NodeId));
             }));
 
         _disposables.Add(Observable.Interval(PollInterval, RxApp.TaskpoolScheduler)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(tick => { _ = PollDesignerAsync(); }));
+            .Subscribe(_ => { RunBackground(PollDesignerAsync()); }));
     }
 
     public TreeInspectorGridViewModel TreeModel { get; }
@@ -181,6 +181,45 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         await RefreshAsync(cancellationToken);
     }
 
+    public async Task HandleSelectionChangedAsync(
+        IReadOnlyList<DesignerNodeSummary> selectedNodes,
+        CancellationToken cancellationToken)
+    {
+        _lastSelectionUpdateUtc = DateTime.UtcNow;
+        string? activeDocumentPath = _designer.ActiveDocumentPath;
+        bool activeDocumentChanged = !string.Equals(
+            _lastActiveDocumentPath,
+            activeDocumentPath,
+            StringComparison.OrdinalIgnoreCase);
+        if (activeDocumentChanged)
+        {
+            await RefreshAsync(cancellationToken);
+            return;
+        }
+
+        if (selectedNodes.Count == 0 && !string.IsNullOrWhiteSpace(activeDocumentPath))
+        {
+            try
+            {
+                IReadOnlyList<DesignerNodeSummary> refreshed = await _designer.GetSelectedNodesAsync(cancellationToken);
+                if (refreshed.Count > 0)
+                {
+                    selectedNodes = refreshed;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        UpdateSelection(selectedNodes);
+    }
+
+    public Task HandleDocumentChangedAsync(string? _, CancellationToken cancellationToken)
+    {
+        return RefreshAsync(cancellationToken);
+    }
+
     public async Task RefreshAsync(CancellationToken cancellationToken)
     {
         CancellationTokenSource? previous = _loadCts;
@@ -195,8 +234,11 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
 
         _lastActiveDocumentPath = _designer.ActiveDocumentPath;
         _lastSelectionUpdateUtc = DateTime.UtcNow;
-        _snapshot = nodes;
-        RebuildTree();
+        if (!AreSnapshotsEquivalent(_snapshot, nodes))
+        {
+            _snapshot = nodes;
+            RebuildTree();
+        }
 
         IReadOnlyList<DesignerNodeSummary> selectedNodes = await _designer.GetSelectedNodesAsync(token);
         UpdateSelection(selectedNodes, refreshWhenMissing: false);
@@ -233,9 +275,9 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         _lastSelectedNodeId = selectedId;
         if (!_nodeIndex.TryGetValue(selectedId, out TreeInspectorNodeViewModel? match))
         {
-            if (refreshWhenMissing)
+            if (refreshWhenMissing && string.IsNullOrWhiteSpace(SearchText))
             {
-                _ = RefreshAsync(CancellationToken.None);
+                RunBackground(RefreshAsync(CancellationToken.None));
             }
             return;
         }
@@ -260,6 +302,9 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
             await _designer.SelectNodeAsync(nodeId, token);
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch
         {
         }
     }
@@ -329,6 +374,9 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         catch (OperationCanceledException)
         {
         }
+        catch
+        {
+        }
         finally
         {
             _isPolling = false;
@@ -337,6 +385,16 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
 
     private void RebuildTree()
     {
+        if (_snapshot.Count == 0 && TreeModel.RootItems.Count == 0)
+        {
+            if (_nodeIndex.Count > 0)
+            {
+                _nodeIndex = new Dictionary<string, TreeInspectorNodeViewModel>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            return;
+        }
+
         string? selectedId = TreeModel.SelectedNode?.NodeId;
         CollectExpandedIds();
 
@@ -382,9 +440,9 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         ISet<string> expandedIds,
         string nodeGlyph)
     {
-        Dictionary<string, TreeInspectorNodeViewModel> entries = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, List<TreeInspectorNodeViewModel>> children = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, TreeInspectorNodeViewModel> index = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, TreeInspectorNodeViewModel> entries = new(nodes.Count, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<TreeInspectorNodeViewModel>> children = new(nodes.Count, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, TreeInspectorNodeViewModel> index = new(nodes.Count, StringComparer.OrdinalIgnoreCase);
 
         foreach (DesignerNodeSummary node in nodes)
         {
@@ -448,7 +506,7 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
         }
 
         string search = filter.Trim();
-        List<TreeInspectorNodeViewModel> filteredRoots = new();
+        List<TreeInspectorNodeViewModel> filteredRoots = new(roots.Count);
         foreach (TreeInspectorNodeViewModel root in roots)
         {
             TreeInspectorNodeViewModel? filtered = FilterTree(root, children, search, index);
@@ -531,8 +589,48 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
             || node.TypeName.Contains(search, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool AreSnapshotsEquivalent(
+        IReadOnlyList<DesignerNodeSummary> current,
+        IReadOnlyList<DesignerNodeSummary> next)
+    {
+        if (ReferenceEquals(current, next))
+        {
+            return true;
+        }
+
+        if (current.Count != next.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < current.Count; i++)
+        {
+            DesignerNodeSummary left = current[i];
+            DesignerNodeSummary right = next[i];
+            if (!string.Equals(left.NodeId, right.NodeId, StringComparison.Ordinal)
+                || !string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal)
+                || !string.Equals(left.DisplayName, right.DisplayName, StringComparison.Ordinal)
+                || !string.Equals(left.ParentNodeId, right.ParentNodeId, StringComparison.Ordinal)
+                || left.ChildCount != right.ChildCount)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static string GetNodeGlyph(TreeKind kind)
     {
         return kind == TreeKind.Visual ? "◆" : "○";
+    }
+
+    private static void RunBackground(Task task)
+    {
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 }

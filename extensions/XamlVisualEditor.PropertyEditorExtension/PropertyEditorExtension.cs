@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,14 +47,14 @@ public sealed class PropertyEditorExtension : IXveExtension
             ViewId,
             new PropertyEditorPanelViewProvider(viewModel)));
 
-        EventHandler<DesignerSelectionChangedEventArgs> selectionHandler = (_, _) =>
+        EventHandler<DesignerSelectionChangedEventArgs> selectionHandler = (_, e) =>
         {
-            _ = RefreshSelectionAsync(context, viewModel, CancellationToken.None);
+            RunBackground(viewModel.HandleSelectionChangedAsync(e.SelectedNodes, CancellationToken.None));
         };
 
-        EventHandler<DesignerDocumentChangedEventArgs> documentHandler = (_, _) =>
+        EventHandler<DesignerDocumentChangedEventArgs> documentHandler = (_, e) =>
         {
-            _ = viewModel.InitializeAsync(CancellationToken.None);
+            RunBackground(viewModel.HandleDocumentChangedAsync(e.DocumentPath, CancellationToken.None));
         };
 
         context.Designer.SelectionChanged += selectionHandler;
@@ -70,13 +69,13 @@ public sealed class PropertyEditorExtension : IXveExtension
         await viewModel.InitializeAsync(cancellationToken);
     }
 
-    private static async Task RefreshSelectionAsync(
-        ExtensionContext context,
-        PropertyEditorPanelViewModel viewModel,
-        CancellationToken cancellationToken)
+    private static void RunBackground(Task task)
     {
-        IReadOnlyList<DesignerNodeSummary> selected = await context.Designer.GetSelectedNodesAsync(cancellationToken);
-        await viewModel.UpdateSelectionAsync(selected, cancellationToken);
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private sealed class PropertyEditorPanelViewProvider : ICustomViewProvider
