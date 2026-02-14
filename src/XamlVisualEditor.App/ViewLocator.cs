@@ -14,10 +14,19 @@ using XamlVisualEditor.IdeBridgeExtension;
 using XamlVisualEditor.IdeBridgeExtension.Views;
 using XamlVisualEditor.McpExtension;
 using XamlVisualEditor.McpExtension.Views;
-using XamlVisualEditor.PropertyEditor;
+using XamlVisualEditor.NavigationExtension;
+using XamlVisualEditor.NavigationExtension.Views;
+using XamlVisualEditor.OutputExtension;
+using XamlVisualEditor.OutputExtension.Views;
+using XamlVisualEditor.PropertyEditorExtension;
+using XamlVisualEditor.PropertyEditorExtension.Views;
+using XamlVisualEditor.ToolboxExtension;
+using XamlVisualEditor.ToolboxExtension.Views;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal.Avalonia.Views;
+using XamlVisualEditor.TreeInspectorExtension;
+using XamlVisualEditor.TreeInspectorExtension.Views;
 using XamlVisualEditor.TreeView;
 
 namespace XamlVisualEditor.App;
@@ -44,24 +53,12 @@ public sealed class ViewLocator : IDataTemplate
                     return new DesignerDocumentView { DataContext = designer };
                 case CanvasMdiDocument doc when doc.DocumentViewModel is TextDocumentViewModel text:
                     return new TextFileView { DataContext = text };
-                case ToolboxTool tool:
-                    return new ToolboxView { DataContext = tool.ToolboxViewModel };
                 case SolutionExplorerTool tool:
                     return new SolutionExplorerView { DataContext = tool.SolutionExplorerViewModel };
-                case PropertyEditorTool tool:
-                    return new PropertyEditorToolView { DataContext = tool };
-                case VisualTreeTool tool:
-                    return new VisualTreeToolView { DataContext = tool };
-                case LogicalTreeTool tool:
-                    return new LogicalTreeToolView { DataContext = tool };
                 case OutputTool tool:
                     return new OutputView { DataContext = tool.OutputViewModel };
                 case TerminalTool tool:
                     return new TerminalToolView { DataContext = tool };
-                case DebugSettingsTool tool:
-                    return new DebugSettingsView { DataContext = tool.DebugSettingsViewModel };
-                case LspSettingsTool tool:
-                    return new LspSettingsView { DataContext = tool.LspSettingsViewModel };
                 case BreakpointsTool tool:
                     return new BreakpointsView { DataContext = tool.BreakpointsViewModel };
                 case CallStackTool tool:
@@ -70,12 +67,6 @@ public sealed class ViewLocator : IDataTemplate
                     return new LocalsView { DataContext = tool.LocalsViewModel };
                 case WatchesTool tool:
                     return new WatchesView { DataContext = tool.WatchesViewModel };
-                case ReferencesTool tool:
-                    return new ReferencesView { DataContext = tool.ReferencesViewModel };
-                case CollaborationTool tool:
-                    return new CollaborationPanelView { DataContext = tool.CollaborationViewModel };
-                case AnimationEditorTool tool:
-                    return new AnimationEditorView { DataContext = tool.AnimationEditor };
                 case ExtensionTool tool:
                     return new ExtensionToolView { DataContext = tool };
                 case ExtensionManagerTool tool:
@@ -96,12 +87,10 @@ public sealed class ViewLocator : IDataTemplate
             CallStackViewModel => new CallStackView(),
             LocalsViewModel => new LocalsView(),
             WatchesViewModel => new WatchesView(),
-            ReferencesViewModel => new ReferencesView(),
             CodeEditorViewModel => new XamlCodeEditorView(),
             TextDocumentViewModel => new TextFileView(),
             InfiniteCanvasViewModel => new InfiniteCanvasView(),
             DesignSurfaceViewModel => new DesignSurfaceView(),
-            PropertyEditorViewModel => new PropertyEditorView(),
             CollaborationPanelViewModel => new CollaborationPanelView(),
             VisualTreeNodeViewModel => new VisualTreePanelView(),
             LogicalTreeNodeViewModel => new LogicalTreePanelView(),
@@ -110,6 +99,12 @@ public sealed class ViewLocator : IDataTemplate
             GitPanelViewModel => new GitPanelView(),
             IdeBridgePanelViewModel => new IdeBridgePanelView(),
             McpPanelViewModel => new McpPanelView(),
+            ReferencesPanelViewModel => new ReferencesPanelView(),
+            OutputPanelViewModel => new OutputPanelView(),
+            ProblemsPanelViewModel => new ProblemsPanelView(),
+            PropertyEditorPanelViewModel => new PropertyEditorPanelView(),
+            ToolboxPanelViewModel => new ToolboxPanelView(),
+            TreeInspectorPanelViewModel => new TreeInspectorPanelView(),
             ExtensionTreeViewModel => new ExtensionTreeView(),
             ExtensionWebviewViewModel => new ExtensionWebviewView(),
             ExtensionManagerViewModel => new ExtensionManagerView(),
@@ -138,7 +133,6 @@ public sealed class ViewLocator : IDataTemplate
             or TextDocumentViewModel
             or InfiniteCanvasViewModel
             or DesignSurfaceViewModel
-            or PropertyEditorViewModel
             or CollaborationPanelViewModel
             or VisualTreeNodeViewModel
             or LogicalTreeNodeViewModel
@@ -147,6 +141,10 @@ public sealed class ViewLocator : IDataTemplate
             or GitPanelViewModel
             or IdeBridgePanelViewModel
             or McpPanelViewModel
+            or OutputPanelViewModel
+            or PropertyEditorPanelViewModel
+            or ToolboxPanelViewModel
+            or TreeInspectorPanelViewModel
             or ExtensionTreeViewModel
             or ExtensionWebviewViewModel
             or ExtensionManagerViewModel;

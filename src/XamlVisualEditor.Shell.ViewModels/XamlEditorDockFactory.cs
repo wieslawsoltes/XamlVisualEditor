@@ -13,35 +13,10 @@ using Dock.Serializer.SystemTextJson;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
-using XamlVisualEditor.Collaboration.UI;
 using XamlVisualEditor.Extensions;
-using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.Shell;
-
-/// <summary>
-/// Dock tool for the toolbox panel.
-/// </summary>
-public sealed class ToolboxTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public ToolboxViewModel? ToolboxViewModel { get; set; }
-
-    public ToolboxTool()
-    {
-        Id = "Toolbox";
-        Title = "Toolbox";
-    }
-
-    public ToolboxTool(ToolboxViewModel toolboxViewModel)
-    {
-        ToolboxViewModel = toolboxViewModel;
-        Id = "Toolbox";
-        Title = "Toolbox";
-    }
-}
 
 /// <summary>
 /// Dock tool for the solution explorer panel.
@@ -63,100 +38,6 @@ public sealed class SolutionExplorerTool : Tool
         SolutionExplorerViewModel = solutionExplorerViewModel;
         Id = "SolutionExplorer";
         Title = "Solution Explorer";
-    }
-}
-
-/// <summary>
-/// Dock tool for the property editor panel.
-/// </summary>
-public sealed class PropertyEditorTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public MainWindowViewModel? MainViewModel { get; set; }
-
-    internal static MainWindowViewModel? DefaultMainViewModel { get; set; }
-
-    [IgnoreDataMember]
-    [Reactive]
-    public PropertyEditorViewModel? PropertyEditor { get; private set; }
-
-    private IDisposable? _activeDocSubscription;
-
-    public PropertyEditorTool()
-    {
-        Id = "Properties";
-        Title = "Properties";
-        MainViewModel = DefaultMainViewModel;
-    }
-
-    public PropertyEditorTool(MainWindowViewModel mainViewModel)
-    {
-        MainViewModel = mainViewModel;
-        Id = "Properties";
-        Title = "Properties";
-    }
-
-    public void Bind(MainWindowViewModel mainViewModel)
-    {
-        MainViewModel = mainViewModel;
-        _activeDocSubscription?.Dispose();
-        _activeDocSubscription = mainViewModel.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .Select(doc => doc?.PropertyEditor)
-            .Subscribe(vm => PropertyEditor = vm);
-    }
-}
-
-/// <summary>
-/// Dock tool for the visual tree panel.
-/// </summary>
-public sealed class VisualTreeTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public MainWindowViewModel? MainViewModel { get; set; }
-
-    internal static MainWindowViewModel? DefaultMainViewModel { get; set; }
-
-    public VisualTreeTool()
-    {
-        Id = "VisualTree";
-        Title = "Visual Tree";
-        MainViewModel = DefaultMainViewModel;
-    }
-
-    public VisualTreeTool(MainWindowViewModel mainViewModel)
-    {
-        MainViewModel = mainViewModel;
-
-        Id = "VisualTree";
-        Title = "Visual Tree";
-    }
-}
-
-/// <summary>
-/// Dock tool for the logical tree panel.
-/// </summary>
-public sealed class LogicalTreeTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public MainWindowViewModel? MainViewModel { get; set; }
-
-    internal static MainWindowViewModel? DefaultMainViewModel { get; set; }
-
-    public LogicalTreeTool()
-    {
-        Id = "LogicalTree";
-        Title = "Logical Tree";
-        MainViewModel = DefaultMainViewModel;
-    }
-
-    public LogicalTreeTool(MainWindowViewModel mainViewModel)
-    {
-        MainViewModel = mainViewModel;
-        Id = "LogicalTree";
-        Title = "Logical Tree";
     }
 }
 
@@ -203,52 +84,6 @@ public sealed class TerminalTool : Tool
         TerminalViewModel = terminalViewModel;
         Id = "Terminal-" + terminalViewModel.Id.ToString("N");
         Title = terminalViewModel.Title;
-    }
-}
-
-/// <summary>
-/// Dock tool for the debug settings panel.
-/// </summary>
-public sealed class DebugSettingsTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public DebugSettingsViewModel? DebugSettingsViewModel { get; set; }
-
-    public DebugSettingsTool()
-    {
-        Id = "DebugSettings";
-        Title = "Debug Settings";
-    }
-
-    public DebugSettingsTool(DebugSettingsViewModel debugSettingsViewModel)
-    {
-        DebugSettingsViewModel = debugSettingsViewModel;
-        Id = "DebugSettings";
-        Title = "Debug Settings";
-    }
-}
-
-/// <summary>
-/// Dock tool for the LSP settings panel.
-/// </summary>
-public sealed class LspSettingsTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public LspSettingsViewModel? LspSettingsViewModel { get; set; }
-
-    public LspSettingsTool()
-    {
-        Id = "LspSettings";
-        Title = "LSP Settings";
-    }
-
-    public LspSettingsTool(LspSettingsViewModel lspSettingsViewModel)
-    {
-        LspSettingsViewModel = lspSettingsViewModel;
-        Id = "LspSettings";
-        Title = "LSP Settings";
     }
 }
 
@@ -345,52 +180,6 @@ public sealed class WatchesTool : Tool
 }
 
 /// <summary>
-/// Dock tool for the animation editor panel.
-/// </summary>
-public sealed class AnimationEditorTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public AnimationEditorViewModel? AnimationEditor { get; set; }
-
-    public AnimationEditorTool()
-    {
-        Id = "AnimationEditor";
-        Title = "Animation";
-    }
-
-    public AnimationEditorTool(AnimationEditorViewModel animationEditor)
-    {
-        AnimationEditor = animationEditor;
-        Id = "AnimationEditor";
-        Title = "Animation";
-    }
-}
-
-/// <summary>
-/// Dock tool for the collaboration panel.
-/// </summary>
-public sealed class CollaborationTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public CollaborationPanelViewModel? CollaborationViewModel { get; set; }
-
-    public CollaborationTool()
-    {
-        Id = "Collaboration";
-        Title = "Collaboration";
-    }
-
-    public CollaborationTool(CollaborationPanelViewModel collaborationViewModel)
-    {
-        CollaborationViewModel = collaborationViewModel;
-        Id = "Collaboration";
-        Title = "Collaboration";
-    }
-}
-
-/// <summary>
 /// Dock tool for extension management.
 /// </summary>
 public sealed class ExtensionManagerTool : Tool
@@ -442,29 +231,6 @@ public sealed class ExtensionTool : Tool
     public static string BuildId(string viewId)
     {
         return IdPrefix + viewId;
-    }
-}
-
-/// <summary>
-/// Dock tool for the references panel.
-/// </summary>
-public sealed class ReferencesTool : Tool
-{
-    [IgnoreDataMember]
-    [Reactive]
-    public ReferencesViewModel? ReferencesViewModel { get; set; }
-
-    public ReferencesTool()
-    {
-        Id = "References";
-        Title = "References";
-    }
-
-    public ReferencesTool(ReferencesViewModel referencesViewModel)
-    {
-        ReferencesViewModel = referencesViewModel;
-        Id = "References";
-        Title = "References";
     }
 }
 
@@ -544,9 +310,6 @@ public sealed class XamlEditorDockFactory : Factory
     {
         _mainVm = mainVm;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<XamlEditorDockFactory>.Instance;
-        PropertyEditorTool.DefaultMainViewModel = mainVm;
-        VisualTreeTool.DefaultMainViewModel = mainVm;
-        LogicalTreeTool.DefaultMainViewModel = mainVm;
     }
 
     /// <summary>
@@ -554,25 +317,14 @@ public sealed class XamlEditorDockFactory : Factory
     /// </summary>
     public IRootDock CreateDefaultLayout()
     {
-        // Left tools: Toolbox
-        ToolboxTool toolboxTool = new(_mainVm.Toolbox);
+        // Left tools: extensions will populate
 
-        // Right tools: Properties, Visual Tree, Logical Tree
-        PropertyEditorTool propertyTool = new(_mainVm);
-        VisualTreeTool visualTreeTool = new(_mainVm);
-        LogicalTreeTool logicalTreeTool = new(_mainVm);
-
-        // Bottom tools: Output, Collaboration
+        // Bottom tools: output and debugging panels (extensions contribute the rest).
         OutputTool outputTool = new(_mainVm.Output);
-        DebugSettingsTool debugSettingsTool = new(_mainVm.DebugSettings);
-        LspSettingsTool lspSettingsTool = new(_mainVm.LspSettings);
         BreakpointsTool breakpointsTool = new(_mainVm.Breakpoints);
         CallStackTool callStackTool = new(_mainVm.CallStack);
         LocalsTool localsTool = new(_mainVm.Locals);
         WatchesTool watchesTool = new(_mainVm.Watches);
-        ReferencesTool referencesTool = new(_mainVm.References);
-        CollaborationTool collabTool = new(_mainVm.Collaboration);
-        AnimationEditorTool animationTool = new(_mainVm.AnimationEditor);
         ExtensionManagerTool extensionManagerTool = new(_mainVm.ExtensionManager);
 
         // Left tool dock
@@ -581,8 +333,8 @@ public sealed class XamlEditorDockFactory : Factory
             Id = "LeftToolDock",
             Title = "Left Tools",
             Proportion = 0.2,
-            ActiveDockable = toolboxTool,
-            VisibleDockables = CreateList<IDockable>(toolboxTool),
+            ActiveDockable = null,
+            VisibleDockables = CreateList<IDockable>(),
             Alignment = Alignment.Left
         };
 
@@ -592,8 +344,8 @@ public sealed class XamlEditorDockFactory : Factory
             Id = "RightToolDock",
             Title = "Right Tools",
             Proportion = 0.25,
-            ActiveDockable = propertyTool,
-            VisibleDockables = CreateList<IDockable>(propertyTool, visualTreeTool, logicalTreeTool),
+            ActiveDockable = null,
+            VisibleDockables = CreateList<IDockable>(),
             Alignment = Alignment.Right
         };
 
@@ -606,15 +358,10 @@ public sealed class XamlEditorDockFactory : Factory
             ActiveDockable = outputTool,
             VisibleDockables = CreateList<IDockable>(
                 outputTool,
-                referencesTool,
-                debugSettingsTool,
-                lspSettingsTool,
                 breakpointsTool,
                 callStackTool,
                 localsTool,
                 watchesTool,
-                animationTool,
-                collabTool,
                 extensionManagerTool),
             Alignment = Alignment.Bottom
         };
@@ -675,52 +422,16 @@ public sealed class XamlEditorDockFactory : Factory
     /// </summary>
     public void ConfigureToolViewModels(IRootDock rootDock)
     {
-        ToolboxTool? toolboxTool = FindDockable<ToolboxTool>(rootDock, "Toolbox");
-        if (toolboxTool is not null)
-        {
-            toolboxTool.ToolboxViewModel = _mainVm.Toolbox;
-        }
-
         SolutionExplorerTool? solutionTool = FindDockable<SolutionExplorerTool>(rootDock, "SolutionExplorer");
         if (solutionTool is not null)
         {
             solutionTool.SolutionExplorerViewModel = _mainVm.SolutionExplorer;
         }
 
-        PropertyEditorTool? propertyTool = FindDockable<PropertyEditorTool>(rootDock, "Properties");
-        if (propertyTool is not null)
-        {
-            propertyTool.Bind(_mainVm);
-        }
-
-        VisualTreeTool? visualTreeTool = FindDockable<VisualTreeTool>(rootDock, "VisualTree");
-        if (visualTreeTool is not null)
-        {
-            visualTreeTool.MainViewModel = _mainVm;
-        }
-
-        LogicalTreeTool? logicalTreeTool = FindDockable<LogicalTreeTool>(rootDock, "LogicalTree");
-        if (logicalTreeTool is not null)
-        {
-            logicalTreeTool.MainViewModel = _mainVm;
-        }
-
         OutputTool? outputTool = FindDockable<OutputTool>(rootDock, "Output");
         if (outputTool is not null)
         {
             outputTool.OutputViewModel = _mainVm.Output;
-        }
-
-        DebugSettingsTool? debugSettingsTool = FindDockable<DebugSettingsTool>(rootDock, "DebugSettings");
-        if (debugSettingsTool is not null)
-        {
-            debugSettingsTool.DebugSettingsViewModel = _mainVm.DebugSettings;
-        }
-
-        LspSettingsTool? lspSettingsTool = FindDockable<LspSettingsTool>(rootDock, "LspSettings");
-        if (lspSettingsTool is not null)
-        {
-            lspSettingsTool.LspSettingsViewModel = _mainVm.LspSettings;
         }
 
         BreakpointsTool? breakpointsTool = FindDockable<BreakpointsTool>(rootDock, "Breakpoints");
@@ -747,29 +458,11 @@ public sealed class XamlEditorDockFactory : Factory
             watchesTool.WatchesViewModel = _mainVm.Watches;
         }
 
-        ReferencesTool? referencesTool = FindDockable<ReferencesTool>(rootDock, "References");
-        if (referencesTool is not null)
-        {
-            referencesTool.ReferencesViewModel = _mainVm.References;
-        }
-
-        CollaborationTool? collabTool = FindDockable<CollaborationTool>(rootDock, "Collaboration");
-        if (collabTool is not null)
-        {
-            collabTool.CollaborationViewModel = _mainVm.Collaboration;
-        }
-
         ExtensionManagerTool? extensionManagerTool =
             FindDockable<ExtensionManagerTool>(rootDock, "ExtensionsManager");
         if (extensionManagerTool is not null)
         {
             extensionManagerTool.ExtensionManagerViewModel = _mainVm.ExtensionManager;
-        }
-
-        AnimationEditorTool? animationTool = FindDockable<AnimationEditorTool>(rootDock, "AnimationEditor");
-        if (animationTool is not null)
-        {
-            animationTool.AnimationEditor = _mainVm.AnimationEditor;
         }
 
         foreach (ExtensionTool extensionTool in FindDockables<ExtensionTool>(rootDock))
@@ -930,10 +623,12 @@ public sealed class XamlEditorDockFactory : Factory
                 }
 
                 dockables.Insert(insertIndex, tool);
+                toolDock.IsEmpty = false;
             }
             else
             {
                 AddDockable(toolDock, tool);
+                toolDock.IsEmpty = false;
             }
             if (toolDock.ActiveDockable is null || viewModel.ActivateByDefault)
             {
@@ -1049,6 +744,22 @@ public sealed class XamlEditorDockFactory : Factory
             if (rootDock is not null)
             {
                 EnsureLayoutDefaults(rootDock);
+                bool hasLeft = FindDockable<ToolDock>(rootDock, "LeftToolDock") is not null;
+                bool hasRight = FindDockable<ToolDock>(rootDock, "RightToolDock") is not null;
+                bool hasBottom = FindDockable<ToolDock>(rootDock, "BottomToolDock") is not null;
+                bool hasDocuments = FindDockable<DocumentDock>(rootDock, "DocumentDock") is not null;
+                if (!hasLeft || !hasRight || !hasBottom || !hasDocuments)
+                {
+                    if (LogLayoutWarnings)
+                    {
+                        _logger.LogWarning("Dock layout missing required docks. Resetting to defaults.");
+                    }
+                    if (File.Exists(filePath))
+                    {
+                        File.Delete(filePath);
+                    }
+                    return null;
+                }
             }
             return rootDock;
         }
@@ -1078,6 +789,11 @@ public sealed class XamlEditorDockFactory : Factory
 
     public static void EnsureLayoutDefaults(IRootDock rootDock)
     {
+        const double leftWidth = 0.2;
+        const double rightWidth = 0.25;
+        const double bottomHeight = 0.25;
+        const double documentWidth = 0.75;
+
         if (string.IsNullOrWhiteSpace(rootDock.Id))
         {
             rootDock.Id = "Root";
@@ -1115,20 +831,20 @@ public sealed class XamlEditorDockFactory : Factory
         if (bottomDock is not null)
         {
             bottomDock.VisibleDockables ??= new ObservableCollection<IDockable>();
+            if (double.IsNaN(bottomDock.Proportion) || bottomDock.Proportion <= 0)
+            {
+                bottomDock.Proportion = bottomHeight;
+            }
+            if (bottomDock.VisibleDockables.Count > 0)
+            {
+                bottomDock.IsEmpty = false;
+            }
             bool hasBreakpoints = bottomDock.VisibleDockables
                 .OfType<BreakpointsTool>()
                 .Any();
             if (!hasBreakpoints)
             {
                 bottomDock.VisibleDockables.Add(new BreakpointsTool());
-            }
-
-            bool hasDebugSettings = bottomDock.VisibleDockables
-                .OfType<DebugSettingsTool>()
-                .Any();
-            if (!hasDebugSettings)
-            {
-                bottomDock.VisibleDockables.Add(new DebugSettingsTool());
             }
 
             bool hasCallStack = bottomDock.VisibleDockables
@@ -1155,13 +871,40 @@ public sealed class XamlEditorDockFactory : Factory
                 bottomDock.VisibleDockables.Add(new WatchesTool());
             }
 
-            bool hasAnimationTool = bottomDock.VisibleDockables
-                .OfType<AnimationEditorTool>()
-                .Any();
-            if (!hasAnimationTool)
+        }
+
+        ToolDock? leftDock = FindDockable<ToolDock>(rootDock, "LeftToolDock");
+        if (leftDock is not null)
+        {
+            leftDock.VisibleDockables ??= new ObservableCollection<IDockable>();
+            if (double.IsNaN(leftDock.Proportion) || leftDock.Proportion <= 0)
             {
-                bottomDock.VisibleDockables.Add(new AnimationEditorTool());
+                leftDock.Proportion = leftWidth;
             }
+            if (leftDock.VisibleDockables.Count > 0)
+            {
+                leftDock.IsEmpty = false;
+            }
+        }
+
+        ToolDock? rightDock = FindDockable<ToolDock>(rootDock, "RightToolDock");
+        if (rightDock is not null)
+        {
+            rightDock.VisibleDockables ??= new ObservableCollection<IDockable>();
+            if (double.IsNaN(rightDock.Proportion) || rightDock.Proportion <= 0)
+            {
+                rightDock.Proportion = rightWidth;
+            }
+            if (rightDock.VisibleDockables.Count > 0)
+            {
+                rightDock.IsEmpty = false;
+            }
+        }
+
+        DocumentDock? documentDock = FindDockable<DocumentDock>(rootDock, "DocumentDock");
+        if (documentDock is not null && (double.IsNaN(documentDock.Proportion) || documentDock.Proportion <= 0))
+        {
+            documentDock.Proportion = documentWidth;
         }
     }
 
@@ -1170,51 +913,15 @@ public sealed class XamlEditorDockFactory : Factory
         List<Action> restore = new();
 
         DetachToolViewModel(
-            FindDockable<ToolboxTool>(rootDock, "Toolbox"),
-            tool => tool.ToolboxViewModel,
-            (tool, vm) => tool.ToolboxViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
             FindDockable<SolutionExplorerTool>(rootDock, "SolutionExplorer"),
             tool => tool.SolutionExplorerViewModel,
             (tool, vm) => tool.SolutionExplorerViewModel = vm,
             restore);
 
         DetachToolViewModel(
-            FindDockable<PropertyEditorTool>(rootDock, "Properties"),
-            tool => tool.MainViewModel,
-            (tool, vm) => tool.MainViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<VisualTreeTool>(rootDock, "VisualTree"),
-            tool => tool.MainViewModel,
-            (tool, vm) => tool.MainViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<LogicalTreeTool>(rootDock, "LogicalTree"),
-            tool => tool.MainViewModel,
-            (tool, vm) => tool.MainViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
             FindDockable<OutputTool>(rootDock, "Output"),
             tool => tool.OutputViewModel,
             (tool, vm) => tool.OutputViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<DebugSettingsTool>(rootDock, "DebugSettings"),
-            tool => tool.DebugSettingsViewModel,
-            (tool, vm) => tool.DebugSettingsViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<LspSettingsTool>(rootDock, "LspSettings"),
-            tool => tool.LspSettingsViewModel,
-            (tool, vm) => tool.LspSettingsViewModel = vm,
             restore);
 
         DetachToolViewModel(
@@ -1239,18 +946,6 @@ public sealed class XamlEditorDockFactory : Factory
             FindDockable<WatchesTool>(rootDock, "Watches"),
             tool => tool.WatchesViewModel,
             (tool, vm) => tool.WatchesViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<ReferencesTool>(rootDock, "References"),
-            tool => tool.ReferencesViewModel,
-            (tool, vm) => tool.ReferencesViewModel = vm,
-            restore);
-
-        DetachToolViewModel(
-            FindDockable<CollaborationTool>(rootDock, "Collaboration"),
-            tool => tool.CollaborationViewModel,
-            (tool, vm) => tool.CollaborationViewModel = vm,
             restore);
 
         foreach (TerminalTool terminalTool in FindDockables<TerminalTool>(rootDock))

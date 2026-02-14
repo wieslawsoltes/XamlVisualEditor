@@ -56,22 +56,6 @@
                         </DataTemplate>
                     </MenuItem.ItemTemplate>
                 </MenuItem>
-                <ItemsControl ItemsSource="{CompiledBinding FileMenuItems}" Margin="0">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Vertical" Spacing="0" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
-                            <MenuItem Header="{CompiledBinding Title}"
-                                      Command="{CompiledBinding Command}"
-                                      Margin="0"
-                                      Padding="0" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <Separator />
                 <MenuItem Header="_Save" Command="{CompiledBinding SaveDocumentCommand}" InputGesture="Ctrl+S" />
                 <MenuItem Header="Save _All" Command="{CompiledBinding SaveAllCommand}" InputGesture="Ctrl+Shift+S" />
                 <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding FileMenuItems}">
@@ -122,16 +106,27 @@
                 <Separator />
                 <MenuItem Header="Navigate _Back" Command="{CompiledBinding NavigateBackCommand}" InputGesture="Alt+Left" />
                 <MenuItem Header="Navigate _Forward" Command="{CompiledBinding NavigateForwardCommand}" InputGesture="Alt+Right" />
+                <Separator />
+                <MenuItem Header="_Extensions" ItemsSource="{CompiledBinding EditMenuItems}">
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}" />
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_View">
-                <MenuItem Header="_Toolbox" Command="{CompiledBinding ToggleToolboxCommand}" />
-                <MenuItem Header="_Properties" Command="{CompiledBinding TogglePropertiesCommand}" />
-                <MenuItem Header="_Visual Tree" Command="{CompiledBinding ToggleVisualTreeCommand}" />
-                <MenuItem Header="_Logical Tree" Command="{CompiledBinding ToggleLogicalTreeCommand}" />
-                <MenuItem Header="_Output" Command="{CompiledBinding ToggleOutputCommand}" />
-                <MenuItem Header="_References" Command="{CompiledBinding ToggleReferencesCommand}" />
+                <MenuItem Header="_Panels" ItemsSource="{CompiledBinding ViewMenuItems}">
+                    <MenuItem.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
+                            <MenuItem Header="{CompiledBinding Title}"
+                                      Command="{CompiledBinding Command}" />
+                        </DataTemplate>
+                    </MenuItem.ItemTemplate>
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="_Extensions Manager" Command="{CompiledBinding ToggleExtensionsManagerCommand}" />
-                <MenuItem Header="_Animation" Command="{CompiledBinding ToggleAnimationEditorCommand}" />
                 <Separator />
                 <MenuItem Header="_Breakpoints" Command="{CompiledBinding ToggleBreakpointsCommand}" />
                 <MenuItem Header="_Call Stack" Command="{CompiledBinding ToggleCallStackCommand}" />

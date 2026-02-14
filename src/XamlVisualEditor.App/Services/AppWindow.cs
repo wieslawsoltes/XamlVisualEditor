@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -12,6 +14,7 @@ namespace XamlVisualEditor.App.Services;
 public sealed class AppWindow : IWindow
 {
     private readonly MainWindowProvider _windowProvider;
+    private readonly Dictionary<string, AppOutputChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
 
     public AppWindow(MainWindowProvider windowProvider)
     {
@@ -60,8 +63,47 @@ public sealed class AppWindow : IWindow
 
     public IOutputChannel CreateOutputChannel(string name)
     {
-        return new InMemoryOutputChannel(name);
+        lock (_channels)
+        {
+            if (_channels.TryGetValue(name, out AppOutputChannel? existing))
+            {
+                return existing;
+            }
+
+            OutputChannelInfo info = new(name);
+            AppOutputChannel channel = new(
+                info,
+                message => OutputChannelMessage?.Invoke(this, message),
+                cleared => OutputChannelCleared?.Invoke(this, cleared),
+                () => RemoveChannel(info));
+
+            _channels[name] = channel;
+            OutputChannelCreated?.Invoke(this, new OutputChannelEventArgs(info));
+            return channel;
+        }
     }
+
+    public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+    {
+        lock (_channels)
+        {
+            List<OutputChannelInfo> results = new(_channels.Count);
+            foreach (AppOutputChannel channel in _channels.Values)
+            {
+                results.Add(channel.Info);
+            }
+
+            return Task.FromResult<IReadOnlyList<OutputChannelInfo>>(results);
+        }
+    }
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+    public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+    public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+    public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
     {
@@ -108,5 +150,79 @@ public sealed class AppWindow : IWindow
         });
 
         return await dialogTask.ConfigureAwait(false);
+    }
+
+    private void RemoveChannel(OutputChannelInfo info)
+    {
+        lock (_channels)
+        {
+            _channels.Remove(info.Name);
+        }
+
+        OutputChannelRemoved?.Invoke(this, new OutputChannelEventArgs(info));
+    }
+
+    private sealed class AppOutputChannel : IOutputChannel
+    {
+        private readonly Action<OutputChannelMessageEventArgs>? _messageCallback;
+        private readonly Action<OutputChannelClearedEventArgs>? _clearedCallback;
+        private readonly Action? _disposedCallback;
+        private readonly List<string> _lines = new();
+
+        public AppOutputChannel(
+            OutputChannelInfo info,
+            Action<OutputChannelMessageEventArgs>? messageCallback,
+            Action<OutputChannelClearedEventArgs>? clearedCallback,
+            Action? disposedCallback)
+        {
+            Info = info;
+            _messageCallback = messageCallback;
+            _clearedCallback = clearedCallback;
+            _disposedCallback = disposedCallback;
+        }
+
+        public OutputChannelInfo Info { get; }
+
+        public string Name => Info.Name;
+
+        public void Append(string value)
+        {
+            if (_lines.Count == 0)
+            {
+                _lines.Add(value);
+            }
+            else
+            {
+                int last = _lines.Count - 1;
+                _lines[last] = _lines[last] + value;
+            }
+
+            _messageCallback?.Invoke(new OutputChannelMessageEventArgs(Info, value, false));
+        }
+
+        public void AppendLine(string value)
+        {
+            _lines.Add(value);
+            _messageCallback?.Invoke(new OutputChannelMessageEventArgs(Info, value, true));
+        }
+
+        public void Show()
+        {
+        }
+
+        public void Hide()
+        {
+        }
+
+        public void Clear()
+        {
+            _lines.Clear();
+            _clearedCallback?.Invoke(new OutputChannelClearedEventArgs(Info));
+        }
+
+        public void Dispose()
+        {
+            _disposedCallback?.Invoke();
+        }
     }
 }

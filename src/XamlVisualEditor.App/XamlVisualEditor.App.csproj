@@ -39,6 +39,16 @@
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.FileExplorerExtension\XamlVisualEditor.FileExplorerExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.SolutionExplorerExtension\XamlVisualEditor.SolutionExplorerExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.WorkspaceExtension\XamlVisualEditor.WorkspaceExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.ToolboxExtension\XamlVisualEditor.ToolboxExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.PropertyEditorExtension\XamlVisualEditor.PropertyEditorExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.OutputExtension\XamlVisualEditor.OutputExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.NavigationExtension\XamlVisualEditor.NavigationExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.AnimationEditorExtension\XamlVisualEditor.AnimationEditorExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.CollaborationExtension\XamlVisualEditor.CollaborationExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.DebugSettingsExtension\XamlVisualEditor.DebugSettingsExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.LspSettingsExtension\XamlVisualEditor.LspSettingsExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.XamlEditorExtension\XamlVisualEditor.XamlEditorExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.TreeInspectorExtension\XamlVisualEditor.TreeInspectorExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.IdeBridgeExtension\XamlVisualEditor.IdeBridgeExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.McpExtension\XamlVisualEditor.McpExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.VscodeCompatExtension\XamlVisualEditor.VscodeCompatExtension.csproj" />
@@ -54,7 +64,6 @@
     <ProjectReference Include="..\XamlVisualEditor.Designer.DragDrop\XamlVisualEditor.Designer.DragDrop.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Designer.Adorners\XamlVisualEditor.Designer.Adorners.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.TreeView\XamlVisualEditor.TreeView.csproj" />
-    <ProjectReference Include="..\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Language\XamlVisualEditor.Language.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Lsp\XamlVisualEditor.Lsp.csproj" />

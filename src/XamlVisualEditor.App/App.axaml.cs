@@ -35,6 +35,16 @@ using DapDebuggingExtensionEntry = XamlVisualEditor.Debugging.DapExtension.DapDe
 using DotNetSdkDebuggingExtensionEntry = XamlVisualEditor.Debugging.DotNetSdkExtension.DotNetSdkDebuggingExtension;
 using FileExplorerExtensionEntry = XamlVisualEditor.FileExplorerExtension.FileExplorerExtension;
 using SolutionExplorerExtensionEntry = XamlVisualEditor.SolutionExplorerExtension.SolutionExplorerExtension;
+using ToolboxExtensionEntry = XamlVisualEditor.ToolboxExtension.ToolboxExtension;
+using TreeInspectorExtensionEntry = XamlVisualEditor.TreeInspectorExtension.TreeInspectorExtension;
+using NavigationExtensionEntry = XamlVisualEditor.NavigationExtension.NavigationExtension;
+using AnimationEditorExtensionEntry = XamlVisualEditor.AnimationEditorExtension.AnimationEditorExtension;
+using CollaborationExtensionEntry = XamlVisualEditor.CollaborationExtension.CollaborationExtension;
+using DebugSettingsExtensionEntry = XamlVisualEditor.DebugSettingsExtension.DebugSettingsExtension;
+using LspSettingsExtensionEntry = XamlVisualEditor.LspSettingsExtension.LspSettingsExtension;
+using PropertyEditorExtensionEntry = XamlVisualEditor.PropertyEditorExtension.PropertyEditorExtension;
+using OutputExtensionEntry = XamlVisualEditor.OutputExtension.OutputExtension;
+using XamlEditorExtensionEntry = XamlVisualEditor.XamlEditorExtension.XamlEditorExtension;
 using WorkspaceExtensionEntry = XamlVisualEditor.WorkspaceExtension.WorkspaceExtension;
 
 namespace XamlVisualEditor.App;
@@ -134,6 +144,7 @@ public sealed class App : Application
         services.AddSingleton<IWorkspace, InMemoryWorkspace>();
         services.AddSingleton<IWindow, AppWindow>();
         services.AddSingleton<ISettings, InMemorySettingsStore>();
+        services.AddSingleton<IPropertyEditorRegistry, PropertyEditorRegistry>();
         services.AddSingleton<IWorkspaceCommands>(sp => sp.GetRequiredService<MainWindowViewModel>());
         services.AddSingleton<MainWindowProvider>();
         services.AddSingleton<IFolderPicker, AppFolderPicker>();
@@ -162,13 +173,23 @@ public sealed class App : Application
 
         // Extension services
         services.AddSingleton<ICommands, CommandRegistry>();
+        services.AddSingleton<ICommandMetadataRegistry, CommandMetadataRegistry>();
         services.AddSingleton<IExtensionContributionRegistry, ExtensionContributionRegistry>();
         services.AddSingleton<IExtensionViewRegistry, ExtensionViewRegistry>();
         services.AddSingleton<IViews>(sp => sp.GetRequiredService<IExtensionViewRegistry>());
         services.AddSingleton<IExtensionLanguageServices>(sp => sp.GetRequiredService<ExtensionLanguageServiceRegistry>());
+        services.AddSingleton<ILanguageNavigationService, LanguageNavigationServiceAdapter>();
+        services.AddSingleton<INavigationHistoryService, NavigationHistoryServiceAdapter>();
+        services.AddSingleton<IAnimationEditorHost, AnimationEditorHostAdapter>();
+        services.AddSingleton<ICollaborationPanelHost, CollaborationPanelHostAdapter>();
+        services.AddSingleton<IDebugSettingsHost, DebugSettingsHostAdapter>();
+        services.AddSingleton<ILspSettingsHost, LspSettingsHostAdapter>();
         services.AddSingleton<IEditorServices, EditorServicesAdapter>();
+        services.AddSingleton<IDesignerHost, ShellDesignerHost>();
+        services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();
         services.AddSingleton<ITerminalBridge, TerminalBridgeAdapter>();
+        services.AddSingleton<IExtensionViewHost, ExtensionViewHostAdapter>();
         services.AddSingleton<ExtensionPackageLoader>();
         services.AddSingleton<IExtensionPackageStore>(sp => new ExtensionPackageStore(
             ExtensionPackagePaths.GetInstalledRoot(),
@@ -189,6 +210,16 @@ public sealed class App : Application
         services.AddSingleton<IXveExtension, DotNetTemplatesExtensionEntry>();
         services.AddSingleton<IXveExtension, FileExplorerExtensionEntry>();
         services.AddSingleton<IXveExtension, SolutionExplorerExtensionEntry>();
+        services.AddSingleton<IXveExtension, ToolboxExtensionEntry>();
+        services.AddSingleton<IXveExtension, PropertyEditorExtensionEntry>();
+        services.AddSingleton<IXveExtension, OutputExtensionEntry>();
+        services.AddSingleton<IXveExtension, NavigationExtensionEntry>();
+        services.AddSingleton<IXveExtension, XamlEditorExtensionEntry>();
+        services.AddSingleton<IXveExtension, TreeInspectorExtensionEntry>();
+        services.AddSingleton<IXveExtension, AnimationEditorExtensionEntry>();
+        services.AddSingleton<IXveExtension, CollaborationExtensionEntry>();
+        services.AddSingleton<IXveExtension, DebugSettingsExtensionEntry>();
+        services.AddSingleton<IXveExtension, LspSettingsExtensionEntry>();
         services.AddSingleton<IXveExtension, WorkspaceExtensionEntry>();
         services.AddSingleton<IXveExtension, DapDebuggingExtensionEntry>();
         services.AddSingleton<IXveExtension, DotNetSdkDebuggingExtensionEntry>();

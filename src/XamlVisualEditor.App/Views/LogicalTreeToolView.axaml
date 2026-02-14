@@ -1,9 +1,0 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:shell="using:XamlVisualEditor.Shell"
-             xmlns:v="using:XamlVisualEditor.App.Views"
-             x:Class="XamlVisualEditor.App.Views.LogicalTreeToolView"
-             x:DataType="shell:LogicalTreeTool">
-  <v:LogicalTreePanelView
-      DataContext="{CompiledBinding MainViewModel.LogicalTree}" />
-</UserControl>

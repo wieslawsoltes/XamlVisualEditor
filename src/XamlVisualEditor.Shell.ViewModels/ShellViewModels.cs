@@ -40,7 +40,6 @@ using XamlVisualEditor.Designer.Rendering;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 using XamlVisualEditor.Lsp;
-using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Sync;
 using XamlVisualEditor.TreeView;
 using XamlVisualEditor.Xaml.Ast;
@@ -125,13 +124,13 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     // Sub-ViewModels
     public DesignSurfaceViewModel DesignSurface { get; }
     public CodeEditorViewModel CodeEditor { get; }
-    public PropertyEditorViewModel PropertyEditor { get; }
 
     // Services
     public SyncEngine SyncEngine { get; }
     public AstNodeMap NodeMap { get; }
     public ControlFactory ControlFactory { get; }
     public SelectionManager SelectionManager { get; }
+    public ITypeMetadataService? MetadataService => _metadataService;
 
     /// <summary>
     /// Gets or sets the active view mode.
@@ -234,10 +233,9 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         XamlSerializationService serializationService = new();
         NodeMap = new AstNodeMap();
         SyncEngine = new SyncEngine(parsingService, serializationService, NodeMap);
-        SelectionManager = new SelectionManager();
-
         // Create sub-ViewModels
         DesignSurface = new DesignSurfaceViewModel();
+        SelectionManager = DesignSurface.Selection;
         CompletionProviderRegistry completionRegistry = CompletionProviderRegistry.CreateDefault();
         CodeEditor = new CodeEditorViewModel(
             filePath,
@@ -246,22 +244,9 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
             languageRegistry,
             metadataService,
             _loggerFactory?.CreateLogger<CodeEditorViewModel>());
-        PropertyEditor = new PropertyEditorViewModel(
-            NodeMap,
-            metadataService,
-            _loggerFactory?.CreateLogger<PropertyEditorViewModel>());
         ControlFactory = new ControlFactory(
             metadataService,
             _loggerFactory?.CreateLogger<ControlFactory>());
-
-        // Wire property editor changes back to the sync engine
-        PropertyEditor.PropertyValueApplied += _ =>
-        {
-            if (SyncEngine.CurrentDocument is not null)
-            {
-                SyncEngine.NotifyAstChanged(SyncEngine.CurrentDocument, SyncSource.PropertyEditor);
-            }
-        };
 
         // Track modification state
         IDisposable isModifiedSubscription = this.WhenAnyValue(x => x.CodeEditor.IsModified)
@@ -285,53 +270,6 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
         };
 
         // When selected node changes, update property editor
-        IDisposable selectedNodeClearSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
-            .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(id =>
-            {
-                if (id is not null)
-                {
-                    return;
-                }
-
-                Dispatcher.UIThread.Post(() =>
-                {
-                    PropertyEditor.Categories.Clear();
-                    PropertyEditor.FlatProperties.Clear();
-                    PropertyEditor.GroupedRows.Clear();
-                    PropertyEditor.GroupedCollectionView?.Refresh();
-                    PropertyEditor.Events.Clear();
-                    PropertyEditor.SelectedTypeName = null;
-                }, DispatcherPriority.Background);
-            });
-        _disposables.Add(selectedNodeClearSubscription);
-
-        IDisposable selectedNodeLoadSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
-            .ObserveOn(RxApp.MainThreadScheduler)
-            .Where(id => id is not null)
-            .Subscribe(id =>
-            {
-                MutableAstNode? node = NodeMap.FindById(id!.Value);
-                if (node is not MutableAstObjectNode objNode)
-                {
-                    return;
-                }
-
-                Dispatcher.UIThread.Post(() =>
-                {
-                    DesignItem item = new(objNode);
-                    try
-                    {
-                        PropertyEditor.LoadFromDesignItem(item);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning("Property editor update failed: {Message}", ex.Message);
-                    }
-                }, DispatcherPriority.Background);
-            });
-        _disposables.Add(selectedNodeLoadSubscription);
-
         // Sync selection to design surface and code editor caret
         IDisposable selectedNodeSyncSubscription = this.WhenAnyValue(x => x.SelectedNodeId)
             .Subscribe(id =>
@@ -365,6 +303,21 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
                 }
             });
         _disposables.Add(selectedNodeSyncSubscription);
+
+        void OnDesignSurfaceSelectionChanged(IReadOnlyList<IDesignItem> _)
+        {
+            if (DesignSurface.IsSelectionSyncing)
+            {
+                return;
+            }
+
+            Guid? selectedId = DesignSurface.Selection.PrimarySelection?.AstNodeId;
+            SetSelectedNode(selectedId, SyncSource.DesignSurface);
+        }
+
+        DesignSurface.Selection.SelectionChanged += OnDesignSurfaceSelectionChanged;
+        _disposables.Add(Disposable.Create(() =>
+            DesignSurface.Selection.SelectionChanged -= OnDesignSurfaceSelectionChanged));
 
         // Listen for sync events to update trees
         IDisposable syncEventsSubscription = SyncEngine.SyncEvents
@@ -574,7 +527,6 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
             _breakpointsSource.BreakpointsChanged -= OnBreakpointsChanged;
         }
         _disposables.Dispose();
-        PropertyEditor.Dispose();
         CodeEditor.Dispose();
         SyncEngine.Dispose();
     }
@@ -2147,6 +2099,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private string? _activeDebuggerServiceId;
     private readonly IDebugToolInstaller? _debugToolInstaller;
     private readonly IOutputLogSinkAccessor? _outputLogSinkAccessor;
+    private readonly IOutputChannel? _outputChannel;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly XamlVisualEditor.Terminal.ITerminalService? _terminalService;
@@ -2250,6 +2203,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets extension-provided Tools menu items.
     /// </summary>
     public ObservableCollection<ExtensionMenuItemViewModel> ToolsMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided View menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> ViewMenuItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided Edit menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> EditMenuItems { get; } = new();
 
     /// <summary>
     /// Gets extension-provided Tools > Workspace menu items.
@@ -2619,6 +2582,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IDebuggerServiceRegistry? debuggerRegistry = null,
         IDebugToolInstaller? debugToolInstaller = null,
         IOutputLogSinkAccessor? outputLogSinkAccessor = null,
+        IWindow? window = null,
         XamlVisualEditor.Terminal.ITerminalService? terminalService = null,
         ILspSettingsStore? lspSettingsStore = null,
         ICommands? extensionCommands = null,
@@ -2636,6 +2600,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         InitializeDebuggerServices();
         _debugToolInstaller = debugToolInstaller;
         _outputLogSinkAccessor = outputLogSinkAccessor;
+        _outputChannel = window?.CreateOutputChannel("Host");
         _terminalService = terminalService;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MainWindowViewModel>.Instance;
         _loggerFactory = loggerFactory;
@@ -4066,6 +4031,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         FileMenuItems.Clear();
         FileNewMenuItems.Clear();
         ToolsMenuItems.Clear();
+        ViewMenuItems.Clear();
+        EditMenuItems.Clear();
         WorkspaceMenuItems.Clear();
 
         if (_extensionContributions is null)
@@ -4087,6 +4054,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             {
                 ExtensionMenuLocations.File => FileMenuItems,
                 ExtensionMenuLocations.FileNew => FileNewMenuItems,
+                ExtensionMenuLocations.Edit => EditMenuItems,
+                ExtensionMenuLocations.View => ViewMenuItems,
                 ExtensionMenuLocations.Tools => ToolsMenuItems,
                 ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
                 _ => ExtensionMenuItems
@@ -4182,9 +4151,9 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
     }
 
-    private ReactiveCommand<Unit, Unit> CreateExtensionCommand(string commandId)
+    private ReactiveCommand<object?, Unit> CreateExtensionCommand(string commandId)
     {
-        return ReactiveCommand.CreateFromTask(() => ExecuteExtensionCommandAsync(commandId));
+        return ReactiveCommand.CreateFromTask<object?>(_ => ExecuteExtensionCommandAsync(commandId));
     }
 
     private void SyncExtensionDockables()
@@ -4194,6 +4163,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return;
         }
 
+        DisableShellOutputIfExtensionPresent();
         _extensionTools.Clear();
 
         foreach (ExtensionTool tool in XamlEditorDockFactory.FindDockables<ExtensionTool>(DockLayout))
@@ -4236,6 +4206,28 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 _extensionTools[view.ViewId] = created;
             }
         }
+    }
+
+    private void DisableShellOutputIfExtensionPresent()
+    {
+        const string outputViewId = "output.panel";
+        if (!_extensionViews.ContainsKey(outputViewId))
+        {
+            return;
+        }
+
+        OutputTool? outputTool = XamlEditorDockFactory.FindDockable<OutputTool>(DockLayout, "Output");
+        if (outputTool is null)
+        {
+            return;
+        }
+
+        if (outputTool.Owner is IDock dock && dock.VisibleDockables is not null)
+        {
+            dock.VisibleDockables.Remove(outputTool);
+        }
+
+        IsOutputVisible = false;
     }
 
     private void ResetLayout()
@@ -5337,16 +5329,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IDockable? dockable = XamlEditorDockFactory.FindDockable<IDockable>(DockLayout, id);
         if (dockable is null)
         {
-            if (isVisible && string.Equals(id, "AnimationEditor", StringComparison.Ordinal))
+            string? extensionViewId = MapLegacyToolToExtensionView(id);
+            if (!string.IsNullOrWhiteSpace(extensionViewId)
+                && TrySetExtensionDockableVisibility(extensionViewId, isVisible))
             {
-                ToolDock? bottomDock = XamlEditorDockFactory.FindDockable<ToolDock>(DockLayout, "BottomToolDock");
-                if (bottomDock is not null)
-                {
-                    AnimationEditorTool tool = new(AnimationEditor);
-                    DockFactory.AddDockable(bottomDock, tool);
-                    DockFactory.SetActiveDockable(tool);
-                    DockFactory.SetFocusedDockable(bottomDock, tool);
-                }
+                return;
             }
             return;
         }
@@ -5360,6 +5347,149 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             DockFactory.HideDockable(dockable);
         }
+    }
+
+    private static string? MapLegacyToolToExtensionView(string id)
+    {
+        return id switch
+        {
+            "Toolbox" => "toolbox.panel",
+            "SolutionExplorer" => "solutionExplorer.panel",
+            "Properties" => "propertyEditor.panel",
+            "Output" => "output.panel",
+            "VisualTree" => "visualTree.panel",
+            "LogicalTree" => "logicalTree.panel",
+            "References" => "references.panel",
+            "AnimationEditor" => "animationEditor.panel",
+            "Collaboration" => "collaboration.panel",
+            "DebugSettings" => "debugSettings.panel",
+            "LspSettings" => "lspSettings.panel",
+            _ => null
+        };
+    }
+
+    public void ShowExtensionView(string viewId)
+    {
+        if (TryResolveExtensionViewId(viewId, out string resolved))
+        {
+            TrySetExtensionDockableVisibility(resolved, true);
+        }
+    }
+
+    public void ToggleExtensionView(string viewId)
+    {
+        if (TryResolveExtensionViewId(viewId, out string resolved))
+        {
+            bool isVisible = IsExtensionViewVisible(resolved);
+            TrySetExtensionDockableVisibility(resolved, !isVisible);
+        }
+    }
+
+    public bool IsExtensionViewVisible(string viewId)
+    {
+        if (!TryResolveExtensionViewId(viewId, out string resolved))
+        {
+            return false;
+        }
+
+        if (DockLayout is null)
+        {
+            return false;
+        }
+
+        if (!_extensionTools.TryGetValue(resolved, out ExtensionTool? tool))
+        {
+            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(resolved));
+        }
+
+        if (tool?.Owner is not IDock dock || dock.VisibleDockables is null)
+        {
+            return false;
+        }
+
+        return dock.VisibleDockables.Contains(tool);
+    }
+
+    public void ActivateExtensionView(string viewId)
+    {
+        if (!TryResolveExtensionViewId(viewId, out string resolved))
+        {
+            return;
+        }
+
+        if (DockLayout is null)
+        {
+            return;
+        }
+
+        if (!_extensionTools.TryGetValue(resolved, out ExtensionTool? tool))
+        {
+            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(resolved));
+        }
+
+        if (tool is null)
+        {
+            return;
+        }
+
+        DockFactory.SetActiveDockable(tool);
+        if (tool.Owner is IDock owner)
+        {
+            DockFactory.SetFocusedDockable(owner, tool);
+        }
+    }
+
+    private bool TrySetExtensionDockableVisibility(string viewId, bool isVisible)
+    {
+        if (DockLayout is null)
+        {
+            return false;
+        }
+
+        if (!_extensionTools.TryGetValue(viewId, out ExtensionTool? tool))
+        {
+            tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
+        }
+
+        if (tool is null)
+        {
+            return false;
+        }
+
+        if (isVisible)
+        {
+            DockFactory.RestoreDockable(tool);
+            DockFactory.SetActiveDockable(tool);
+            if (tool.Owner is IDock owner)
+            {
+                DockFactory.SetFocusedDockable(owner, tool);
+            }
+        }
+        else
+        {
+            DockFactory.HideDockable(tool);
+        }
+
+        return true;
+    }
+
+    private bool TryResolveExtensionViewId(string viewId, out string resolved)
+    {
+        if (_extensionViews.ContainsKey(viewId))
+        {
+            resolved = viewId;
+            return true;
+        }
+
+        string? mapped = MapLegacyToolToExtensionView(viewId);
+        if (!string.IsNullOrWhiteSpace(mapped))
+        {
+            resolved = mapped;
+            return true;
+        }
+
+        resolved = viewId;
+        return false;
     }
 
     /// <summary>
@@ -5919,6 +6049,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void LogOutput(string level, string message)
     {
+        if (_outputChannel is not null)
+        {
+            _outputChannel.AppendLine($"[{level}] {message}");
+        }
+
         switch (level)
         {
             case "Error":
@@ -6461,6 +6596,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             _outputLogSinkAccessor.Sink = null;
         }
+
+        _outputChannel?.Dispose();
 
         _disposables.Dispose();
         Collaboration.Dispose();
