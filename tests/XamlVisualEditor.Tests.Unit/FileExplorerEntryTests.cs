@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.FileExplorerExtension;
 using Xunit;
@@ -97,6 +98,11 @@ public sealed class FileExplorerEntryTests
             LastBehavior = behavior;
             return Task.FromResult<IEditorDocument?>(null);
         }
+
+        public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private sealed class StubWindow : IWindow
@@ -134,6 +140,19 @@ public sealed class FileExplorerEntryTests
         {
             throw new NotSupportedException();
         }
+
+        public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
+        }
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+        public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+        public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
 
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
         {

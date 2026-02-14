@@ -34,6 +34,14 @@
     <Project Path="extensions/XamlVisualEditor.SolutionExplorerExtension/XamlVisualEditor.SolutionExplorerExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.WorkspaceExtension/XamlVisualEditor.WorkspaceExtension.csproj" />
     <Project Path="extensions/XamlVisualEditor.McpExtension/XamlVisualEditor.McpExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.OutputExtension/XamlVisualEditor.OutputExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.NavigationExtension/XamlVisualEditor.NavigationExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.AnimationEditorExtension/XamlVisualEditor.AnimationEditorExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.CollaborationExtension/XamlVisualEditor.CollaborationExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.DebugSettingsExtension/XamlVisualEditor.DebugSettingsExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.LspSettingsExtension/XamlVisualEditor.LspSettingsExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.XamlEditorExtension/XamlVisualEditor.XamlEditorExtension.csproj" />
+    <Project Path="extensions/XamlVisualEditor.TreeInspectorExtension/XamlVisualEditor.TreeInspectorExtension.csproj" />
     <Project Path="src/XamlVisualEditor.Shell/XamlVisualEditor.Shell.csproj" />
     <Project Path="src/XamlVisualEditor.Shell.ViewModels/XamlVisualEditor.Shell.ViewModels.csproj" />
     <Project Path="src/XamlVisualEditor.Terminal/XamlVisualEditor.Terminal.csproj" />

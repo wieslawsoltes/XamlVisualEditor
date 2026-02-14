@@ -1,4 +1,5 @@
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Debugging;
 using XamlVisualEditor.Extensions.Hosting;
@@ -19,7 +20,7 @@ public sealed class WorkspaceExtensionTests
         var window = new InMemoryWindow();
         var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
         var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
-        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo);
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
 
         var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
         await extension.ActivateAsync(context, CancellationToken.None);
@@ -38,7 +39,7 @@ public sealed class WorkspaceExtensionTests
         var window = new InMemoryWindow();
         var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
         var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
-        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo);
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
 
         var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
         await extension.ActivateAsync(context, CancellationToken.None);
@@ -57,7 +58,7 @@ public sealed class WorkspaceExtensionTests
         var window = new InMemoryWindow();
         var workspaceInfo = new StubWorkspaceInfo();
         var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = false };
-        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo);
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
 
         var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
         await extension.ActivateAsync(context, CancellationToken.None);
@@ -72,24 +73,49 @@ public sealed class WorkspaceExtensionTests
         ICommands commands,
         IExtensionContributionRegistry contributions,
         IWindow window,
-        IWorkspaceInfo workspaceInfo)
+        IWorkspaceInfo workspaceInfo,
+        IWorkspaceCommands workspaceCommands)
     {
+        var editorServices = new StubEditorServices();
+        var commandMetadata = new CommandMetadataRegistry();
+        var designerHost = new DesignerHostAdapter(editorServices);
+        var navigation = new StubNavigationService();
+        var navigationHistory = new StubNavigationHistoryService();
+        var animationHost = new StubAnimationEditorHost();
+        var collaborationHost = new StubCollaborationPanelHost();
+        var debugSettingsHost = new StubDebugSettingsHost();
+        var lspSettingsHost = new StubLspSettingsHost();
+        var viewHost = new StubExtensionViewHost();
+        var workspaceModel = new WorkspaceModelAdapter(workspaceInfo, workspaceCommands);
+        var propertyEditors = new PropertyEditorRegistry();
+
         return new ExtensionContext(
             "test.extension",
             "/tmp",
             commands,
+            commandMetadata,
             contributions,
             new DebuggerServiceRegistry(),
+            designerHost,
             new InMemoryWorkspace(),
+            workspaceModel,
             workspaceInfo,
             window,
             new InMemoryDialogHost(),
             new InMemoryWorkspaceHost(),
             new ExtensionViewRegistry(),
             new ExtensionLanguageServiceRegistry(),
-            new StubEditorServices(),
+            navigation,
+            navigationHistory,
+            animationHost,
+            collaborationHost,
+            debugSettingsHost,
+            lspSettingsHost,
+            editorServices,
             new StubDiagnostics(),
+            propertyEditors,
             new StubTerminalBridge(),
+            viewHost,
             new InMemorySettingsStore(),
             new InMemoryExtensionStorage(),
             new StubExtensionLogger(),
@@ -136,11 +162,77 @@ public sealed class WorkspaceExtensionTests
         }
     }
 
+    private sealed class StubExtensionViewHost : IExtensionViewHost
+    {
+        public Task ShowAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ToggleAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<bool> IsVisibleAsync(string viewId, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task ActivateAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class StubNavigationService : ILanguageNavigationService
+    {
+        public Task<IReadOnlyList<LanguageLocation>> FindDefinitionsAsync(
+            LanguagePositionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageLocation>>(Array.Empty<LanguageLocation>());
+        }
+
+        public Task<IReadOnlyList<LanguageLocation>> FindReferencesAsync(
+            LanguagePositionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageLocation>>(Array.Empty<LanguageLocation>());
+        }
+    }
+
+    private sealed class StubNavigationHistoryService : INavigationHistoryService
+    {
+        public bool CanNavigateBack => false;
+        public bool CanNavigateForward => false;
+        public event EventHandler<NavigationHistoryChangedEventArgs>? HistoryChanged;
+
+        public Task<bool> NavigateBackAsync(CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<bool> NavigateForwardAsync(CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+    }
+
     private sealed class StubWorkspaceInfo : IWorkspaceInfo
     {
         public string? WorkspacePath { get; set; }
 
         public event EventHandler<WorkspaceChangedEventArgs>? WorkspaceChanged;
+    }
+
+    private sealed class StubAnimationEditorHost : IAnimationEditorHost
+    {
+        public object? ViewModel => null;
+    }
+
+    private sealed class StubCollaborationPanelHost : ICollaborationPanelHost
+    {
+        public object? ViewModel => null;
+    }
+
+    private sealed class StubDebugSettingsHost : IDebugSettingsHost
+    {
+        public object? ViewModel => null;
+    }
+
+    private sealed class StubLspSettingsHost : ILspSettingsHost
+    {
+        public object? ViewModel => null;
     }
 
     private sealed class StubEditorServices : IEditorServices
@@ -159,14 +251,44 @@ public sealed class WorkspaceExtensionTests
             return Task.FromResult<IEditorDocument?>(null);
         }
 
+        public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+
         public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
     }
 
     private sealed class StubDiagnostics : IDiagnosticsService
     {
+        public event EventHandler<DiagnosticsChannelsChangedEventArgs>? ChannelsChanged;
+
+        public event EventHandler<DiagnosticsChannelPublishedEventArgs>? DiagnosticsChannelPublished;
+
+        public event EventHandler<DiagnosticsSnapshotPublishedEventArgs>? DiagnosticsSnapshotPublished;
+
+        public event EventHandler<DiagnosticsPublishedEventArgs>? DiagnosticsPublished;
+
         public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(string? filePath, CancellationToken ct)
         {
             return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+        }
+
+        public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(DiagnosticsQuery query, CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+        }
+
+        public Task<IReadOnlyList<DiagnosticsDocumentSnapshot>> GetDiagnosticsSnapshotAsync(
+            DiagnosticsQuery query,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<DiagnosticsDocumentSnapshot>>(Array.Empty<DiagnosticsDocumentSnapshot>());
+        }
+
+        public Task<IReadOnlyList<DiagnosticsChannelInfo>> GetChannelsAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<DiagnosticsChannelInfo>>(Array.Empty<DiagnosticsChannelInfo>());
         }
 
         public event EventHandler<DiagnosticsChangedEventArgs>? DiagnosticsChanged;

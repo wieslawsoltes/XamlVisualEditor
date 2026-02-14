@@ -235,6 +235,18 @@ public sealed class McpIntegrationTests
             return Task.FromResult(item);
         }
         public IOutputChannel CreateOutputChannel(string name) => new InMemoryOutputChannel(name);
+
+        public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+        public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+        public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => new InMemoryStatusBarItem();
     }
 
@@ -258,6 +270,11 @@ public sealed class McpIntegrationTests
             StubEditorDocument doc = new(filePath);
             _documents.Add(doc);
             return Task.FromResult<IEditorDocument?>(doc);
+        }
+
+        public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
+        {
+            return Task.FromResult(false);
         }
 
         public event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
@@ -300,9 +317,34 @@ public sealed class McpIntegrationTests
 
     private sealed class StubDiagnostics : IDiagnosticsService
     {
+        public event EventHandler<DiagnosticsChannelsChangedEventArgs>? ChannelsChanged;
+
+        public event EventHandler<DiagnosticsChannelPublishedEventArgs>? DiagnosticsChannelPublished;
+
+        public event EventHandler<DiagnosticsSnapshotPublishedEventArgs>? DiagnosticsSnapshotPublished;
+
+        public event EventHandler<DiagnosticsPublishedEventArgs>? DiagnosticsPublished;
+
         public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(string? filePath, CancellationToken ct)
         {
             return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+        }
+
+        public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(DiagnosticsQuery query, CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+        }
+
+        public Task<IReadOnlyList<DiagnosticsDocumentSnapshot>> GetDiagnosticsSnapshotAsync(
+            DiagnosticsQuery query,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<DiagnosticsDocumentSnapshot>>(Array.Empty<DiagnosticsDocumentSnapshot>());
+        }
+
+        public Task<IReadOnlyList<DiagnosticsChannelInfo>> GetChannelsAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<DiagnosticsChannelInfo>>(Array.Empty<DiagnosticsChannelInfo>());
         }
 
         public event EventHandler<DiagnosticsChangedEventArgs>? DiagnosticsChanged;

@@ -61,6 +61,19 @@ public sealed class IdeBridgePermissionServiceTests
 
         public IOutputChannel CreateOutputChannel(string name) => new NullOutputChannel(name);
 
+        public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
+
+#pragma warning disable CS0067
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+        public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+        public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+#pragma warning restore CS0067
+
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => new NullStatusBarItem();
 
         private sealed class NullOutputChannel : IOutputChannel

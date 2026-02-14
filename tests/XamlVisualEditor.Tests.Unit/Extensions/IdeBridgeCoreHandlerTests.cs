@@ -197,6 +197,17 @@ public sealed class IdeBridgeCoreHandlerTests
 
         public IOutputChannel CreateOutputChannel(string name) => new DummyOutputChannel(name);
 
+        public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
+
+        public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
+
+        public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
+
+        public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
+
         public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority) => new DummyStatusBarItem();
     }
 
@@ -221,6 +232,9 @@ public sealed class IdeBridgeCoreHandlerTests
 
         public Task<IEditorDocument?> OpenDocumentAsync(string filePath, EditorDocumentOpenBehavior behavior, CancellationToken ct)
             => Task.FromResult(_document);
+
+        public Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
+            => Task.FromResult(false);
     }
 
     private sealed class FakeEditorDocument : IEditorDocument
@@ -251,10 +265,29 @@ public sealed class IdeBridgeCoreHandlerTests
 
     private sealed class FakeDiagnostics : IDiagnosticsService
     {
+        public event EventHandler<DiagnosticsChannelsChangedEventArgs>? ChannelsChanged;
+
+        public event EventHandler<DiagnosticsChannelPublishedEventArgs>? DiagnosticsChannelPublished;
+
+        public event EventHandler<DiagnosticsSnapshotPublishedEventArgs>? DiagnosticsSnapshotPublished;
+
+        public event EventHandler<DiagnosticsPublishedEventArgs>? DiagnosticsPublished;
+
         public event EventHandler<DiagnosticsChangedEventArgs>? DiagnosticsChanged;
 
         public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(string? filePath, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+
+        public Task<IReadOnlyList<LanguageDiagnostic>> GetDiagnosticsAsync(DiagnosticsQuery query, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<LanguageDiagnostic>>(Array.Empty<LanguageDiagnostic>());
+
+        public Task<IReadOnlyList<DiagnosticsDocumentSnapshot>> GetDiagnosticsSnapshotAsync(
+            DiagnosticsQuery query,
+            CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<DiagnosticsDocumentSnapshot>>(Array.Empty<DiagnosticsDocumentSnapshot>());
+
+        public Task<IReadOnlyList<DiagnosticsChannelInfo>> GetChannelsAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<DiagnosticsChannelInfo>>(Array.Empty<DiagnosticsChannelInfo>());
     }
 
     private sealed class FakeTerminal : ITerminalBridge

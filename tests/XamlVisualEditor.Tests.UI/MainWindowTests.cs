@@ -80,6 +80,21 @@ public sealed class DesignerSurfaceTests
 
         Assert.Equal(2, manager.SelectedItems.Count);
     }
+
+    [Fact]
+    public void DesignerDocument_SelectionManager_Is_DesignSurface_Selection()
+    {
+        DesignerDocumentViewModel doc = new("SelectionSyncTest.axaml");
+        MutableAstObjectNode node = new() { TypeName = "Button", XmlNamespace = "https://github.com/avaloniaui" };
+        DesignItem item = new(node);
+
+        Assert.Same(doc.DesignSurface.Selection, doc.SelectionManager);
+
+        doc.DesignSurface.Selection.Select(item);
+
+        Assert.Single(doc.SelectionManager.SelectedItems);
+        Assert.Equal(node.Id, doc.SelectedNodeId);
+    }
 }
 
 // ==============================================
