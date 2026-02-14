@@ -61,7 +61,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             return GetSelectedNodesCore();
         }
 
-        return await Dispatcher.UIThread.InvokeAsync(GetSelectedNodesCore, DispatcherPriority.Background);
+        return await Dispatcher.UIThread.InvokeAsync(GetSelectedNodesCore, DispatcherPriority.Normal);
     }
 
     public async Task<IReadOnlyList<DesignerNodeSummary>> GetVisualTreeAsync(CancellationToken cancellationToken)
@@ -71,7 +71,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             return GetCurrentTree(includeContentPreview: false);
         }
 
-        return await Dispatcher.UIThread.InvokeAsync(() => GetCurrentTree(includeContentPreview: false), DispatcherPriority.Background);
+        return await Dispatcher.UIThread.InvokeAsync(() => GetCurrentTree(includeContentPreview: false), DispatcherPriority.Normal);
     }
 
     public async Task<IReadOnlyList<DesignerNodeSummary>> GetLogicalTreeAsync(CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
             return GetCurrentTree(includeContentPreview: true);
         }
 
-        return await Dispatcher.UIThread.InvokeAsync(() => GetCurrentTree(includeContentPreview: true), DispatcherPriority.Background);
+        return await Dispatcher.UIThread.InvokeAsync(() => GetCurrentTree(includeContentPreview: true), DispatcherPriority.Normal);
     }
 
     public async Task<IReadOnlyList<DesignerPropertyInfo>> GetPropertiesAsync(string nodeId, CancellationToken cancellationToken)
@@ -94,7 +94,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
         return await Dispatcher.UIThread.InvokeAsync(
             () => GetPropertiesCore(nodeId),
-            DispatcherPriority.Background);
+            DispatcherPriority.Normal);
     }
 
     public async Task<IReadOnlyList<DesignerEventInfo>> GetEventsAsync(string nodeId, CancellationToken cancellationToken)
@@ -107,7 +107,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
         return await Dispatcher.UIThread.InvokeAsync(
             () => GetEventsCore(nodeId),
-            DispatcherPriority.Background);
+            DispatcherPriority.Normal);
     }
 
     public async Task<bool> SetPropertyAsync(string nodeId, string propertyName, string? value, CancellationToken cancellationToken)
@@ -463,6 +463,7 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         if (document is not null && !document.IsDisposed)
         {
             IDisposable selectedNodeSubscription = document.WhenAnyValue(x => x.SelectedNodeId)
+                .ObserveOn(RxApp.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(selectedNodeSubscription);
 
@@ -473,9 +474,9 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
 
             var designSurfaceSelection = document.DesignSurface.Selection;
 
-            void OnSelectionChanged(IReadOnlyList<IDesignItem> _)
+            void OnSelectionChanged(IReadOnlyList<IDesignItem> items)
             {
-                RaiseSelectionChanged();
+                RaiseSelectionChanged(items);
             }
 
             designSurfaceSelection.SelectionChanged += OnSelectionChanged;
@@ -491,21 +492,29 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         _selectionSubscription.Disposable = subscription;
     }
 
-    private void RaiseSelectionChanged()
+    private void RaiseSelectionChanged(IReadOnlyList<IDesignItem>? selectionItems = null)
     {
-        DesignerDocumentViewModel? document = GetActiveDocument();
-        if (document is null || document.IsDisposed)
+        if (!Dispatcher.UIThread.CheckAccess())
         {
-            SelectionChanged?.Invoke(this, new DesignerSelectionChangedEventArgs(Array.Empty<DesignerNodeSummary>()));
+            _ = Dispatcher.UIThread.InvokeAsync(() => RaiseSelectionChanged(selectionItems), DispatcherPriority.Normal);
             return;
         }
 
-        IReadOnlyList<DesignerNodeSummary> selectedNodes = BuildSelectedNodes(document);
+        DesignerDocumentViewModel? document = GetActiveDocument();
+        IReadOnlyList<DesignerNodeSummary> selectedNodes = document is null || document.IsDisposed
+            ? Array.Empty<DesignerNodeSummary>()
+            : BuildSelectedNodes(document, selectionItems);
         SelectionChanged?.Invoke(this, new DesignerSelectionChangedEventArgs(selectedNodes));
     }
 
     private void PublishActiveDocument(DesignerDocumentViewModel? document)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            _ = Dispatcher.UIThread.InvokeAsync(() => PublishActiveDocument(document), DispatcherPriority.Normal);
+            return;
+        }
+
         DesignerDocumentViewModel? cached = GetCachedDocument();
         if (ReferenceEquals(cached, document))
         {
@@ -727,10 +736,14 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         }
     }
 
-    private static IReadOnlyList<DesignerNodeSummary> BuildSelectedNodes(DesignerDocumentViewModel document)
+    private static IReadOnlyList<DesignerNodeSummary> BuildSelectedNodes(
+        DesignerDocumentViewModel document,
+        IReadOnlyList<IDesignItem>? selectionItems = null)
     {
         List<DesignerNodeSummary> nodes = new();
-        IReadOnlyList<IDesignItem> selectedItems = document.DesignSurface.Selection.SelectedItems;
+        IReadOnlyList<IDesignItem> selectedItems = selectionItems is { Count: > 0 }
+            ? selectionItems
+            : document.DesignSurface.Selection.SelectedItems;
         if (selectedItems.Count == 0 && !ReferenceEquals(document.SelectionManager, document.DesignSurface.Selection))
         {
             selectedItems = document.SelectionManager.SelectedItems;

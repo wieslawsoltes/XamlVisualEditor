@@ -3137,7 +3137,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null && !t.doc.IsDisposed)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Where(_ => !_suppressTreeSelectionSync)
+            .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(visualTreeSelectionSubscription);
 
@@ -3145,7 +3145,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null && !t.doc.IsDisposed)
             .ObserveOn(RxApp.MainThreadScheduler)
-            .Where(_ => !_suppressTreeSelectionSync)
+            .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
 
@@ -5094,6 +5094,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void UpdateTrees(DesignerDocumentViewModel? doc)
     {
+        if (AreExtensionTreePanelsVisible())
+        {
+            if (VisualTree.Root is not null)
+            {
+                VisualTree.SetRoot(null);
+            }
+
+            if (LogicalTree.Root is not null)
+            {
+                LogicalTree.SetRoot(null);
+            }
+
+            return;
+        }
+
         if (doc is null)
         {
             VisualTree.SetRoot(null);
@@ -5129,6 +5144,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void ApplySelectionToTrees(Guid? nodeId)
     {
+        if (AreExtensionTreePanelsVisible())
+        {
+            return;
+        }
+
         _suppressTreeSelectionSync = true;
         try
         {
@@ -5157,6 +5177,18 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             _suppressTreeSelectionSync = false;
         }
+    }
+
+    private bool AreExtensionTreePanelsVisible()
+    {
+        if (_extensionViews.ContainsKey("visualTree.panel")
+            || _extensionViews.ContainsKey("logicalTree.panel"))
+        {
+            return true;
+        }
+
+        return IsExtensionViewVisible("visualTree.panel")
+            || IsExtensionViewVisible("logicalTree.panel");
     }
 
     private void AddDocumentToDock(IEditorDocumentViewModel document)
