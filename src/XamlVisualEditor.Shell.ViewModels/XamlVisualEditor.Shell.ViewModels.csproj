@@ -25,7 +25,6 @@
     <ProjectReference Include="..\XamlVisualEditor.Designer.Rendering\XamlVisualEditor.Designer.Rendering.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Designer.DragDrop\XamlVisualEditor.Designer.DragDrop.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.TreeView\XamlVisualEditor.TreeView.csproj" />
-    <ProjectReference Include="..\XamlVisualEditor.PropertyEditor\XamlVisualEditor.PropertyEditor.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration.UI\XamlVisualEditor.Collaboration.UI.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Xaml.Intellisense\XamlVisualEditor.Xaml.Intellisense.csproj" />

@@ -7,6 +7,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Avalonia.Controls.DataGridFiltering;
 using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
@@ -25,7 +26,7 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
         string? location,
         string? group,
         int priority,
-        ReactiveCommand<Unit, Unit> command)
+        ICommand command)
     {
         CommandId = commandId;
         Title = title;
@@ -45,7 +46,7 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
 
     public int Priority { get; }
 
-    public ReactiveCommand<Unit, Unit> Command { get; }
+    public ICommand Command { get; }
 }
 
 
@@ -58,7 +59,7 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
         string? location,
         string? group,
         int priority,
-        ReactiveCommand<Unit, Unit> command)
+        ICommand command)
     {
         CommandId = commandId;
         Title = title;
@@ -81,7 +82,7 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
 
     public int Priority { get; }
 
-    public ReactiveCommand<Unit, Unit> Command { get; }
+    public ICommand Command { get; }
 }
 
 public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject

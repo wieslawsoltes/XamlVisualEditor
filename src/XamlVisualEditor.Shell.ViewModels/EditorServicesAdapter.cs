@@ -92,12 +92,65 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         return result;
     }
 
+    public async Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
+    {
+        if (location is null || string.IsNullOrWhiteSpace(location.FilePath))
+        {
+            return false;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await OpenLocationCoreAsync(location, ct).ConfigureAwait(false);
+        }
+
+        bool result = false;
+        await Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            result = await OpenLocationCoreAsync(location, ct).ConfigureAwait(false);
+        }, DispatcherPriority.Background, ct);
+        return result;
+    }
+
     private async Task<IEditorDocument?> OpenDocumentCoreAsync(string filePath, EditorDocumentOpenBehavior behavior)
     {
         await _mainViewModel.OpenFileAsync(filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
         IEditorDocumentViewModel? document = _mainViewModel.Documents
             .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
         return document is null ? null : GetAdapter(document);
+    }
+
+    private async Task<bool> OpenLocationCoreAsync(LanguageLocation location, CancellationToken ct)
+    {
+        IEditorDocument? doc = await OpenDocumentAsync(location.FilePath, ct).ConfigureAwait(false);
+        if (doc is not EditorDocumentAdapter adapter)
+        {
+            return false;
+        }
+
+        AvaloniaTextDocument document = adapter.GetDocument();
+        int start = GetOffset(document, location.Range.Start);
+        int end = GetOffset(document, location.Range.End);
+        int length = Math.Max(0, end - start);
+
+        adapter.SelectionStart = start;
+        adapter.SelectionLength = length;
+        adapter.CaretOffset = start;
+        return true;
+    }
+
+    private static int GetOffset(AvaloniaTextDocument document, LanguageTextPosition position)
+    {
+        if (document.LineCount == 0)
+        {
+            return 0;
+        }
+
+        int lineNumber = Math.Clamp(position.Line, 1, document.LineCount);
+        AvaloniaEdit.Document.DocumentLine line = document.GetLineByNumber(lineNumber);
+        int column = Math.Max(1, position.Column);
+        int offsetInLine = Math.Clamp(column - 1, 0, line.Length);
+        return line.Offset + offsetInLine;
     }
 
     public void Dispose()
@@ -182,6 +235,8 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         }
 
         protected AvaloniaTextDocument Document { get; }
+
+        public AvaloniaTextDocument GetDocument() => Document;
 
         public string FilePath { get; }
 
