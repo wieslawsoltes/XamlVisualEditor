@@ -39,7 +39,7 @@ public sealed class XamlEditorExtension : IXveExtension
         new("Brush", PropertyEditorKind.Brush, BrushPresets: DefaultBrushPresets),
         new("IBrush", PropertyEditorKind.Brush, BrushPresets: DefaultBrushPresets),
         new("SolidColorBrush", PropertyEditorKind.Brush, BrushPresets: DefaultBrushPresets),
-        new("Color", PropertyEditorKind.Brush, BrushPresets: DefaultBrushPresets),
+        new("Color", PropertyEditorKind.Color, BrushPresets: DefaultBrushPresets),
         new("Thickness", PropertyEditorKind.Thickness),
         new("CornerRadius", PropertyEditorKind.CornerRadius),
         new("Point", PropertyEditorKind.Point),

@@ -18,6 +18,8 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
 
     public IDataTemplate? BrushEditor { get; set; }
 
+    public IDataTemplate? ColorEditor { get; set; }
+
     public IDataTemplate? ThicknessEditor { get; set; }
 
     public IDataTemplate? CornerRadiusEditor { get; set; }
@@ -64,6 +66,7 @@ public sealed class PropertyEditorValueTemplateSelector : IDataTemplate
             PropertyEditorKind.Number => NumberEditor,
             PropertyEditorKind.Enum => EnumEditor,
             PropertyEditorKind.Brush => BrushEditor,
+            PropertyEditorKind.Color => ColorEditor,
             PropertyEditorKind.Thickness => ThicknessEditor,
             PropertyEditorKind.CornerRadius => CornerRadiusEditor,
             PropertyEditorKind.Point => PointEditor,

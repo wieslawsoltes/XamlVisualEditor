@@ -35,6 +35,10 @@ public sealed record ExtensionToolbarContribution(
 public sealed record ExtensionCommandPaletteContribution(string CommandId, string Title, string? Category);
 
 public sealed record ExtensionPropertyEditorContribution(
+    /// <summary>
+    /// Lookup key for property editor contribution.
+    /// This can be a CLR type name (preferred) or a well-known property name fallback.
+    /// </summary>
     string PropertyType,
     PropertyEditorKind Kind,
     IReadOnlyList<string>? EnumOptions = null,

@@ -43,6 +43,13 @@
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.BrushEditor>
+      <vm:PropertyEditorValueTemplateSelector.ColorEditor>
+        <DataTemplate x:DataType="vm:PropertyEntryViewModel">
+          <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
+                   Watermark="#AARRGGBB"
+                   IsReadOnly="{CompiledBinding IsReadOnly}" />
+        </DataTemplate>
+      </vm:PropertyEditorValueTemplateSelector.ColorEditor>
       <vm:PropertyEditorValueTemplateSelector.ThicknessEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
