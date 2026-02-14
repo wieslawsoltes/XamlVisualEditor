@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
+             xmlns:ia="using:Avalonia.Xaml.Interactions.Core"
+             xmlns:vm="using:XamlVisualEditor.NavigationExtension"
+             x:Class="XamlVisualEditor.NavigationExtension.Views.ReferencesPanelView"
+             x:DataType="vm:ReferencesPanelViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="4,2">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="References" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0" />
+        <TextBlock Text="{CompiledBinding TotalCount, StringFormat='Count: {0}'}"
+                   VerticalAlignment="Center" Opacity="0.7" />
+      </StackPanel>
+      <TextBox Watermark="Search references..."
+               Text="{CompiledBinding FilterText, Mode=TwoWay}" />
+    </StackPanel>
+
+    <dg:DataGrid ItemsSource="{CompiledBinding Model.Flattened}"
+                HierarchicalModel="{CompiledBinding Model}"
+                HierarchicalRowsEnabled="True"
+                SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                SortingModel="{CompiledBinding SortingModel}"
+                FilteringModel="{CompiledBinding FilteringModel}"
+                SearchModel="{CompiledBinding SearchModel}"
+                HeadersVisibility="Column"
+                GridLinesVisibility="None"
+                CanUserSortColumns="True"
+                IsReadOnly="True">
+      <i:Interaction.Behaviors>
+        <ia:EventTriggerBehavior EventName="DoubleTapped">
+          <ia:InvokeCommandAction Command="{CompiledBinding OpenSelectedCommand}" />
+        </ia:EventTriggerBehavior>
+      </i:Interaction.Behaviors>
+      <dg:DataGrid.DataTemplates>
+        <DataTemplate DataType="vm:ReferencesGroupViewModel" x:DataType="vm:ReferencesGroupViewModel">
+          <TextBlock Text="{CompiledBinding FileName}" FontWeight="SemiBold" />
+        </DataTemplate>
+        <DataTemplate DataType="vm:ReferenceLocationItemViewModel" x:DataType="vm:ReferenceLocationItemViewModel">
+          <TextBlock Text="{CompiledBinding DisplayText}" Margin="0,2" />
+        </DataTemplate>
+      </dg:DataGrid.DataTemplates>
+      <dg:DataGrid.Columns>
+        <dg:DataGridHierarchicalColumn Header="Reference"
+                                       Width="*"
+                                       Binding="{CompiledBinding Item}"
+                                       SortMemberPath="Item.DisplayText"
+                                       x:DataType="dh:HierarchicalNode">
+          <dg:DataGridHierarchicalColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" />
+            </DataTemplate>
+          </dg:DataGridHierarchicalColumn.CellTemplate>
+        </dg:DataGridHierarchicalColumn>
+      </dg:DataGrid.Columns>
+      <dg:DataGrid.KeyBindings>
+        <KeyBinding Gesture="Enter" Command="{CompiledBinding OpenSelectedCommand}" />
+        <KeyBinding Gesture="Return" Command="{CompiledBinding OpenSelectedCommand}" />
+      </dg:DataGrid.KeyBindings>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

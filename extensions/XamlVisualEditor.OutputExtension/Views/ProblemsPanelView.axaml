@@ -1,0 +1,167 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.OutputExtension"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:i="using:Avalonia.Xaml.Interactivity"
+             xmlns:ia="using:Avalonia.Xaml.Interactions.Core"
+             x:Class="XamlVisualEditor.OutputExtension.Views.ProblemsPanelView"
+             x:DataType="vm:ProblemsPanelViewModel">
+  <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="8" ColumnSpacing="8" RowSpacing="8">
+    <TextBlock Text="Problems" FontWeight="SemiBold" Grid.ColumnSpan="2" />
+
+    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+      <Button Content="Refresh" Command="{CompiledBinding RefreshCommand}" Padding="6,2" />
+      <Button Content="Clear" Command="{CompiledBinding ClearCommand}" Padding="6,2" />
+      <Button Content="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
+      <Button Content="Copy All" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
+      <Button Content="Clear Filters" Command="{CompiledBinding ClearFiltersCommand}" Padding="6,2" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+      <ComboBox Width="140"
+                ItemsSource="{CompiledBinding GroupByOptions}"
+                SelectedItem="{CompiledBinding SelectedGroupBy, Mode=TwoWay}" />
+      <ComboBox Width="120"
+                ItemsSource="{CompiledBinding SeverityOptions}"
+                SelectedItem="{CompiledBinding SelectedSeverity, Mode=TwoWay}" />
+    </StackPanel>
+    <TextBox Grid.Row="2"
+             Grid.Column="1"
+             Watermark="Search diagnostics..."
+             Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+
+    <dg:DataGrid Grid.Row="3"
+                 ItemsSource="{CompiledBinding ChannelsView}"
+                 SelectedItem="{CompiledBinding SelectedChannel, Mode=TwoWay}"
+                 AutoGenerateColumns="False"
+                 CanUserSortColumns="True"
+                 IsReadOnly="True"
+                 GridLinesVisibility="None">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTextColumn Header="Channel"
+                               Width="*"
+                               x:DataType="vm:DiagnosticsChannelViewModel"
+                               Binding="{CompiledBinding DisplayName}" />
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+
+    <dg:DataGrid Grid.Row="4" Grid.Column="1"
+                 ItemsSource="{CompiledBinding Model.Flattened}"
+                 HierarchicalModel="{CompiledBinding Model}"
+                 HierarchicalRowsEnabled="True"
+                 SelectedItem="{CompiledBinding SelectedRow, Mode=TwoWay}"
+                 AutoGenerateColumns="False"
+                 CanUserSortColumns="True"
+                 IsReadOnly="True"
+                 GridLinesVisibility="None">
+      <i:Interaction.Behaviors>
+        <ia:EventTriggerBehavior EventName="DoubleTapped">
+          <ia:InvokeCommandAction Command="{CompiledBinding OpenLocationCommand}" />
+        </ia:EventTriggerBehavior>
+      </i:Interaction.Behaviors>
+      <dg:DataGrid.DataTemplates>
+        <DataTemplate DataType="vm:ProblemsGroupViewModel" x:DataType="vm:ProblemsGroupViewModel">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{CompiledBinding Title}" FontWeight="SemiBold" />
+            <TextBlock Text="{CompiledBinding Count, StringFormat='({0})'}" Opacity="0.7" />
+          </StackPanel>
+        </DataTemplate>
+        <DataTemplate DataType="vm:DiagnosticEntryViewModel" x:DataType="vm:DiagnosticEntryViewModel">
+          <TextBlock Text="{CompiledBinding Message}" />
+        </DataTemplate>
+      </dg:DataGrid.DataTemplates>
+      <dg:DataGrid.Columns>
+        <dg:DataGridHierarchicalColumn Header="Message"
+                                       Width="3*"
+                                       Binding="{CompiledBinding Item}"
+                                       SortMemberPath="Item.Message"
+                                       x:DataType="dh:HierarchicalNode">
+          <dg:DataGridHierarchicalColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}" />
+            </DataTemplate>
+          </dg:DataGridHierarchicalColumn.CellTemplate>
+        </dg:DataGridHierarchicalColumn>
+        <dg:DataGridTemplateColumn Header="Severity" Width="120">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:DiagnosticEntryViewModel">
+                    <TextBlock Text="{CompiledBinding Severity}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="File" Width="2*">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:DiagnosticEntryViewModel">
+                    <TextBlock Text="{CompiledBinding FilePath}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Line" Width="70">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:DiagnosticEntryViewModel">
+                    <TextBlock Text="{CompiledBinding Line}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Column" Width="70">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:DiagnosticEntryViewModel">
+                    <TextBlock Text="{CompiledBinding Column}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Code" Width="120">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:DiagnosticEntryViewModel">
+                    <TextBlock Text="{CompiledBinding Code}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Source" Width="120">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:DiagnosticEntryViewModel">
+                    <TextBlock Text="{CompiledBinding Source}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </Grid>
+</UserControl>

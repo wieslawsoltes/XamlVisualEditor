@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.OutputExtension"
+             xmlns:dg="using:Avalonia.Controls"
+             x:Class="XamlVisualEditor.OutputExtension.Views.OutputPanelView"
+             x:DataType="vm:OutputPanelViewModel">
+  <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,*" Margin="8" ColumnSpacing="8" RowSpacing="8">
+    <TextBlock Text="Output (Extension)" FontWeight="SemiBold" Grid.ColumnSpan="2" />
+
+    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+      <Button Content="Clear Channel" Command="{CompiledBinding ClearChannelCommand}" Padding="6,2" />
+      <Button Content="Clear All" Command="{CompiledBinding ClearAllChannelsCommand}" Padding="6,2" />
+      <Button Content="Copy Selected" Command="{CompiledBinding CopySelectedCommand}" Padding="6,2" />
+      <Button Content="Copy All" Command="{CompiledBinding CopyAllCommand}" Padding="6,2" />
+      <Button Content="Clear Filters" Command="{CompiledBinding ClearFiltersCommand}" Padding="6,2" />
+    </StackPanel>
+
+    <TextBox Grid.Row="2"
+             Watermark="Search channels..."
+             Text="{CompiledBinding ChannelSearchText, Mode=TwoWay}" />
+    <TextBox Grid.Row="2"
+             Grid.Column="1"
+             Watermark="Search messages..."
+             Text="{CompiledBinding MessageSearchText, Mode=TwoWay}" />
+
+    <dg:DataGrid Grid.Row="3"
+                 ItemsSource="{CompiledBinding ChannelsView}"
+                 SelectedItem="{CompiledBinding SelectedChannel, Mode=TwoWay}"
+                 AutoGenerateColumns="False"
+                 CanUserSortColumns="True"
+                 IsReadOnly="True"
+                 GridLinesVisibility="None">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTextColumn Header="Channel"
+                               Width="*"
+                               x:DataType="vm:OutputChannelViewModel"
+                               Binding="{CompiledBinding Name}" />
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+
+    <dg:DataGrid Grid.Row="3" Grid.Column="1"
+                 ItemsSource="{CompiledBinding MessagesView}"
+                 SelectedItem="{CompiledBinding SelectedMessage, Mode=TwoWay}"
+                 AutoGenerateColumns="False"
+                 CanUserSortColumns="True"
+                 IsReadOnly="True"
+                 GridLinesVisibility="None">
+      <dg:DataGrid.Columns>
+        <dg:DataGridTextColumn Header="Time"
+                               Width="160"
+                               x:DataType="vm:OutputMessageEntry"
+                               Binding="{CompiledBinding Timestamp}" />
+        <dg:DataGridTextColumn Header="Message"
+                               Width="*"
+                               x:DataType="vm:OutputMessageEntry"
+                               Binding="{CompiledBinding Message}" />
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </Grid>
+</UserControl>

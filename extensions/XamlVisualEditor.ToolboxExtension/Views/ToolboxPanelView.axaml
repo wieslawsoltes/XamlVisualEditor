@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.ToolboxExtension"
+             x:Class="XamlVisualEditor.ToolboxExtension.Views.ToolboxPanelView"
+             x:DataType="vm:ToolboxPanelViewModel">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="8" RowSpacing="8">
+    <TextBlock Text="Toolbox" FontWeight="SemiBold" />
+
+    <ListBox Grid.Row="1"
+             ItemsSource="{CompiledBinding Items}"
+             SelectedItem="{CompiledBinding SelectedItem, Mode=TwoWay}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ToolboxPanelItem">
+          <TextBlock Text="{CompiledBinding DisplayName}" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <Button Grid.Row="2"
+            Content="Insert Selected"
+            Command="{CompiledBinding InsertSelectedCommand}" />
+  </Grid>
+</UserControl>

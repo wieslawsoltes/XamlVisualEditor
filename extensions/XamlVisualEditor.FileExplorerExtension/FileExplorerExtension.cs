@@ -14,6 +14,7 @@ public sealed class FileExplorerExtension : IXveExtension
     private const string ToggleHiddenCommandId = "fileExplorer.toggleHidden";
     private const string SetIconProviderCommandId = "fileExplorer.setIconProvider";
     private const string SetViewLocationCommandId = "fileExplorer.setViewLocation";
+    private const string ToggleViewCommandId = "fileExplorer.toggleView";
     private const string ShowHiddenKey = "fileExplorer.showHidden";
     private const string IconProviderKey = "fileExplorer.iconProvider";
     private const string IconSizeKey = "fileExplorer.iconSize";
@@ -70,10 +71,13 @@ public sealed class FileExplorerExtension : IXveExtension
             ConfigureIconProviderAsync(context)));
         context.Subscriptions.Add(context.Commands.Register(SetViewLocationCommandId, _ =>
             ConfigureViewLocationAsync(context)));
+        context.Subscriptions.Add(context.Commands.Register(ToggleViewCommandId, _ =>
+            context.ViewHost.ToggleAsync(ViewId, CancellationToken.None)));
 
         ExtensionMenuContribution[] menuItems =
         {
             new(OpenFolderCommandId, "Open Folder...", ExtensionMenuLocations.File, "workspace", 5),
+            new(ToggleViewCommandId, "File Explorer", ExtensionMenuLocations.View, "views.left", 5),
             new(ToggleHiddenCommandId, "Toggle Hidden Files", ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 10),
             new(SetIconProviderCommandId, "File Explorer Icons...", ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 20),
             new(SetViewLocationCommandId, "File Explorer Dock...", ExtensionMenuLocations.ToolsWorkspace, "fileExplorer", 30)
@@ -253,7 +257,8 @@ public sealed class FileExplorerExtension : IXveExtension
             "File Explorer",
             ExtensionViewType.Tree,
             ResolveViewLocation(),
-            15);
+            15,
+            ActivateByDefault: true);
 
         _viewRegistration = _contributions.RegisterViews(_extensionId, new[] { view });
     }

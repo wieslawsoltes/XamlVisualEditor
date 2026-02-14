@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.TreeInspectorExtension"
+             xmlns:dg="using:Avalonia.Controls"
+             xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             x:Class="XamlVisualEditor.TreeInspectorExtension.Views.TreeInspectorPanelView"
+             x:DataType="vm:TreeInspectorPanelViewModel">
+  <DockPanel Margin="8">
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Text="{CompiledBinding PanelTitle}" FontWeight="SemiBold" />
+      <TextBox Watermark="Search nodes..."
+               Text="{CompiledBinding SearchText, Mode=TwoWay}" />
+    </StackPanel>
+
+    <dg:DataGrid ItemsSource="{CompiledBinding TreeModel.Model.Flattened}"
+                 HierarchicalModel="{CompiledBinding TreeModel.Model}"
+                 HierarchicalRowsEnabled="True"
+                 SelectedItem="{CompiledBinding TreeModel.SelectedRow, Mode=TwoWay}"
+                 AutoGenerateColumns="False"
+                 CanUserSortColumns="False"
+                 GridLinesVisibility="None"
+                 IsReadOnly="True"
+                 Margin="0,8,0,0">
+      <dg:DataGrid.Columns>
+        <dg:DataGridHierarchicalColumn Header="Node"
+                                       Width="3*"
+                                       Binding="{CompiledBinding Item}"
+                                       x:DataType="dh:HierarchicalNode">
+          <dg:DataGridHierarchicalColumn.CellTemplate>
+            <DataTemplate x:DataType="vm:TreeInspectorNodeViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{CompiledBinding NodeGlyph}" />
+                <TextBlock Text="{CompiledBinding TypeName}" />
+              </StackPanel>
+            </DataTemplate>
+          </dg:DataGridHierarchicalColumn.CellTemplate>
+        </dg:DataGridHierarchicalColumn>
+        <dg:DataGridTemplateColumn Header="Name" Width="3*">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:TreeInspectorNodeViewModel">
+                    <TextBlock Text="{CompiledBinding DisplayName}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+        <dg:DataGridTemplateColumn Header="Children" Width="1.5*">
+          <dg:DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="dh:HierarchicalNode">
+              <ContentControl Content="{CompiledBinding Item}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate x:DataType="vm:TreeInspectorNodeViewModel">
+                    <TextBlock Text="{CompiledBinding ChildCount}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </DataTemplate>
+          </dg:DataGridTemplateColumn.CellTemplate>
+        </dg:DataGridTemplateColumn>
+      </dg:DataGrid.Columns>
+    </dg:DataGrid>
+  </DockPanel>
+</UserControl>

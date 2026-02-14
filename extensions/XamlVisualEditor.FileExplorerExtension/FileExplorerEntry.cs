@@ -59,7 +59,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
             return Task.CompletedTask;
         }
 
-        return _editor.OpenDocumentAsync(FullPath, EditorDocumentOpenBehavior.DocumentOnly, cancellationToken);
+        return _editor.OpenDocumentAsync(FullPath, EditorDocumentOpenBehavior.AllowWorkspaceLoad, cancellationToken);
     }
 
     public Task OpenWorkspaceAsync(CancellationToken cancellationToken)
@@ -189,7 +189,7 @@ public sealed class FileExplorerEntry : IExtensionTreeItemOperationsProvider, IE
         {
             File.WriteAllText(path, string.Empty);
             _refresh();
-            await _editor.OpenDocumentAsync(path, EditorDocumentOpenBehavior.DocumentOnly, cancellationToken);
+            await _editor.OpenDocumentAsync(path, EditorDocumentOpenBehavior.AllowWorkspaceLoad, cancellationToken);
         }
         catch (Exception ex)
         {
