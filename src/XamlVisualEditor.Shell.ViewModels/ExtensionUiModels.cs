@@ -63,7 +63,8 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
         string? location,
         string? group,
         int priority,
-        ICommand command)
+        ICommand command,
+        string? iconPathData = null)
     {
         CommandId = commandId;
         Title = title;
@@ -72,6 +73,7 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
         Group = group;
         Priority = priority;
         Command = command;
+        IconPathData = iconPathData;
     }
 
     public string CommandId { get; }
@@ -87,6 +89,10 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
     public int Priority { get; }
 
     public ICommand Command { get; }
+
+    public string? IconPathData { get; }
+
+    public bool HasIcon => !string.IsNullOrWhiteSpace(IconPathData);
 }
 
 public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject
@@ -238,6 +244,8 @@ public abstract class ExtensionViewModel : ReactiveObject
         Location = contribution.Location;
         Priority = contribution.Priority;
         ActivateByDefault = contribution.ActivateByDefault;
+        ContainerId = contribution.ContainerId;
+        PersistDockState = contribution.PersistDockState;
     }
 
     public string ViewId { get; }
@@ -251,6 +259,10 @@ public abstract class ExtensionViewModel : ReactiveObject
     public int Priority { get; }
 
     public bool ActivateByDefault { get; }
+
+    public string? ContainerId { get; }
+
+    public bool PersistDockState { get; }
 }
 
 public sealed class ExtensionWebviewViewModel : ExtensionViewModel

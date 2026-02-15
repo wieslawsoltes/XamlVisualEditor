@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Reactive.Linq;
 using Dock.Avalonia.Controls;
@@ -214,6 +215,8 @@ public sealed class ExtensionTool : Tool
 
     public string? ViewId { get; set; }
 
+    public bool PersistDockState { get; set; } = true;
+
     public ExtensionTool()
     {
         Id = "Extension";
@@ -224,6 +227,7 @@ public sealed class ExtensionTool : Tool
     {
         ExtensionViewModel = viewModel;
         ViewId = viewModel.ViewId;
+        PersistDockState = viewModel.PersistDockState;
         Id = BuildId(viewModel.ViewId);
         Title = viewModel.Title;
     }
@@ -578,7 +582,7 @@ public sealed class XamlEditorDockFactory : Factory
 
     public ExtensionTool? AddExtensionTool(IRootDock rootDock, ExtensionViewModel viewModel)
     {
-        string dockId = viewModel.Location switch
+        string fallbackDockId = viewModel.Location switch
         {
             ExtensionViewLocation.Left => "LeftToolDock",
             ExtensionViewLocation.Right => "RightToolDock",
@@ -586,7 +590,20 @@ public sealed class XamlEditorDockFactory : Factory
             _ => "RightToolDock"
         };
 
-        ToolDock? toolDock = FindDockable<ToolDock>(rootDock, dockId);
+        ToolDock? toolDock = null;
+        if (!string.IsNullOrWhiteSpace(viewModel.ContainerId))
+        {
+            toolDock = FindDockable<ToolDock>(rootDock, viewModel.ContainerId);
+            if (toolDock is null)
+            {
+                _logger.LogDebug(
+                    "Extension container '{ContainerId}' was not found for view '{ViewId}'. Falling back to location dock.",
+                    viewModel.ContainerId,
+                    viewModel.ViewId);
+            }
+        }
+
+        toolDock ??= FindDockable<ToolDock>(rootDock, fallbackDockId);
         if (toolDock is not null)
         {
             ExtensionTool tool = new(viewModel);
@@ -704,6 +721,7 @@ public sealed class XamlEditorDockFactory : Factory
     {
         filePath ??= GetDefaultLayoutPath();
         List<Action> restoreActions = DetachToolViewModels(rootDock);
+        restoreActions.AddRange(DetachNonPersistentExtensionTools(rootDock));
         restoreActions.AddRange(DetachDockRuntimeReferences(rootDock));
         try
         {
@@ -971,6 +989,48 @@ public sealed class XamlEditorDockFactory : Factory
             tool => tool.ExtensionManagerViewModel,
             (tool, vm) => tool.ExtensionManagerViewModel = vm,
             restore);
+
+        return restore;
+    }
+
+    private static IReadOnlyList<Action> DetachNonPersistentExtensionTools(IRootDock rootDock)
+    {
+        List<Action> restore = new();
+        foreach (ExtensionTool extensionTool in FindDockables<ExtensionTool>(rootDock))
+        {
+            if (extensionTool.PersistDockState || extensionTool.Owner is not IDock owner || owner.VisibleDockables is null)
+            {
+                continue;
+            }
+
+            int index = owner.VisibleDockables.IndexOf(extensionTool);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            bool wasActive = ReferenceEquals(owner.ActiveDockable, extensionTool);
+            owner.VisibleDockables.RemoveAt(index);
+            if (wasActive)
+            {
+                owner.ActiveDockable = owner.VisibleDockables.FirstOrDefault();
+            }
+
+            restore.Add(() =>
+            {
+                if (owner.VisibleDockables is null || owner.VisibleDockables.Contains(extensionTool))
+                {
+                    return;
+                }
+
+                int insertIndex = Math.Clamp(index, 0, owner.VisibleDockables.Count);
+                owner.VisibleDockables.Insert(insertIndex, extensionTool);
+                if (wasActive)
+                {
+                    owner.ActiveDockable = extensionTool;
+                }
+            });
+        }
 
         return restore;
     }

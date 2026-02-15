@@ -2129,6 +2129,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ICommand> _extensionCommandsById = new(StringComparer.Ordinal);
+    private string? _activeExtensionViewId;
 
     /// <summary>
     /// Gets the open documents.
@@ -2213,6 +2214,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     public ObservableCollection<ExtensionMenuItemViewModel> ViewMenuItems { get; } = new();
 
     /// <summary>
+    /// Gets extension-provided Debug menu items.
+    /// </summary>
+    public ObservableCollection<ExtensionMenuItemViewModel> DebugMenuItems { get; } = new();
+
+    /// <summary>
     /// Gets extension-provided Edit menu items.
     /// </summary>
     public ObservableCollection<ExtensionMenuItemViewModel> EditMenuItems { get; } = new();
@@ -2251,6 +2257,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets the extension manager ViewModel.
     /// </summary>
     public ExtensionManagerViewModel ExtensionManager { get; }
+
+    /// <summary>
+    /// Raised when extension view visibility changes.
+    /// </summary>
+    public event EventHandler<ExtensionViewVisibilityChangedEventArgs>? ExtensionViewVisibilityChanged;
+
+    /// <summary>
+    /// Raised when extension view focus changes.
+    /// </summary>
+    public event EventHandler<ExtensionViewFocusChangedEventArgs>? ExtensionViewFocusChanged;
 
     public bool HasExtensionToolbarItems => ExtensionToolbarItems.Count > 0 || MainToolbarItems.Count > 0;
 
@@ -2516,25 +2532,25 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     public ReactiveCommand<Unit, Unit> SetThemeLightCommand { get; }
     public ReactiveCommand<Unit, Unit> SetThemeDarkCommand { get; }
 
-    // Edit Commands
-    public ReactiveCommand<Unit, Unit> UndoCommand { get; }
-    public ReactiveCommand<Unit, Unit> RedoCommand { get; }
-    public ReactiveCommand<Unit, Unit> CutCommand { get; }
-    public ReactiveCommand<Unit, Unit> CopyCommand { get; }
-    public ReactiveCommand<Unit, Unit> PasteCommand { get; }
-    public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
-    public ReactiveCommand<Unit, Unit> SelectAllCommand { get; }
-    public ReactiveCommand<Unit, Unit> RenameSymbolCommand { get; }
-    public ReactiveCommand<Unit, Unit> FormatDocumentCommand { get; }
-    public ReactiveCommand<Unit, Unit> CodeActionsCommand { get; }
-    public ReactiveCommand<Unit, Unit> DocumentSymbolsCommand { get; }
-    public ReactiveCommand<Unit, Unit> WorkspaceSymbolsCommand { get; }
+    // Extension-owned non-lifecycle shell command handlers
+    private ReactiveCommand<Unit, Unit> UndoCommand { get; }
+    private ReactiveCommand<Unit, Unit> RedoCommand { get; }
+    private ReactiveCommand<Unit, Unit> CutCommand { get; }
+    private ReactiveCommand<Unit, Unit> CopyCommand { get; }
+    private ReactiveCommand<Unit, Unit> PasteCommand { get; }
+    private ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+    private ReactiveCommand<Unit, Unit> SelectAllCommand { get; }
+    private ReactiveCommand<Unit, Unit> RenameSymbolCommand { get; }
+    private ReactiveCommand<Unit, Unit> FormatDocumentCommand { get; }
+    private ReactiveCommand<Unit, Unit> CodeActionsCommand { get; }
+    private ReactiveCommand<Unit, Unit> DocumentSymbolsCommand { get; }
+    private ReactiveCommand<Unit, Unit> WorkspaceSymbolsCommand { get; }
 
     // View Commands
-    public ReactiveCommand<Unit, Unit> ToggleBreakpointsCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleCallStackCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleLocalsCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleWatchesCommand { get; }
+    private ReactiveCommand<Unit, Unit> ToggleBreakpointsCommand { get; }
+    private ReactiveCommand<Unit, Unit> ToggleCallStackCommand { get; }
+    private ReactiveCommand<Unit, Unit> ToggleLocalsCommand { get; }
+    private ReactiveCommand<Unit, Unit> ToggleWatchesCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleExtensionsManagerCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetLayoutCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCanvasCommand { get; }
@@ -2545,21 +2561,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     // Previewer Commands
     public ReactiveCommand<Unit, Unit> StartPreviewerCommand { get; }
 
-    // Debug Commands
-    public ReactiveCommand<Unit, Unit> StartDebugCommand { get; }
-    public ReactiveCommand<Unit, Unit> StopDebugCommand { get; }
-    public ReactiveCommand<Unit, Unit> ContinueDebugCommand { get; }
-    public ReactiveCommand<Unit, Unit> StepOverCommand { get; }
-    public ReactiveCommand<Unit, Unit> StepInCommand { get; }
-    public ReactiveCommand<Unit, Unit> StepOutCommand { get; }
-    public ReactiveCommand<Unit, Unit> PauseDebugCommand { get; }
-    public ReactiveCommand<Unit, Unit> ToggleBreakpointCommand { get; }
-    public ReactiveCommand<Unit, Unit> StartRunCommand { get; }
-    public ReactiveCommand<Unit, Unit> StopRunCommand { get; }
-    public ReactiveCommand<ProjectModel, Unit> SetStartupProjectCommand { get; }
+    // Extension-owned non-lifecycle shell command handlers
+    private ReactiveCommand<Unit, Unit> StartDebugCommand { get; }
+    private ReactiveCommand<Unit, Unit> StopDebugCommand { get; }
+    private ReactiveCommand<Unit, Unit> ContinueDebugCommand { get; }
+    private ReactiveCommand<Unit, Unit> StepOverCommand { get; }
+    private ReactiveCommand<Unit, Unit> StepInCommand { get; }
+    private ReactiveCommand<Unit, Unit> StepOutCommand { get; }
+    private ReactiveCommand<Unit, Unit> PauseDebugCommand { get; }
+    private ReactiveCommand<Unit, Unit> ToggleBreakpointCommand { get; }
+    private ReactiveCommand<Unit, Unit> StartRunCommand { get; }
+    private ReactiveCommand<Unit, Unit> StopRunCommand { get; }
+    private ReactiveCommand<ProjectModel, Unit> SetStartupProjectCommand { get; }
 
     // Terminal Commands
-    public ReactiveCommand<Unit, Unit> NewTerminalCommand { get; }
+    private ReactiveCommand<Unit, Unit> NewTerminalCommand { get; }
 
     // Command palette
     public ReactiveCommand<Unit, Unit> ShowCommandPaletteCommand { get; }
@@ -3143,6 +3159,81 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     : null;
             });
         _disposables.Add(activeDocumentTypeSubscription);
+    }
+
+    internal Task ExecuteShellCommandAsync(ShellCommandKind command, CancellationToken cancellationToken)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return ExecuteShellCommandCoreAsync(command, cancellationToken);
+        }
+
+        TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                await ExecuteShellCommandCoreAsync(command, cancellationToken).ConfigureAwait(false);
+                completion.TrySetResult();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                completion.TrySetCanceled(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
+            }
+        }, DispatcherPriority.Normal);
+        return completion.Task;
+    }
+
+    private Task ExecuteShellCommandCoreAsync(ShellCommandKind command, CancellationToken cancellationToken)
+    {
+        ReactiveCommand<Unit, Unit>? reactiveCommand = command switch
+        {
+            ShellCommandKind.Undo => UndoCommand,
+            ShellCommandKind.Redo => RedoCommand,
+            ShellCommandKind.Cut => CutCommand,
+            ShellCommandKind.Copy => CopyCommand,
+            ShellCommandKind.Paste => PasteCommand,
+            ShellCommandKind.Delete => DeleteCommand,
+            ShellCommandKind.SelectAll => SelectAllCommand,
+            ShellCommandKind.RenameSymbol => RenameSymbolCommand,
+            ShellCommandKind.FormatDocument => FormatDocumentCommand,
+            ShellCommandKind.ShowCodeActions => CodeActionsCommand,
+            ShellCommandKind.ShowDocumentSymbols => DocumentSymbolsCommand,
+            ShellCommandKind.ShowWorkspaceSymbols => WorkspaceSymbolsCommand,
+            ShellCommandKind.ToggleBreakpoints => ToggleBreakpointsCommand,
+            ShellCommandKind.ToggleCallStack => ToggleCallStackCommand,
+            ShellCommandKind.ToggleLocals => ToggleLocalsCommand,
+            ShellCommandKind.ToggleWatches => ToggleWatchesCommand,
+            ShellCommandKind.StartDebug => StartDebugCommand,
+            ShellCommandKind.StopDebug => StopDebugCommand,
+            ShellCommandKind.ContinueDebug => ContinueDebugCommand,
+            ShellCommandKind.StepOver => StepOverCommand,
+            ShellCommandKind.StepIn => StepInCommand,
+            ShellCommandKind.StepOut => StepOutCommand,
+            ShellCommandKind.PauseDebug => PauseDebugCommand,
+            ShellCommandKind.ToggleBreakpoint => ToggleBreakpointCommand,
+            ShellCommandKind.StartRun => StartRunCommand,
+            ShellCommandKind.StopRun => StopRunCommand,
+            ShellCommandKind.NewTerminal => NewTerminalCommand,
+            _ => null
+        };
+
+        if (reactiveCommand is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (reactiveCommand is ICommand commandBinding && !commandBinding.CanExecute(null))
+        {
+            return Task.CompletedTask;
+        }
+
+        return reactiveCommand.Execute().ToTask(cancellationToken);
     }
 
     private static IObservable<int> ObserveDocumentProperty(
@@ -3869,6 +3960,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             FileNewMenuEntries.Clear();
             ToolsMenuItems.Clear();
             ViewMenuItems.Clear();
+            DebugMenuItems.Clear();
             EditMenuItems.Clear();
             WorkspaceMenuItems.Clear();
             ExtensionToolbarItems.Clear();
@@ -3973,6 +4065,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         FileNewMenuItems.Clear();
         ToolsMenuItems.Clear();
         ViewMenuItems.Clear();
+        DebugMenuItems.Clear();
         EditMenuItems.Clear();
         WorkspaceMenuItems.Clear();
 
@@ -3997,6 +4090,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 ExtensionMenuLocations.FileNew => FileNewMenuItems,
                 ExtensionMenuLocations.Edit => EditMenuItems,
                 ExtensionMenuLocations.View => ViewMenuItems,
+                ExtensionMenuLocations.Debug => DebugMenuItems,
                 ExtensionMenuLocations.Tools => ToolsMenuItems,
                 ExtensionMenuLocations.ToolsWorkspace => WorkspaceMenuItems,
                 _ => ExtensionMenuItems
@@ -4070,7 +4164,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 location,
                 item.Group,
                 item.Priority,
-                CreateExtensionCommand(item.CommandId)));
+                CreateExtensionCommand(item.CommandId),
+                item.IconPathData));
         }
     }
 
@@ -4172,6 +4267,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
 
         foreach (ExtensionMenuItemViewModel item in ViewMenuItems)
+        {
+            activeCommandIds.Add(item.CommandId);
+        }
+
+        foreach (ExtensionMenuItemViewModel item in DebugMenuItems)
         {
             activeCommandIds.Add(item.CommandId);
         }
@@ -4554,6 +4654,46 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         StatusText = "Terminal started";
         return terminalVm;
+    }
+
+    public Guid? GetActiveTerminalId()
+    {
+        if (DockLayout?.ActiveDockable is TerminalTool terminalTool
+            && terminalTool.TerminalViewModel is TerminalViewModel terminalVm)
+        {
+            return terminalVm.Id;
+        }
+
+        return null;
+    }
+
+    public bool CloseTerminalSession(Guid terminalId)
+    {
+        if (_terminalTools.TryGetValue(terminalId, out TerminalTool? terminalTool))
+        {
+            if (terminalTool.Owner is IDock)
+            {
+                DockFactory.CloseDockable(terminalTool);
+                return true;
+            }
+
+            if (terminalTool.TerminalViewModel is TerminalViewModel orphanedVm)
+            {
+                RemoveTerminalSession(orphanedVm);
+                terminalTool.TerminalViewModel = null;
+                _terminalTools.Remove(terminalId);
+                return true;
+            }
+        }
+
+        TerminalViewModel? terminal = Terminals.FirstOrDefault(vm => vm.Id == terminalId);
+        if (terminal is null)
+        {
+            return false;
+        }
+
+        RemoveTerminalSession(terminal);
+        return true;
     }
 
     private void CreateTerminalSession()
@@ -5481,6 +5621,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void OnActiveDockableChanged(object? sender, ActiveDockableChangedEventArgs e)
     {
+        string? nextActiveExtensionViewId = null;
         switch (e.Dockable)
         {
             case DesignerDocument designer:
@@ -5495,7 +5636,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     ActiveDocument = text.DocumentViewModel;
                 }
                 break;
+            case ExtensionTool extensionTool when !string.IsNullOrWhiteSpace(extensionTool.ViewId):
+                nextActiveExtensionViewId = extensionTool.ViewId;
+                break;
         }
+
+        UpdateActiveExtensionViewFocus(nextActiveExtensionViewId);
     }
 
     private void OnDockableClosed(object? sender, DockableClosedEventArgs e)
@@ -5530,20 +5676,37 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         if (e.Dockable is TerminalTool terminalTool && terminalTool.TerminalViewModel is TerminalViewModel terminalVm)
         {
-            if (_terminalTitleSubscriptions.Remove(terminalVm.Id, out IDisposable? subscription))
-            {
-                subscription.Dispose();
-            }
-
-            terminalVm.Dispose();
-            Terminals.Remove(terminalVm);
+            RemoveTerminalSession(terminalVm);
             _terminalTools.Remove(terminalVm.Id);
             terminalTool.TerminalViewModel = null;
             if (terminalTool.Owner is IDock dock && dock.VisibleDockables is not null && dock.VisibleDockables.Contains(terminalTool))
             {
                 dock.VisibleDockables.Remove(terminalTool);
             }
+            return;
         }
+
+        if (e.Dockable is ExtensionTool extensionTool && !string.IsNullOrWhiteSpace(extensionTool.ViewId))
+        {
+            string viewId = extensionTool.ViewId;
+            RaiseExtensionViewVisibilityChanged(viewId, false);
+            if (string.Equals(_activeExtensionViewId, viewId, StringComparison.OrdinalIgnoreCase))
+            {
+                RaiseExtensionViewFocusChanged(viewId, false);
+                _activeExtensionViewId = null;
+            }
+        }
+    }
+
+    private void RemoveTerminalSession(TerminalViewModel terminalVm)
+    {
+        if (_terminalTitleSubscriptions.Remove(terminalVm.Id, out IDisposable? subscription))
+        {
+            subscription.Dispose();
+        }
+
+        terminalVm.Dispose();
+        Terminals.Remove(terminalVm);
     }
 
     private void SetDockableVisibility(string id, bool isVisible)
@@ -5659,11 +5822,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return;
         }
 
+        bool wasVisible = IsExtensionViewVisible(resolved);
         DockFactory.SetActiveDockable(tool);
         if (tool.Owner is IDock owner)
         {
             DockFactory.SetFocusedDockable(owner, tool);
         }
+        if (!wasVisible)
+        {
+            RaiseExtensionViewVisibilityChanged(resolved, true);
+        }
+        UpdateActiveExtensionViewFocus(resolved);
     }
 
     private bool TrySetExtensionDockableVisibility(string viewId, bool isVisible)
@@ -5683,6 +5852,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return false;
         }
 
+        bool wasVisible = tool.Owner is IDock beforeDock
+            && beforeDock.VisibleDockables is not null
+            && beforeDock.VisibleDockables.Contains(tool);
+
         if (isVisible)
         {
             DockFactory.RestoreDockable(tool);
@@ -5691,10 +5864,23 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             {
                 DockFactory.SetFocusedDockable(owner, tool);
             }
+            UpdateActiveExtensionViewFocus(viewId);
         }
         else
         {
             DockFactory.HideDockable(tool);
+            if (string.Equals(_activeExtensionViewId, viewId, StringComparison.OrdinalIgnoreCase))
+            {
+                UpdateActiveExtensionViewFocus(null);
+            }
+        }
+
+        bool isVisibleNow = tool.Owner is IDock afterDock
+            && afterDock.VisibleDockables is not null
+            && afterDock.VisibleDockables.Contains(tool);
+        if (wasVisible != isVisibleNow)
+        {
+            RaiseExtensionViewVisibilityChanged(viewId, isVisibleNow);
         }
 
         return true;
@@ -5717,6 +5903,40 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         resolved = viewId;
         return false;
+    }
+
+    private void UpdateActiveExtensionViewFocus(string? nextViewId)
+    {
+        if (string.Equals(_activeExtensionViewId, nextViewId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_activeExtensionViewId))
+        {
+            RaiseExtensionViewFocusChanged(_activeExtensionViewId, false);
+        }
+
+        _activeExtensionViewId = nextViewId;
+
+        if (!string.IsNullOrWhiteSpace(_activeExtensionViewId))
+        {
+            RaiseExtensionViewFocusChanged(_activeExtensionViewId, true);
+        }
+    }
+
+    private void RaiseExtensionViewVisibilityChanged(string viewId, bool isVisible)
+    {
+        ExtensionViewVisibilityChanged?.Invoke(
+            this,
+            new ExtensionViewVisibilityChangedEventArgs(viewId, isVisible));
+    }
+
+    private void RaiseExtensionViewFocusChanged(string viewId, bool isFocused)
+    {
+        ExtensionViewFocusChanged?.Invoke(
+            this,
+            new ExtensionViewFocusChangedEventArgs(viewId, isFocused));
     }
 
     /// <summary>

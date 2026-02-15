@@ -15,6 +15,10 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
     private int _scrollOffset;
     private int _lastScrollbackCount;
     private readonly Action<string> _clipboardHandler;
+    private readonly Action<ReadOnlyMemory<byte>> _outputHandler;
+    private readonly Action<int?> _exitHandler;
+    private int _columns;
+    private int _rows;
 
     public Guid Id { get; } = Guid.NewGuid();
 
@@ -34,16 +38,45 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
 
     public int ScrollOffset => _scrollOffset;
 
+    public int Columns => _columns;
+
+    public int Rows => _rows;
+
     public event Action? FrameInvalidated;
     public event Action<string>? ClipboardCopyRequested;
+    public event Action<string>? OutputReceived;
+    public event Action<int?>? Exited;
+    public event Action<int, int>? DimensionsChanged;
 
     public ReactiveCommand<Unit, Unit> ClearSelectionCommand { get; }
 
     public TerminalViewModel(ITerminalSession session)
     {
         _session = session;
+        _columns = Emulator.ActiveBuffer.Columns;
+        _rows = Emulator.ActiveBuffer.Rows;
         _session.ScreenUpdated += OnScreenUpdated;
         _session.TitleChanged += title => Title = string.IsNullOrWhiteSpace(title) ? "Terminal" : title;
+        _outputHandler = data =>
+        {
+            if (data.IsEmpty)
+            {
+                return;
+            }
+
+            string text = System.Text.Encoding.UTF8.GetString(data.Span);
+            if (!string.IsNullOrEmpty(text))
+            {
+                OutputReceived?.Invoke(text);
+            }
+        };
+        _exitHandler = exitCode =>
+        {
+            IsConnected = false;
+            Exited?.Invoke(exitCode);
+        };
+        _session.OutputReceived += _outputHandler;
+        _session.Exited += _exitHandler;
         _clipboardHandler = text => ClipboardCopyRequested?.Invoke(text);
         Emulator.ClipboardCopyRequested += _clipboardHandler;
         ClearSelectionCommand = ReactiveCommand.Create(ClearSelection);
@@ -105,6 +138,7 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
             cellHeightPixels,
             effectivePixelWidth,
             effectivePixelHeight);
+        SetDimensions(columns, rows);
 
         FrameInvalidated?.Invoke();
     }
@@ -383,10 +417,24 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
         return startIndex;
     }
 
+    private void SetDimensions(int columns, int rows)
+    {
+        if (_columns == columns && _rows == rows)
+        {
+            return;
+        }
+
+        _columns = columns;
+        _rows = rows;
+        DimensionsChanged?.Invoke(columns, rows);
+    }
+
 
     public void Dispose()
     {
         _session.ScreenUpdated -= OnScreenUpdated;
+        _session.OutputReceived -= _outputHandler;
+        _session.Exited -= _exitHandler;
         Emulator.ClipboardCopyRequested -= _clipboardHandler;
         _session.Dispose();
     }

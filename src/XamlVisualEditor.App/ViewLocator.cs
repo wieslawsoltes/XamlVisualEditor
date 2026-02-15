@@ -7,11 +7,15 @@ using XamlVisualEditor.AcpExtension.Views;
 using XamlVisualEditor.App.Views;
 using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Collaboration.UI;
+using XamlVisualEditor.CollaborationExtension;
+using XamlVisualEditor.CollaborationExtension.Views;
 using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.GitExtension;
 using XamlVisualEditor.GitExtension.Views;
 using XamlVisualEditor.IdeBridgeExtension;
 using XamlVisualEditor.IdeBridgeExtension.Views;
+using XamlVisualEditor.LspSettingsExtension;
+using XamlVisualEditor.LspSettingsExtension.Views;
 using XamlVisualEditor.McpExtension;
 using XamlVisualEditor.McpExtension.Views;
 using XamlVisualEditor.NavigationExtension;
@@ -22,6 +26,8 @@ using XamlVisualEditor.PropertyEditorExtension;
 using XamlVisualEditor.PropertyEditorExtension.Views;
 using XamlVisualEditor.ToolboxExtension;
 using XamlVisualEditor.ToolboxExtension.Views;
+using XamlVisualEditor.DebugSettingsExtension;
+using XamlVisualEditor.DebugSettingsExtension.Views;
 using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using XamlVisualEditor.Terminal.Avalonia.Views;
@@ -83,6 +89,8 @@ public sealed class ViewLocator : IDataTemplate
             AcpToolViewModel => new AcpToolView(),
             DebugSettingsViewModel => new DebugSettingsView(),
             LspSettingsViewModel => new LspSettingsView(),
+            DebugSettingsPanelViewModel => new DebugSettingsPanelView(),
+            LspSettingsPanelViewModel => new LspSettingsPanelView(),
             BreakpointsViewModel => new BreakpointsView(),
             CallStackViewModel => new CallStackView(),
             LocalsViewModel => new LocalsView(),
@@ -91,6 +99,7 @@ public sealed class ViewLocator : IDataTemplate
             TextDocumentViewModel => new TextFileView(),
             InfiniteCanvasViewModel => new InfiniteCanvasView(),
             DesignSurfaceViewModel => new DesignSurfaceView(),
+            CollaborationPanelToolViewModel => new CollaborationToolPanelView(),
             CollaborationPanelViewModel => new CollaborationPanelView(),
             VisualTreeNodeViewModel => new VisualTreePanelView(),
             LogicalTreeNodeViewModel => new LogicalTreePanelView(),
@@ -124,6 +133,8 @@ public sealed class ViewLocator : IDataTemplate
             or AcpToolViewModel
             or DebugSettingsViewModel
             or LspSettingsViewModel
+            or DebugSettingsPanelViewModel
+            or LspSettingsPanelViewModel
             or BreakpointsViewModel
             or CallStackViewModel
             or LocalsViewModel
@@ -133,6 +144,7 @@ public sealed class ViewLocator : IDataTemplate
             or TextDocumentViewModel
             or InfiniteCanvasViewModel
             or DesignSurfaceViewModel
+            or CollaborationPanelToolViewModel
             or CollaborationPanelViewModel
             or VisualTreeNodeViewModel
             or LogicalTreeNodeViewModel

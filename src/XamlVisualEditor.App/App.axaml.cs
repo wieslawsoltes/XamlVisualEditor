@@ -181,10 +181,14 @@ public sealed class App : Application
         services.AddSingleton<ILanguageNavigationService, LanguageNavigationServiceAdapter>();
         services.AddSingleton<INavigationHistoryService, NavigationHistoryServiceAdapter>();
         services.AddSingleton<IAnimationEditorHost, AnimationEditorHostAdapter>();
-        services.AddSingleton<ICollaborationPanelHost, CollaborationPanelHostAdapter>();
+        services.AddSingleton<CollaborationPanelHostAdapter>();
+        services.AddSingleton<ICollaborationHost>(sp => sp.GetRequiredService<CollaborationPanelHostAdapter>());
+        services.AddSingleton<ICollaborationPanelHost>(sp => sp.GetRequiredService<CollaborationPanelHostAdapter>());
+        services.AddSingleton<ISolutionExplorerPanelHost, SolutionExplorerPanelHostAdapter>();
         services.AddSingleton<IDebugSettingsHost, DebugSettingsHostAdapter>();
         services.AddSingleton<ILspSettingsHost, LspSettingsHostAdapter>();
         services.AddSingleton<IEditorServices, EditorServicesAdapter>();
+        services.AddSingleton<IShellCommandBridge, ShellCommandBridgeAdapter>();
         services.AddSingleton<IDesignerHost, ShellDesignerHost>();
         services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();

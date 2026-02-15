@@ -8,6 +8,8 @@ public interface ITerminalSession : IDisposable
     ITerminalEmulator Emulator { get; }
     event Action? ScreenUpdated;
     event Action<string>? TitleChanged;
+    event Action<ReadOnlyMemory<byte>>? OutputReceived;
+    event Action<int?>? Exited;
     void Start();
     void Write(ReadOnlySpan<byte> data);
     void Resize(int columns, int rows, int pixelWidth = 0, int pixelHeight = 0);

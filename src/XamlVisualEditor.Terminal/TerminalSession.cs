@@ -18,10 +18,13 @@ public sealed class TerminalSession : ITerminalSession
     private IPtyProcess? _process;
     private CancellationTokenSource? _cts;
     private Task? _readLoop;
+    private int _exitRaised;
 
     public ITerminalEmulator Emulator { get; }
     public event Action? ScreenUpdated;
     public event Action<string>? TitleChanged;
+    public event Action<ReadOnlyMemory<byte>>? OutputReceived;
+    public event Action<int?>? Exited;
 
     public TerminalSession(
         TerminalSessionOptions options,
@@ -136,6 +139,10 @@ public sealed class TerminalSession : ITerminalSession
                     break;
                 }
 
+                byte[] output = new byte[read];
+                Buffer.BlockCopy(buffer, 0, output, 0, read);
+                OutputReceived?.Invoke(output);
+
                 _sequenceLogger?.LogOutput(buffer.AsSpan(0, read));
                 Emulator.ProcessInput(buffer.AsSpan(0, read));
             }
@@ -147,6 +154,10 @@ public sealed class TerminalSession : ITerminalSession
         {
             _logger.LogWarning("Terminal read failed: {Message}", ex.Message);
         }
+        finally
+        {
+            SignalExited(null);
+        }
     }
 
     public void Dispose()
@@ -155,6 +166,7 @@ public sealed class TerminalSession : ITerminalSession
         _cts?.Dispose();
         _process?.Dispose();
         _sequenceLogger?.Dispose();
+        SignalExited(null);
     }
 
     private void OnEmulatorResponseRequested(string response)
@@ -185,5 +197,15 @@ public sealed class TerminalSession : ITerminalSession
         {
             _logger.LogWarning("Terminal unhandled sequence ({Count}): {Sequence}", count + 1, sequence);
         }
+    }
+
+    private void SignalExited(int? exitCode)
+    {
+        if (Interlocked.Exchange(ref _exitRaised, 1) != 0)
+        {
+            return;
+        }
+
+        Exited?.Invoke(exitCode);
     }
 }
