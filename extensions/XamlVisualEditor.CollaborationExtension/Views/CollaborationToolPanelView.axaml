@@ -1,0 +1,83 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.CollaborationExtension"
+             x:Class="XamlVisualEditor.CollaborationExtension.Views.CollaborationToolPanelView"
+             x:DataType="vm:CollaborationPanelToolViewModel">
+  <Grid Margin="8" RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
+    <TextBlock Text="Collaboration"
+               FontWeight="SemiBold"
+               FontSize="14" />
+
+    <StackPanel Grid.Row="1"
+                Orientation="Horizontal"
+                Spacing="6">
+      <Button Content="Start Session"
+              Command="{CompiledBinding StartSessionCommand}"
+              IsVisible="{CompiledBinding !IsSessionActive}" />
+      <Button Content="Join Session"
+              Command="{CompiledBinding JoinSessionCommand}"
+              IsVisible="{CompiledBinding !IsSessionActive}" />
+      <Button Content="Leave Session"
+              Command="{CompiledBinding LeaveSessionCommand}"
+              IsVisible="{CompiledBinding IsSessionActive}" />
+      <Button Content="Share Link"
+              Command="{CompiledBinding ShareSessionCommand}"
+              IsVisible="{CompiledBinding IsSessionActive}" />
+    </StackPanel>
+
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="6">
+      <TextBlock Text="Session"
+                 VerticalAlignment="Center" />
+      <TextBox Grid.Column="1"
+               Watermark="Session id"
+               Text="{CompiledBinding JoinSessionId, Mode=TwoWay}"
+               IsVisible="{CompiledBinding !IsSessionActive}" />
+      <TextBlock Grid.Column="1"
+                 Text="{CompiledBinding SessionId}"
+                 IsVisible="{CompiledBinding IsSessionActive}"
+                 VerticalAlignment="Center"
+                 FontFamily="Consolas" />
+    </Grid>
+
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="6">
+      <TextBox Watermark="Invite participant"
+               Text="{CompiledBinding Invitee, Mode=TwoWay}"
+               IsVisible="{CompiledBinding IsSessionActive}" />
+      <Button Grid.Column="1"
+              Content="Invite"
+              Command="{CompiledBinding InviteParticipantCommand}"
+              IsVisible="{CompiledBinding IsSessionActive}" />
+    </Grid>
+
+    <Grid Grid.Row="4" RowDefinitions="Auto,*" RowSpacing="6">
+      <TextBlock Text="{CompiledBinding StatusMessage}"
+                 Opacity="0.75"
+                 FontSize="12" />
+      <ListBox Grid.Row="1" ItemsSource="{CompiledBinding Participants}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:CollaborationParticipantItemViewModel">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+              <Border Width="10"
+                      Height="10"
+                      CornerRadius="5"
+                      Background="{CompiledBinding Color}"
+                      VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1"
+                         Text="{CompiledBinding DisplayName}"
+                         VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2"
+                         Text="{CompiledBinding CurrentFile}"
+                         Opacity="0.7"
+                         TextTrimming="CharacterEllipsis"
+                         VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3"
+                         Text="{CompiledBinding CaretLine}"
+                         Opacity="0.7"
+                         VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </Grid>
+</UserControl>

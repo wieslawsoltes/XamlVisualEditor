@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:XamlVisualEditor.DebugSettingsExtension"
+             x:Class="XamlVisualEditor.DebugSettingsExtension.Views.DebugSettingsPanelView"
+             x:DataType="vm:DebugSettingsPanelViewModel">
+  <DockPanel Margin="8">
+    <StackPanel Spacing="8">
+      <TextBlock Text="Debug Settings" FontWeight="SemiBold" FontSize="14" />
+
+      <StackPanel Spacing="4">
+        <TextBlock Text="Debugger service" />
+        <ComboBox ItemsSource="{CompiledBinding DebuggerServices}"
+                  SelectedItem="{CompiledBinding SelectedDebuggerService, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DebuggerServiceOption">
+              <TextBlock Text="{CompiledBinding DisplayName}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <StackPanel Spacing="4">
+        <TextBlock Text="Debugger adapter path" />
+        <TextBox Text="{CompiledBinding AdapterPath, Mode=TwoWay}" />
+      </StackPanel>
+
+      <CheckBox Content="Auto-download netcoredbg"
+                IsChecked="{CompiledBinding AutoDownloadTools, Mode=TwoWay}"
+                IsEnabled="{CompiledBinding IsNetcoredbgSelected}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="Download netcoredbg"
+                Command="{CompiledBinding DownloadNetcoredbgCommand}" />
+        <TextBlock Text="{CompiledBinding StatusText}" VerticalAlignment="Center" />
+      </StackPanel>
+    </StackPanel>
+  </DockPanel>
+</UserControl>

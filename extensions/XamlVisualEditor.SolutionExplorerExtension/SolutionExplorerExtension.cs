@@ -1,5 +1,4 @@
 using XamlVisualEditor.Extensions;
-using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.SolutionExplorerExtension;
 
@@ -7,11 +6,11 @@ public sealed class SolutionExplorerExtension : IXveExtension
 {
     private const string ViewId = "solutionExplorer.panel";
     private const string ToggleViewCommandId = "solutionExplorer.toggleView";
-    private readonly MainWindowViewModel _mainViewModel;
+    private readonly ISolutionExplorerPanelHost _solutionExplorerHost;
 
-    public SolutionExplorerExtension(MainWindowViewModel mainViewModel)
+    public SolutionExplorerExtension(ISolutionExplorerPanelHost solutionExplorerHost)
     {
-        _mainViewModel = mainViewModel;
+        _solutionExplorerHost = solutionExplorerHost;
     }
 
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
@@ -41,16 +40,16 @@ public sealed class SolutionExplorerExtension : IXveExtension
             }));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             ViewId,
-            new SolutionExplorerViewProvider(_mainViewModel.SolutionExplorer)));
+            new SolutionExplorerViewProvider(_solutionExplorerHost.ViewModel)));
 
         return Task.CompletedTask;
     }
 
     private sealed class SolutionExplorerViewProvider : ICustomViewProvider
     {
-        private readonly SolutionExplorerViewModel _viewModel;
+        private readonly object? _viewModel;
 
-        public SolutionExplorerViewProvider(SolutionExplorerViewModel viewModel)
+        public SolutionExplorerViewProvider(object? viewModel)
         {
             _viewModel = viewModel;
         }

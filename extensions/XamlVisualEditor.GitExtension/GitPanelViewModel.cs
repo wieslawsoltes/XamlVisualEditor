@@ -421,6 +421,17 @@ public sealed class GitPanelViewModel : ReactiveObject, IDisposable
 
     private void ApplyFilter()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(ApplyFilterCore, DispatcherPriority.Background);
+            return;
+        }
+
+        ApplyFilterCore();
+    }
+
+    private void ApplyFilterCore()
+    {
         string filter = SearchText?.Trim() ?? string.Empty;
         StringComparison comparison = StringComparison.OrdinalIgnoreCase;
 
