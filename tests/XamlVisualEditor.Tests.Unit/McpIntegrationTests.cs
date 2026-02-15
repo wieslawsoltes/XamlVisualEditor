@@ -352,6 +352,13 @@ public sealed class McpIntegrationTests
 
     private sealed class StubTerminalBridge : ITerminalBridge
     {
+        public event EventHandler<TerminalChangedEventArgs>? TerminalCreated;
+        public event EventHandler<TerminalChangedEventArgs>? TerminalClosed;
+        public event EventHandler<ActiveTerminalChangedEventArgs>? ActiveTerminalChanged;
+        public event EventHandler<TerminalOutputEventArgs>? TerminalOutput;
+        public event EventHandler<TerminalExitEventArgs>? TerminalExited;
+        public event EventHandler<TerminalDimensionsChangedEventArgs>? TerminalDimensionsChanged;
+
         public Task<TerminalInfo> CreateAsync(TerminalCreateRequest request, CancellationToken ct)
         {
             return Task.FromResult(new TerminalInfo(Guid.NewGuid(), request.Title ?? "terminal"));
@@ -360,6 +367,30 @@ public sealed class McpIntegrationTests
         public Task SendTextAsync(Guid terminalId, string text, CancellationToken ct)
         {
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<TerminalInfo>> GetTerminalsAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<TerminalInfo>>(Array.Empty<TerminalInfo>());
+        }
+
+        public Task<Guid?> GetActiveTerminalIdAsync(CancellationToken ct)
+        {
+            return Task.FromResult<Guid?>(null);
+        }
+
+        public Task<bool> CloseAsync(Guid terminalId, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<TaskExecutionResult> RunTaskAsync(TaskExecutionRequest request, CancellationToken ct)
+        {
+            return Task.FromResult(new TaskExecutionResult(
+                request.TaskId,
+                0,
+                Array.Empty<string>(),
+                Array.Empty<TaskProblemMatch>()));
         }
     }
 

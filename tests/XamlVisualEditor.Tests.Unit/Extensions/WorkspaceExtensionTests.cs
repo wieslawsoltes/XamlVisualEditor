@@ -20,9 +20,10 @@ public sealed class WorkspaceExtensionTests
         var window = new InMemoryWindow();
         var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
         var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        var shellCommands = new StubShellCommandBridge();
         ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
 
-        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo, shellCommands);
         await extension.ActivateAsync(context, CancellationToken.None);
 
         Assert.Contains(contributions.MenuItems, item =>
@@ -39,15 +40,58 @@ public sealed class WorkspaceExtensionTests
         var window = new InMemoryWindow();
         var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
         var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        var shellCommands = new StubShellCommandBridge();
         ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
 
-        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo, shellCommands);
         await extension.ActivateAsync(context, CancellationToken.None);
 
         await commands.ExecuteAsync("workspace.build", null, CancellationToken.None);
 
         Assert.Equal(1, workspaceCommands.BuildCalls);
         Assert.Empty(window.Messages);
+    }
+
+    [Fact]
+    public async Task ShellBridgeCommand_IsRegistered_AndInvoked()
+    {
+        var commands = new CommandRegistry();
+        var contributions = new ExtensionContributionRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        var shellCommands = new StubShellCommandBridge();
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
+
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo, shellCommands);
+        await extension.ActivateAsync(context, CancellationToken.None);
+
+        await commands.ExecuteAsync("terminal.new", null, CancellationToken.None);
+
+        ShellCommandKind command = Assert.Single(shellCommands.Calls);
+        Assert.Equal(ShellCommandKind.NewTerminal, command);
+    }
+
+    [Fact]
+    public async Task Registers_Edit_And_Debug_Menu_Contributions()
+    {
+        var commands = new CommandRegistry();
+        var contributions = new ExtensionContributionRegistry();
+        var window = new InMemoryWindow();
+        var workspaceInfo = new StubWorkspaceInfo { WorkspacePath = "workspace.sln" };
+        var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = true };
+        var shellCommands = new StubShellCommandBridge();
+        ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
+
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo, shellCommands);
+        await extension.ActivateAsync(context, CancellationToken.None);
+
+        Assert.Contains(contributions.MenuItems, item =>
+            item.CommandId == "editing.undo"
+            && item.Location == ExtensionMenuLocations.Edit);
+        Assert.Contains(contributions.MenuItems, item =>
+            item.CommandId == "debug.start"
+            && item.Location == ExtensionMenuLocations.Debug);
     }
 
     [Fact]
@@ -58,9 +102,10 @@ public sealed class WorkspaceExtensionTests
         var window = new InMemoryWindow();
         var workspaceInfo = new StubWorkspaceInfo();
         var workspaceCommands = new StubWorkspaceCommands { HasWorkspace = false };
+        var shellCommands = new StubShellCommandBridge();
         ExtensionContext context = CreateContext(commands, contributions, window, workspaceInfo, workspaceCommands);
 
-        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo);
+        var extension = new WorkspaceExtensionEntry(workspaceCommands, workspaceInfo, shellCommands);
         await extension.ActivateAsync(context, CancellationToken.None);
 
         await commands.ExecuteAsync("workspace.build", null, CancellationToken.None);
@@ -82,12 +127,13 @@ public sealed class WorkspaceExtensionTests
         var navigation = new StubNavigationService();
         var navigationHistory = new StubNavigationHistoryService();
         var animationHost = new StubAnimationEditorHost();
-        var collaborationHost = new StubCollaborationPanelHost();
+        var collaborationHost = new StubCollaborationHost();
         var debugSettingsHost = new StubDebugSettingsHost();
         var lspSettingsHost = new StubLspSettingsHost();
         var viewHost = new StubExtensionViewHost();
-        var workspaceModel = new WorkspaceModelAdapter(workspaceInfo, workspaceCommands);
+        var workspaceModel = new WorkspaceModelAdapter(workspaceInfo, workspaceCommands, new StubWorkspaceService());
         var propertyEditors = new PropertyEditorRegistry();
+        var permissions = new StubExtensionPermissions();
 
         return new ExtensionContext(
             "test.extension",
@@ -109,12 +155,14 @@ public sealed class WorkspaceExtensionTests
             navigationHistory,
             animationHost,
             collaborationHost,
+            collaborationHost,
             debugSettingsHost,
             lspSettingsHost,
             editorServices,
             new StubDiagnostics(),
             propertyEditors,
             new StubTerminalBridge(),
+            permissions,
             viewHost,
             new InMemorySettingsStore(),
             new InMemoryExtensionStorage(),
@@ -164,6 +212,10 @@ public sealed class WorkspaceExtensionTests
 
     private sealed class StubExtensionViewHost : IExtensionViewHost
     {
+        public event EventHandler<ExtensionViewVisibilityChangedEventArgs>? VisibilityChanged;
+
+        public event EventHandler<ExtensionViewFocusChangedEventArgs>? FocusChanged;
+
         public Task ShowAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task ToggleAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -172,6 +224,41 @@ public sealed class WorkspaceExtensionTests
             Task.FromResult(false);
 
         public Task ActivateAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class StubShellCommandBridge : IShellCommandBridge
+    {
+        public List<ShellCommandKind> Calls { get; } = new();
+
+        public Task ExecuteAsync(ShellCommandKind command, CancellationToken cancellationToken)
+        {
+            Calls.Add(command);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubExtensionPermissions : IExtensionPermissions
+    {
+        public event EventHandler<ExtensionPermissionAuditEventArgs>? AccessAudited;
+        public event EventHandler<ExtensionPermissionChangedEventArgs>? Changed;
+
+        public void Declare(IReadOnlyList<ExtensionCapabilityDeclaration> capabilities)
+        {
+        }
+
+        public Task<ExtensionPermissionDecision> RequestAsync(string capabilityId, CancellationToken cancellationToken)
+            => Task.FromResult(new ExtensionPermissionDecision(
+                capabilityId,
+                IsAllowed: true,
+                IsRemembered: false,
+                ExtensionPermissionDecisionSource.Prompt,
+                DateTimeOffset.UtcNow));
+
+        public Task<IReadOnlyList<ExtensionPermissionEntry>> GetRememberedAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<ExtensionPermissionEntry>>(Array.Empty<ExtensionPermissionEntry>());
+
+        public Task ClearRememberedAsync(string? capabilityId, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 
     private sealed class StubNavigationService : ILanguageNavigationService
@@ -188,6 +275,51 @@ public sealed class WorkspaceExtensionTests
             CancellationToken ct)
         {
             return Task.FromResult<IReadOnlyList<LanguageLocation>>(Array.Empty<LanguageLocation>());
+        }
+
+        public Task<IReadOnlyList<LanguageLocation>> FindImplementationsAsync(
+            LanguagePositionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageLocation>>(Array.Empty<LanguageLocation>());
+        }
+
+        public Task<IReadOnlyList<LanguageSymbol>> GetWorkspaceSymbolsAsync(
+            LanguageSymbolQuery query,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageSymbol>>(Array.Empty<LanguageSymbol>());
+        }
+
+        public Task<LanguageRenameInfo?> PrepareRenameAsync(
+            LanguagePositionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<LanguageRenameInfo?>(null);
+        }
+
+        public Task<LanguageWorkspaceEdit?> RenameAsync(
+            LanguageRenameContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<LanguageWorkspaceEdit?>(null);
+        }
+
+        public Task<IReadOnlyList<LanguageCodeAction>> GetCodeActionsAsync(
+            LanguageCodeActionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageCodeAction>>(Array.Empty<LanguageCodeAction>());
+        }
+
+        public Task<LanguageCodeAction?> ResolveCodeActionAsync(LanguageCodeAction action, CancellationToken ct)
+        {
+            return Task.FromResult<LanguageCodeAction?>(action);
+        }
+
+        public Task<bool> ApplyCodeActionAsync(LanguageCodeAction action, CancellationToken ct)
+        {
+            return Task.FromResult(false);
         }
     }
 
@@ -218,21 +350,103 @@ public sealed class WorkspaceExtensionTests
     private sealed class StubAnimationEditorHost : IAnimationEditorHost
     {
         public object? ViewModel => null;
+
+        public IDisposable BeginTransaction(string name)
+        {
+            return System.Reactive.Disposables.Disposable.Empty;
+        }
+
+        public Task RefreshPreviewAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
-    private sealed class StubCollaborationPanelHost : ICollaborationPanelHost
+    private sealed class StubCollaborationHost : ICollaborationHost, ICollaborationPanelHost
     {
+        public bool IsSessionActive => false;
+
+        public string? SessionId => null;
+
+        public string StatusMessage => string.Empty;
+
         public object? ViewModel => null;
+
+        public event EventHandler<CollaborationSessionChangedEventArgs>? SessionChanged;
+
+        public event EventHandler<CollaborationParticipantsChangedEventArgs>? ParticipantsChanged;
+
+        public IReadOnlyList<CollaborationParticipantInfo> GetParticipants()
+        {
+            return Array.Empty<CollaborationParticipantInfo>();
+        }
+
+        public Task StartSessionAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> JoinSessionAsync(string sessionId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task LeaveSessionAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> CreateShareLinkAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        public Task<bool> InviteAsync(string invitee, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private sealed class StubDebugSettingsHost : IDebugSettingsHost
     {
-        public object? ViewModel => null;
+        public event EventHandler<DebugSettingsChangedEventArgs>? Changed;
+
+        public DebugSettingsState GetState()
+        {
+            return new DebugSettingsState(string.Empty, false, false, string.Empty);
+        }
+
+        public Task SetAdapterPathAsync(string adapterPath, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task SetAutoDownloadToolsAsync(bool autoDownloadTools, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DownloadNetcoredbgAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubLspSettingsHost : ILspSettingsHost
     {
-        public object? ViewModel => null;
+        public string SettingsPath => string.Empty;
+
+        public event EventHandler<LspSettingsChangedEventArgs>? Changed;
+
+        public Task<IReadOnlyList<LspServerSettings>> LoadServersAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<LspServerSettings>>(Array.Empty<LspServerSettings>());
+        }
+
+        public Task SaveServersAsync(IReadOnlyList<LspServerSettings> servers, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubEditorServices : IEditorServices
@@ -296,6 +510,13 @@ public sealed class WorkspaceExtensionTests
 
     private sealed class StubTerminalBridge : ITerminalBridge
     {
+        public event EventHandler<TerminalChangedEventArgs>? TerminalCreated;
+        public event EventHandler<TerminalChangedEventArgs>? TerminalClosed;
+        public event EventHandler<ActiveTerminalChangedEventArgs>? ActiveTerminalChanged;
+        public event EventHandler<TerminalOutputEventArgs>? TerminalOutput;
+        public event EventHandler<TerminalExitEventArgs>? TerminalExited;
+        public event EventHandler<TerminalDimensionsChangedEventArgs>? TerminalDimensionsChanged;
+
         public Task<TerminalInfo> CreateAsync(TerminalCreateRequest request, CancellationToken ct)
         {
             return Task.FromResult(new TerminalInfo(Guid.NewGuid(), request.Title ?? "terminal"));
@@ -304,6 +525,30 @@ public sealed class WorkspaceExtensionTests
         public Task SendTextAsync(Guid terminalId, string text, CancellationToken ct)
         {
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<TerminalInfo>> GetTerminalsAsync(CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<TerminalInfo>>(Array.Empty<TerminalInfo>());
+        }
+
+        public Task<Guid?> GetActiveTerminalIdAsync(CancellationToken ct)
+        {
+            return Task.FromResult<Guid?>(null);
+        }
+
+        public Task<bool> CloseAsync(Guid terminalId, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<TaskExecutionResult> RunTaskAsync(TaskExecutionRequest request, CancellationToken ct)
+        {
+            return Task.FromResult(new TaskExecutionResult(
+                request.TaskId,
+                0,
+                Array.Empty<string>(),
+                Array.Empty<TaskProblemMatch>()));
         }
     }
 
@@ -319,6 +564,33 @@ public sealed class WorkspaceExtensionTests
 
         public void Error(string message, Exception? exception = null)
         {
+        }
+    }
+
+    private sealed class StubWorkspaceService : IWorkspaceService
+    {
+        public Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
+        {
+            return Task.FromResult(new WorkspaceModel
+            {
+                Projects = Array.Empty<ProjectModel>()
+            });
+        }
+
+        public Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default)
+        {
+            return Task.FromResult(new WorkspaceModel
+            {
+                Projects = Array.Empty<ProjectModel>()
+            });
+        }
+
+        public WorkspaceModel CreateStandaloneWorkspace(string xamlFilePath)
+        {
+            return new WorkspaceModel
+            {
+                Projects = Array.Empty<ProjectModel>()
+            };
         }
     }
 }

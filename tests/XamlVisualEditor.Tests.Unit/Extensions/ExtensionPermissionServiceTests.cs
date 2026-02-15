@@ -1,52 +1,120 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
-using XamlVisualEditor.Extensions.Hosting.IdeBridge;
+using XamlVisualEditor.Extensions.Hosting;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
 
-public sealed class IdeBridgePermissionServiceTests
+public sealed class ExtensionPermissionServiceTests
 {
     [Fact]
-    public async Task AuthorizeAsync_AllowsFullAccessWhenApproved()
+    public async Task RequestAsync_AlwaysAllow_IsRememberedAndReused()
     {
         FakeSettings settings = new();
-        FakeWindow window = new()
-        {
-            NextPick = new QuickPickItem("Allow full access", "", null)
-        };
+        FakeWindow window = new();
+        window.EnqueuePick(new QuickPickItem("Always allow", "remember", null));
 
-        IdeBridgePermissionService service = new(settings, window);
-        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws1", null, CancellationToken.None);
+        ExtensionPermissionService service = new("sample.extension", settings, window);
+        service.Declare(
+        [
+            new ExtensionCapabilityDeclaration("workspace.write", "Write files", "Allow writing workspace files.", true)
+        ]);
 
-        Assert.NotNull(state);
-        Assert.True(state!.Capabilities.Write);
-        Assert.True(state.Capabilities.Terminal);
+        ExtensionPermissionDecision first = await service.RequestAsync("workspace.write", CancellationToken.None);
+        ExtensionPermissionDecision second = await service.RequestAsync("workspace.write", CancellationToken.None);
+        IReadOnlyList<ExtensionPermissionEntry> remembered = await service.GetRememberedAsync(CancellationToken.None);
+
+        Assert.True(first.IsAllowed);
+        Assert.True(first.IsRemembered);
+        Assert.Equal(ExtensionPermissionDecisionSource.Prompt, first.Source);
+        Assert.True(second.IsAllowed);
+        Assert.True(second.IsRemembered);
+        Assert.Equal(ExtensionPermissionDecisionSource.Remembered, second.Source);
+        Assert.Single(remembered);
+        Assert.Equal("workspace.write", remembered[0].CapabilityId);
+        Assert.Equal(1, window.QuickPickCalls);
     }
 
     [Fact]
-    public async Task AuthorizeAsync_DeniesWhenTokenDoesNotMatch()
+    public async Task RequestAsync_AllowOnce_DoesNotPersistDecision()
     {
         FakeSettings settings = new();
-        FakeWindow window = new()
-        {
-            NextPick = new QuickPickItem("Allow read-only", "", null)
-        };
+        FakeWindow window = new();
+        window.EnqueuePick(new QuickPickItem("Allow once", null, null));
+        window.EnqueuePick(new QuickPickItem("Deny once", null, null));
 
-        IdeBridgePermissionService service = new(settings, window);
-        IdeBridgeWorkspacePermissionState? state = await service.AuthorizeAsync("ws2", null, CancellationToken.None);
-        Assert.NotNull(state);
+        ExtensionPermissionService service = new("sample.extension", settings, window);
+        service.Declare(
+        [
+            new ExtensionCapabilityDeclaration("terminal.run", "Run terminal", "Allow running terminal commands.")
+        ]);
 
-        IdeBridgeWorkspacePermissionState? denied = await service.AuthorizeAsync("ws2", "wrong-token", CancellationToken.None);
-        Assert.Null(denied);
+        ExtensionPermissionDecision first = await service.RequestAsync("terminal.run", CancellationToken.None);
+        ExtensionPermissionDecision second = await service.RequestAsync("terminal.run", CancellationToken.None);
+        IReadOnlyList<ExtensionPermissionEntry> remembered = await service.GetRememberedAsync(CancellationToken.None);
+
+        Assert.True(first.IsAllowed);
+        Assert.False(first.IsRemembered);
+        Assert.False(second.IsAllowed);
+        Assert.False(second.IsRemembered);
+        Assert.Empty(remembered);
+        Assert.Equal(2, window.QuickPickCalls);
+    }
+
+    [Fact]
+    public async Task RequestAsync_UndeclaredCapability_IsDeniedAndAudited()
+    {
+        FakeSettings settings = new();
+        FakeWindow window = new();
+        ExtensionPermissionService service = new("sample.extension", settings, window);
+
+        ExtensionPermissionAuditEventArgs? lastAudit = null;
+        service.AccessAudited += (_, args) => lastAudit = args;
+
+        ExtensionPermissionDecision decision = await service.RequestAsync("unknown.capability", CancellationToken.None);
+
+        Assert.False(decision.IsAllowed);
+        Assert.Equal(ExtensionPermissionDecisionSource.Undeclared, decision.Source);
+        Assert.NotNull(lastAudit);
+        Assert.Equal("unknown.capability", lastAudit!.CapabilityId);
+        Assert.False(lastAudit.IsAllowed);
+        Assert.Equal(ExtensionPermissionDecisionSource.Undeclared, lastAudit.Source);
+    }
+
+    [Fact]
+    public async Task ClearRememberedAsync_RemovesStoredCapabilityDecision()
+    {
+        FakeSettings settings = new();
+        FakeWindow window = new();
+        window.EnqueuePick(new QuickPickItem("Always allow", null, null));
+
+        ExtensionPermissionService service = new("sample.extension", settings, window);
+        service.Declare(
+        [
+            new ExtensionCapabilityDeclaration("diagnostics.read", "Read diagnostics", "Access diagnostics streams.")
+        ]);
+
+        await service.RequestAsync("diagnostics.read", CancellationToken.None);
+        await service.ClearRememberedAsync("diagnostics.read", CancellationToken.None);
+        IReadOnlyList<ExtensionPermissionEntry> remembered = await service.GetRememberedAsync(CancellationToken.None);
+
+        Assert.Empty(remembered);
     }
 
     private sealed class FakeWindow : IWindow
     {
-        public QuickPickItem? NextPick { get; set; }
+        private readonly Queue<QuickPickItem?> _picks = new();
+
+        public int QuickPickCalls { get; private set; }
+
+        public void EnqueuePick(QuickPickItem? item)
+        {
+            _picks.Enqueue(item);
+        }
 
         public Task ShowInformationMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -54,23 +122,32 @@ public sealed class IdeBridgePermissionServiceTests
 
         public Task ShowErrorMessageAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+        public Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
 
-        public Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, QuickPickOptions options, CancellationToken cancellationToken)
-            => Task.FromResult(NextPick);
+        public Task<QuickPickItem?> ShowQuickPickAsync(
+            IReadOnlyList<QuickPickItem> items,
+            QuickPickOptions options,
+            CancellationToken cancellationToken)
+        {
+            QuickPickCalls++;
+            if (_picks.Count > 0)
+            {
+                return Task.FromResult(_picks.Dequeue());
+            }
+
+            return Task.FromResult<QuickPickItem?>(null);
+        }
 
         public IOutputChannel CreateOutputChannel(string name) => new NullOutputChannel(name);
 
-        public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
+        public Task<IReadOnlyList<OutputChannelInfo>> GetOutputChannelsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<OutputChannelInfo>>(Array.Empty<OutputChannelInfo>());
 
 #pragma warning disable CS0067
         public event EventHandler<OutputChannelEventArgs>? OutputChannelCreated;
-
         public event EventHandler<OutputChannelEventArgs>? OutputChannelRemoved;
-
         public event EventHandler<OutputChannelMessageEventArgs>? OutputChannelMessage;
-
         public event EventHandler<OutputChannelClearedEventArgs>? OutputChannelCleared;
 #pragma warning restore CS0067
 
@@ -78,7 +155,10 @@ public sealed class IdeBridgePermissionServiceTests
 
         private sealed class NullOutputChannel : IOutputChannel
         {
-            public NullOutputChannel(string name) => Name = name;
+            public NullOutputChannel(string name)
+            {
+                Name = name;
+            }
 
             public string Name { get; }
 

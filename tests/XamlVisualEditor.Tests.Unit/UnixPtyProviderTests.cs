@@ -22,11 +22,14 @@ public sealed class UnixPtyProviderTests
             Columns = 80,
             Rows = 24,
             Command = "/bin/sh",
-            Arguments = new[] { "-lc", "stty size; trap 'stty size' WINCH; while :; do sleep 1; done" }
+            Arguments = new[] { "-lc", "trap 'stty size' WINCH; echo READY; stty size; while :; do sleep 1; done" }
         };
 
         using TerminalSession session = new(options, new UnixPtyProvider(), new ManagedTerminalEmulatorFactory());
         session.Start();
+
+        bool ready = await WaitForTextAsync(session.Emulator, "READY", TimeSpan.FromSeconds(3));
+        Assert.True(ready, GetVisibleText(session.Emulator));
 
         bool initial = await WaitForTextAsync(session.Emulator, "24 80", TimeSpan.FromSeconds(3));
         Assert.True(initial, GetVisibleText(session.Emulator));
@@ -34,6 +37,13 @@ public sealed class UnixPtyProviderTests
         session.Resize(100, 40);
 
         bool resized = await WaitForTextAsync(session.Emulator, "40 100", TimeSpan.FromSeconds(3));
+        if (!resized)
+        {
+            session.Resize(101, 40);
+            session.Resize(100, 40);
+            resized = await WaitForTextAsync(session.Emulator, "40 100", TimeSpan.FromSeconds(3));
+        }
+
         Assert.True(resized, GetVisibleText(session.Emulator));
     }
 

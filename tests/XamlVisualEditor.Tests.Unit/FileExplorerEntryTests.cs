@@ -15,7 +15,7 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class FileExplorerEntryTests
 {
     [Fact]
-    public async Task OpenUsesDocumentOnlyBehavior()
+    public async Task OpenUsesAllowWorkspaceLoadBehavior()
     {
         string root = CreateTempDirectory();
         try
@@ -30,7 +30,7 @@ public sealed class FileExplorerEntryTests
 
             await entry.OpenAsync(CancellationToken.None);
 
-            Assert.Equal(EditorDocumentOpenBehavior.DocumentOnly, editor.LastBehavior);
+            Assert.Equal(EditorDocumentOpenBehavior.AllowWorkspaceLoad, editor.LastBehavior);
             Assert.Equal(path, editor.LastPath);
         }
         finally
@@ -40,7 +40,7 @@ public sealed class FileExplorerEntryTests
     }
 
     [Fact]
-    public async Task CreateFileUsesDocumentOnlyBehavior()
+    public async Task CreateFileUsesAllowWorkspaceLoadBehavior()
     {
         string root = CreateTempDirectory();
         try
@@ -54,7 +54,7 @@ public sealed class FileExplorerEntryTests
 
             string createdPath = Path.Combine(root, "new.sln");
             Assert.True(File.Exists(createdPath));
-            Assert.Equal(EditorDocumentOpenBehavior.DocumentOnly, editor.LastBehavior);
+            Assert.Equal(EditorDocumentOpenBehavior.AllowWorkspaceLoad, editor.LastBehavior);
             Assert.Equal(createdPath, editor.LastPath);
         }
         finally

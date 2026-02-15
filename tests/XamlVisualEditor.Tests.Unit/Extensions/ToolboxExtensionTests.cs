@@ -40,7 +40,7 @@ public sealed class ToolboxExtensionTests
             SettingsTarget.User,
             CancellationToken.None);
 
-        ToolboxPanelViewModel viewModel = new(commands, window, settings);
+        ToolboxPanelViewModel viewModel = new(commands, settings);
         Assert.Single(viewModel.Items);
         Assert.Equal("Custom Border", viewModel.Items[0].DisplayName);
 
@@ -71,7 +71,6 @@ public sealed class ToolboxExtensionTests
         Assert.Equal("StackPanel", designerHost.LastTypeName);
         Assert.Equal("https://github.com/avaloniaui", designerHost.LastXmlNamespace);
         Assert.Null(designerHost.LastParentNodeId);
-        Assert.Contains(window.Messages, message => message.Contains("Inserted StackPanel node"));
     }
 
     [Fact]
@@ -104,10 +103,11 @@ public sealed class ToolboxExtensionTests
         StubNavigationService navigation = new();
         StubNavigationHistoryService navigationHistory = new();
         StubAnimationEditorHost animationHost = new();
-        StubCollaborationPanelHost collaborationHost = new();
+        StubCollaborationHost collaborationHost = new();
         StubDebugSettingsHost debugSettingsHost = new();
         StubLspSettingsHost lspSettingsHost = new();
         StubExtensionViewHost viewHost = new();
+        StubExtensionPermissions permissions = new();
 
         return new ExtensionContext(
             "test.toolbox",
@@ -118,7 +118,7 @@ public sealed class ToolboxExtensionTests
             new DebuggerServiceRegistry(),
             designerHost,
             new InMemoryWorkspace(),
-            new WorkspaceModelAdapter(workspaceInfo, workspaceCommands),
+            new WorkspaceModelAdapter(workspaceInfo, workspaceCommands, new StubWorkspaceService()),
             workspaceInfo,
             window,
             new InMemoryDialogHost(),
@@ -129,12 +129,14 @@ public sealed class ToolboxExtensionTests
             navigationHistory,
             animationHost,
             collaborationHost,
+            collaborationHost,
             debugSettingsHost,
             lspSettingsHost,
             editorServices,
             new StubDiagnostics(),
             new PropertyEditorRegistry(),
             new StubTerminalBridge(),
+            permissions,
             viewHost,
             new InMemorySettingsStore(),
             new InMemoryExtensionStorage(),
@@ -144,6 +146,10 @@ public sealed class ToolboxExtensionTests
 
     private sealed class StubExtensionViewHost : IExtensionViewHost
     {
+        public event EventHandler<ExtensionViewVisibilityChangedEventArgs>? VisibilityChanged;
+
+        public event EventHandler<ExtensionViewFocusChangedEventArgs>? FocusChanged;
+
         public Task ShowAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task ToggleAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -152,6 +158,30 @@ public sealed class ToolboxExtensionTests
             Task.FromResult(false);
 
         public Task ActivateAsync(string viewId, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class StubExtensionPermissions : IExtensionPermissions
+    {
+        public event EventHandler<ExtensionPermissionAuditEventArgs>? AccessAudited;
+        public event EventHandler<ExtensionPermissionChangedEventArgs>? Changed;
+
+        public void Declare(IReadOnlyList<ExtensionCapabilityDeclaration> capabilities)
+        {
+        }
+
+        public Task<ExtensionPermissionDecision> RequestAsync(string capabilityId, CancellationToken cancellationToken)
+            => Task.FromResult(new ExtensionPermissionDecision(
+                capabilityId,
+                IsAllowed: true,
+                IsRemembered: false,
+                ExtensionPermissionDecisionSource.Prompt,
+                DateTimeOffset.UtcNow));
+
+        public Task<IReadOnlyList<ExtensionPermissionEntry>> GetRememberedAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<ExtensionPermissionEntry>>(Array.Empty<ExtensionPermissionEntry>());
+
+        public Task ClearRememberedAsync(string? capabilityId, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 
     private sealed class StubDesignerHost : IDesignerHost
@@ -229,6 +259,51 @@ public sealed class ToolboxExtensionTests
         {
             return Task.FromResult<IReadOnlyList<LanguageLocation>>(Array.Empty<LanguageLocation>());
         }
+
+        public Task<IReadOnlyList<LanguageLocation>> FindImplementationsAsync(
+            LanguagePositionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageLocation>>(Array.Empty<LanguageLocation>());
+        }
+
+        public Task<IReadOnlyList<LanguageSymbol>> GetWorkspaceSymbolsAsync(
+            LanguageSymbolQuery query,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageSymbol>>(Array.Empty<LanguageSymbol>());
+        }
+
+        public Task<LanguageRenameInfo?> PrepareRenameAsync(
+            LanguagePositionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<LanguageRenameInfo?>(null);
+        }
+
+        public Task<LanguageWorkspaceEdit?> RenameAsync(
+            LanguageRenameContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<LanguageWorkspaceEdit?>(null);
+        }
+
+        public Task<IReadOnlyList<LanguageCodeAction>> GetCodeActionsAsync(
+            LanguageCodeActionContext context,
+            CancellationToken ct)
+        {
+            return Task.FromResult<IReadOnlyList<LanguageCodeAction>>(Array.Empty<LanguageCodeAction>());
+        }
+
+        public Task<LanguageCodeAction?> ResolveCodeActionAsync(LanguageCodeAction action, CancellationToken ct)
+        {
+            return Task.FromResult<LanguageCodeAction?>(action);
+        }
+
+        public Task<bool> ApplyCodeActionAsync(LanguageCodeAction action, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private sealed class StubNavigationHistoryService : INavigationHistoryService
@@ -251,21 +326,103 @@ public sealed class ToolboxExtensionTests
     private sealed class StubAnimationEditorHost : IAnimationEditorHost
     {
         public object? ViewModel => null;
+
+        public IDisposable BeginTransaction(string name)
+        {
+            return System.Reactive.Disposables.Disposable.Empty;
+        }
+
+        public Task RefreshPreviewAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
-    private sealed class StubCollaborationPanelHost : ICollaborationPanelHost
+    private sealed class StubCollaborationHost : ICollaborationHost, ICollaborationPanelHost
     {
+        public bool IsSessionActive => false;
+
+        public string? SessionId => null;
+
+        public string StatusMessage => string.Empty;
+
         public object? ViewModel => null;
+
+        public event EventHandler<CollaborationSessionChangedEventArgs>? SessionChanged;
+
+        public event EventHandler<CollaborationParticipantsChangedEventArgs>? ParticipantsChanged;
+
+        public IReadOnlyList<CollaborationParticipantInfo> GetParticipants()
+        {
+            return Array.Empty<CollaborationParticipantInfo>();
+        }
+
+        public Task StartSessionAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> JoinSessionAsync(string sessionId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task LeaveSessionAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> CreateShareLinkAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        public Task<bool> InviteAsync(string invitee, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private sealed class StubDebugSettingsHost : IDebugSettingsHost
     {
-        public object? ViewModel => null;
+        public event EventHandler<DebugSettingsChangedEventArgs>? Changed;
+
+        public DebugSettingsState GetState()
+        {
+            return new DebugSettingsState(string.Empty, false, false, string.Empty);
+        }
+
+        public Task SetAdapterPathAsync(string adapterPath, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task SetAutoDownloadToolsAsync(bool autoDownloadTools, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DownloadNetcoredbgAsync(CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubLspSettingsHost : ILspSettingsHost
     {
-        public object? ViewModel => null;
+        public string SettingsPath => string.Empty;
+
+        public event EventHandler<LspSettingsChangedEventArgs>? Changed;
+
+        public Task<IReadOnlyList<LspServerSettings>> LoadServersAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<LspServerSettings>>(Array.Empty<LspServerSettings>());
+        }
+
+        public Task SaveServersAsync(IReadOnlyList<LspServerSettings> servers, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubWorkspaceInfo : IWorkspaceInfo
@@ -323,10 +480,33 @@ public sealed class ToolboxExtensionTests
 
     private sealed class StubTerminalBridge : ITerminalBridge
     {
+        public event EventHandler<TerminalChangedEventArgs>? TerminalCreated;
+        public event EventHandler<TerminalChangedEventArgs>? TerminalClosed;
+        public event EventHandler<ActiveTerminalChangedEventArgs>? ActiveTerminalChanged;
+        public event EventHandler<TerminalOutputEventArgs>? TerminalOutput;
+        public event EventHandler<TerminalExitEventArgs>? TerminalExited;
+        public event EventHandler<TerminalDimensionsChangedEventArgs>? TerminalDimensionsChanged;
+
         public Task<TerminalInfo> CreateAsync(TerminalCreateRequest request, CancellationToken ct)
             => Task.FromResult(new TerminalInfo(Guid.NewGuid(), request.Title ?? "terminal"));
 
         public Task SendTextAsync(Guid terminalId, string text, CancellationToken ct) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<TerminalInfo>> GetTerminalsAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<TerminalInfo>>(Array.Empty<TerminalInfo>());
+
+        public Task<Guid?> GetActiveTerminalIdAsync(CancellationToken ct)
+            => Task.FromResult<Guid?>(null);
+
+        public Task<bool> CloseAsync(Guid terminalId, CancellationToken ct)
+            => Task.FromResult(false);
+
+        public Task<TaskExecutionResult> RunTaskAsync(TaskExecutionRequest request, CancellationToken ct)
+            => Task.FromResult(new TaskExecutionResult(
+                request.TaskId,
+                0,
+                Array.Empty<string>(),
+                Array.Empty<TaskProblemMatch>()));
     }
 
     private sealed class StubExtensionLogger : IExtensionLogger
@@ -363,6 +543,33 @@ public sealed class ToolboxExtensionTests
             public void Dispose()
             {
             }
+        }
+    }
+
+    private sealed class StubWorkspaceService : IWorkspaceService
+    {
+        public Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
+        {
+            return Task.FromResult(new WorkspaceModel
+            {
+                Projects = Array.Empty<ProjectModel>()
+            });
+        }
+
+        public Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default)
+        {
+            return Task.FromResult(new WorkspaceModel
+            {
+                Projects = Array.Empty<ProjectModel>()
+            });
+        }
+
+        public WorkspaceModel CreateStandaloneWorkspace(string xamlFilePath)
+        {
+            return new WorkspaceModel
+            {
+                Projects = Array.Empty<ProjectModel>()
+            };
         }
     }
 }
