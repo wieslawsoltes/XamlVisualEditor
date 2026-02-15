@@ -13,16 +13,16 @@
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.11" />
     <PackageVersion Include="Avalonia.Skia" Version="11.3.11" />
     <PackageVersion Include="ProDiagnostics" Version="11.3.11-preview.8" />
-    <PackageVersion Include="ProDataGrid" Version="11.3.11-preview.8" />
+    <PackageVersion Include="ProDataGrid" Version="11.3.11-preview.14" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="11.3.11" />
     <!-- AvaloniaEdit -->
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="11.4.1" />
     <!-- Dock -->
-    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.9" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.9" />
-    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.9" />
-    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.9" />
+    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.13" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.13" />
+    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.13" />
+    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.13" />
     <!-- ReactiveUI -->
     <PackageVersion Include="ReactiveUI" Version="22.3.1" />
     <PackageVersion Include="ReactiveUI.Fody" Version="19.5.41" />
