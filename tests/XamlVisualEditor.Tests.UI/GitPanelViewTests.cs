@@ -29,17 +29,17 @@ public sealed class GitPanelViewTests
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 view.ApplyTemplate();
+                GitDiffTextEditor? editor = view.GetVisualDescendants().OfType<GitDiffTextEditor>().FirstOrDefault();
+                Assert.NotNull(editor);
+                Assert.Contains("diff --git", editor!.Text);
+                Assert.Contains("+ added", editor.Text);
+                Assert.Contains("- removed", editor.Text);
             });
-
-            GitDiffTextEditor? editor = view.GetVisualDescendants().OfType<GitDiffTextEditor>().FirstOrDefault();
-            Assert.NotNull(editor);
-            Assert.Contains("diff --git", editor!.Text);
-            Assert.Contains("+ added", editor.Text);
-            Assert.Contains("- removed", editor.Text);
         }
         finally
         {
             await Dispatcher.UIThread.InvokeAsync(() => window.Close());
+            vm.Dispose();
         }
     }
 

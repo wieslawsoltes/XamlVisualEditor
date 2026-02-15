@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Headless.XUnit;
 using System.Reactive.Linq;
+using System.Threading;
 using Xunit;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
@@ -17,6 +18,7 @@ using XamlVisualEditor.Designer.Core;
 using XamlVisualEditor.TreeView;
 using XamlVisualEditor.PropertyEditor;
 using XamlVisualEditor.Collaboration.UI;
+using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Tests.UI;
 
@@ -81,10 +83,10 @@ public sealed class DesignerSurfaceTests
         Assert.Equal(2, manager.SelectedItems.Count);
     }
 
-    [Fact]
+    [AvaloniaFact]
     public void DesignerDocument_SelectionManager_Is_DesignSurface_Selection()
     {
-        DesignerDocumentViewModel doc = new("SelectionSyncTest.axaml");
+        using DesignerDocumentViewModel doc = new("SelectionSyncTest.axaml");
         MutableAstObjectNode node = new() { TypeName = "Button", XmlNamespace = "https://github.com/avaloniaui" };
         DesignItem item = new(node);
 
@@ -287,11 +289,14 @@ public sealed class DockingLayoutTests
     public void MainWindowViewModel_ToggleCommands_Work()
     {
         MainWindowViewModel vm = new();
+        IShellCommandBridge shellBridge = new ShellCommandBridgeAdapter(vm);
 
-        bool initial = vm.IsToolboxVisible;
-        vm.ToggleToolboxCommand.Execute().Subscribe();
+        bool initial = vm.IsBreakpointsVisible;
+        shellBridge.ExecuteAsync(ShellCommandKind.ToggleBreakpoints, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
 
-        Assert.NotEqual(initial, vm.IsToolboxVisible);
+        Assert.NotEqual(initial, vm.IsBreakpointsVisible);
     }
 }
 

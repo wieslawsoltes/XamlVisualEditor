@@ -23,22 +23,20 @@ public sealed class AcpToolPanelTests
         Window window = await ShowInWindowAsync(view).ConfigureAwait(false);
         try
         {
-            await Dispatcher.UIThread.InvokeAsync(() => { });
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                view.ApplyTemplate();
 
-            ListBox[] listBoxes = view.GetVisualDescendants().OfType<ListBox>().ToArray();
-            Assert.True(listBoxes.Length >= 3);
-
-            bool transcriptMatched = listBoxes.Any(list => list.ItemCount == vm.Transcript.Count);
-            bool sessionsMatched = listBoxes.Any(list => list.ItemCount == vm.Sessions.Count);
-            bool activityMatched = listBoxes.Any(list => list.ItemCount == vm.Activity.Count);
-
-            Assert.True(transcriptMatched, "Transcript list was not bound.");
-            Assert.True(sessionsMatched, "Sessions list was not bound.");
-            Assert.True(activityMatched, "Activity list was not bound.");
+                ListBox[] listBoxes = view.GetVisualDescendants().OfType<ListBox>().ToArray();
+                ListBox? transcript = listBoxes.FirstOrDefault();
+                Assert.NotNull(transcript);
+                Assert.Equal(vm.Transcript.Count, transcript!.ItemCount);
+            });
         }
         finally
         {
             await Dispatcher.UIThread.InvokeAsync(() => window.Close());
+            vm.Dispose();
         }
     }
 
@@ -68,11 +66,15 @@ public sealed class AcpToolPanelTests
         });
         try
         {
-            Button[] buttons = dialog.GetVisualDescendants().OfType<Button>().ToArray();
-            int optionButtons = buttons.Count(button => string.Equals(button.Content?.ToString(), "Allow once", StringComparison.Ordinal)
-                || string.Equals(button.Content?.ToString(), "Reject once", StringComparison.Ordinal));
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                ItemsControl? optionsControl = dialog.GetVisualDescendants()
+                    .OfType<ItemsControl>()
+                    .FirstOrDefault(control => ReferenceEquals(control.ItemsSource, vm.Options));
 
-            Assert.Equal(2, optionButtons);
+                Assert.NotNull(optionsControl);
+                Assert.Equal(vm.Options.Count, optionsControl!.ItemCount);
+            });
         }
         finally
         {

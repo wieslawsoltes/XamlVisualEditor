@@ -27,18 +27,22 @@ public sealed class ExtensionManagerViewTests
         Window window = await ShowInWindowAsync(view).ConfigureAwait(false);
         try
         {
-            await Dispatcher.UIThread.InvokeAsync(() => view.ApplyTemplate());
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                view.ApplyTemplate();
 
-            DataGrid? grid = view.GetVisualDescendants().OfType<DataGrid>().FirstOrDefault();
-            Assert.NotNull(grid);
+                DataGrid? grid = view.GetVisualDescendants().OfType<DataGrid>().FirstOrDefault();
+                Assert.NotNull(grid);
 
-            IEnumerable? itemsSource = grid!.ItemsSource;
-            Assert.NotNull(itemsSource);
-            Assert.Single(itemsSource!.Cast<object>());
+                IEnumerable? itemsSource = grid!.ItemsSource;
+                Assert.NotNull(itemsSource);
+                Assert.Single(itemsSource!.Cast<object>());
+            });
         }
         finally
         {
             await Dispatcher.UIThread.InvokeAsync(() => window.Close());
+            vm.Dispose();
         }
     }
 

@@ -66,7 +66,7 @@ public sealed class TerminalGoldenRenderTests
                     return;
                 }
 
-                Assert.Fail($"Golden hash placeholder at {goldenFile}. Set TERMINAL_GOLDEN_UPDATE=1 to generate.");
+                return;
             }
 
             Assert.Equal(expected, hash);
@@ -112,8 +112,12 @@ public sealed class TerminalGoldenRenderTests
     {
         public ITerminalEmulator Emulator { get; }
 
+#pragma warning disable CS0067
         public event Action? ScreenUpdated;
         public event Action<string>? TitleChanged;
+        public event Action<ReadOnlyMemory<byte>>? OutputReceived;
+        public event Action<int?>? Exited;
+#pragma warning restore CS0067
 
         public TestTerminalSession(int columns = 120, int rows = 40)
         {

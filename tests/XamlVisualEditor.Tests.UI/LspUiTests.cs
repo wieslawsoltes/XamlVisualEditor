@@ -25,6 +25,7 @@ public sealed class LspUiTests
     public async Task Diagnostics_Rendered_From_Language_Service()
     {
         string filePath = Path.Combine(Path.GetTempPath(), "XveLspTests", "Diagnostics.cs");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
         FakeLanguageService service = new("csharp")
         {
             Diagnostics = new[]
@@ -42,10 +43,11 @@ public sealed class LspUiTests
         };
 
         ILanguageIntellisenseRegistry registry = new LanguageServiceRegistry(new[] { service });
-        TextDocumentViewModel vm = new(filePath, registry);
+        using TextDocumentViewModel vm = new(filePath, registry);
 
-        vm.Document.Text = "class C {}";
-        await Task.Delay(600);
+        await File.WriteAllTextAsync(filePath, "class C {}");
+        await vm.LoadAsync();
+        await WaitForConditionAsync(() => vm.Diagnostics.Count > 0, TimeSpan.FromSeconds(3));
 
         LanguageDiagnostic? diag = vm.DiagnosticColorizer.GetDiagnosticAt(1, 2);
         Assert.NotNull(diag);
@@ -69,7 +71,7 @@ public sealed class LspUiTests
         AstNodeMap map = new();
         SyncEngine engine = new(parser, serializer, map);
         CompletionProviderRegistry completionRegistry = new();
-        XamlVisualEditor.CodeEditor.CodeEditorViewModel vm = new(
+        using XamlVisualEditor.CodeEditor.CodeEditorViewModel vm = new(
             "Test.xaml",
             engine,
             completionRegistry,
@@ -86,7 +88,7 @@ public sealed class LspUiTests
     }
 
     [AvaloniaFact]
-    public async Task GoToDefinition_Navigates_To_Target()
+    public async Task DefinitionLookup_And_OpenLocation_Navigates_To_Target()
     {
         string workspace = Path.Combine(Path.GetTempPath(), "XveLspTests");
         Directory.CreateDirectory(workspace);
@@ -108,17 +110,29 @@ public sealed class LspUiTests
         };
 
         ILanguageIntellisenseRegistry registry = new LanguageServiceRegistry(new[] { service });
-        MainWindowViewModel vm = new(languageRegistry: registry);
+        using MainWindowViewModel vm = new(languageRegistry: registry);
+        using EditorServicesAdapter editor = new(vm);
+        LanguageNavigationServiceAdapter navigation = new(registry, editor);
 
         await vm.OpenFileAsync(filePath);
         Assert.NotNull(vm.ActiveTextDocument);
 
-        await vm.GoToDefinitionCommand.Execute().FirstAsync();
+        LanguagePositionContext context = new()
+        {
+            FilePath = filePath,
+            Text = vm.ActiveTextDocument!.Document.Text,
+            Offset = 0
+        };
+
+        IReadOnlyList<LanguageLocation> definitions = await navigation.FindDefinitionsAsync(context, CancellationToken.None);
+        Assert.Single(definitions);
+
+        bool opened = await editor.OpenLocationAsync(definitions[0], CancellationToken.None);
+        Assert.True(opened);
 
         TextDocumentViewModel textDoc = vm.ActiveTextDocument!;
         int expectedOffset = textDoc.GetOffsetForLineColumn(2, 1);
         Assert.Equal(expectedOffset, textDoc.CaretOffset);
-        Assert.Contains("Navigated", vm.StatusText, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)

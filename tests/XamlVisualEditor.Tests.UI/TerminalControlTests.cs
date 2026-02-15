@@ -438,8 +438,12 @@ public sealed class TerminalControlTests
         public List<(int Columns, int Rows, int PixelWidth, int PixelHeight)> ResizeCalls { get; } = new();
         private readonly List<byte[]> _writes = new();
 
+#pragma warning disable CS0067
         public event Action? ScreenUpdated;
         public event Action<string>? TitleChanged;
+        public event Action<ReadOnlyMemory<byte>>? OutputReceived;
+        public event Action<int?>? Exited;
+#pragma warning restore CS0067
 
         public TestTerminalSession(int columns = 80, int rows = 24)
         {

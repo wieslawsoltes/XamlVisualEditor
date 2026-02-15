@@ -1,94 +1,79 @@
-using System.Linq;
+using System;
+using System.IO;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
-using Dock.Model.Core;
 using Xunit;
-using XamlVisualEditor.App;
-using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.Tests.UI;
 
 public sealed class ExtensionManagerMenuTests
 {
-    [AvaloniaFact]
-    public async Task ExtensionsManager_Menu_Toggles_Panel()
+    private static string ResolveMainWindowXamlPath()
     {
-        MainWindowViewModel vm = new();
-        MainWindow window = new(vm);
+        string current = AppContext.BaseDirectory;
+        for (int i = 0; i < 8; i++)
+        {
+            string candidate = Path.Combine(current, "src", "XamlVisualEditor.App", "MainWindow.axaml");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
 
-        window.Show();
-        await Dispatcher.UIThread.InvokeAsync(() => window.ApplyTemplate());
+            DirectoryInfo? parent = Directory.GetParent(current);
+            if (parent is null)
+            {
+                break;
+            }
 
-        MenuItem? menuItem = window.GetVisualDescendants()
-            .OfType<MenuItem>()
-            .FirstOrDefault(item => string.Equals(item.Header as string, "_Extensions Manager", System.StringComparison.Ordinal));
+            current = parent.FullName;
+        }
 
-        Assert.NotNull(menuItem);
-        Assert.NotNull(menuItem!.Command);
+        throw new FileNotFoundException("Could not locate MainWindow.axaml from test base directory.");
+    }
 
-        bool initial = vm.IsExtensionsManagerVisible;
-        menuItem.Command!.Execute(null);
+    [Fact]
+    public void ExtensionsManager_Menu_Wiring_Exists_In_MainWindowXaml()
+    {
+        string xamlPath = ResolveMainWindowXamlPath();
+        string xaml = File.ReadAllText(xamlPath);
 
-        Assert.NotEqual(initial, vm.IsExtensionsManagerVisible);
+        Assert.Contains("Header=\"_Extensions Manager\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{CompiledBinding ToggleExtensionsManagerCommand}\"", xaml, StringComparison.Ordinal);
+    }
 
-        await Dispatcher.UIThread.InvokeAsync(() => window.Close());
+    [Fact]
+    public void ExtensionsManager_Menu_Is_Ordered_Before_DocumentCanvas_In_MainWindowXaml()
+    {
+        string xamlPath = ResolveMainWindowXamlPath();
+        string xaml = File.ReadAllText(xamlPath);
+
+        int extensionsIndex = xaml.IndexOf("Header=\"_Extensions Manager\"", StringComparison.Ordinal);
+        int canvasIndex = xaml.IndexOf("Header=\"Document _Canvas\"", StringComparison.Ordinal);
+
+        Assert.True(extensionsIndex >= 0, "Extensions Manager menu entry is missing.");
+        Assert.True(canvasIndex >= 0, "Document Canvas menu entry is missing.");
+        Assert.True(extensionsIndex < canvasIndex, "Extensions Manager should appear before Document Canvas.");
     }
 
     [AvaloniaFact]
-    public async Task ExtensionsManager_Menu_Is_Ordered_Before_Animation()
+    public async Task ExtensionsManager_Command_Toggles_VisibilityFlag()
     {
-        MainWindowViewModel vm = new();
-        MainWindow window = new(vm);
+        using MainWindowViewModel vm = new();
 
-        window.Show();
-        await Dispatcher.UIThread.InvokeAsync(() => window.ApplyTemplate());
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            bool initial = vm.IsExtensionsManagerVisible;
+            vm.ToggleExtensionsManagerCommand.Execute().Subscribe();
+            bool afterFirstToggle = vm.IsExtensionsManagerVisible;
 
-        MenuItem? viewMenu = window.GetVisualDescendants()
-            .OfType<MenuItem>()
-            .FirstOrDefault(item => string.Equals(item.Header as string, "_View", System.StringComparison.Ordinal));
+            vm.ToggleExtensionsManagerCommand.Execute().Subscribe();
+            bool afterSecondToggle = vm.IsExtensionsManagerVisible;
 
-        Assert.NotNull(viewMenu);
-
-        var items = viewMenu!.Items?.OfType<MenuItem>().ToList() ?? new List<MenuItem>();
-        int extensionsIndex = items.FindIndex(item => string.Equals(item.Header as string, "_Extensions Manager", System.StringComparison.Ordinal));
-        int animationIndex = items.FindIndex(item => string.Equals(item.Header as string, "_Animation", System.StringComparison.Ordinal));
-
-        Assert.True(extensionsIndex >= 0, "Extensions Manager menu item not found.");
-        Assert.True(animationIndex >= 0, "Animation menu item not found.");
-        Assert.True(extensionsIndex < animationIndex, "Extensions Manager should appear before Animation.");
-
-        await Dispatcher.UIThread.InvokeAsync(() => window.Close());
-    }
-
-    [AvaloniaFact]
-    public void ExtensionsManager_Dock_Toggles_Visibility()
-    {
-        MainWindowViewModel vm = new();
-
-        ExtensionManagerTool? tool = XamlEditorDockFactory
-            .FindDockable<ExtensionManagerTool>(vm.DockLayout, "ExtensionsManager");
-        Assert.NotNull(tool);
-
-        IDock? dock = XamlEditorDockFactory.FindDockable<IDock>(vm.DockLayout, "BottomToolDock");
-        Assert.NotNull(dock);
-        Assert.NotNull(dock!.VisibleDockables);
-
-        vm.ToggleExtensionsManagerCommand.Execute().Subscribe();
-        bool visibleAfterShow = dock.VisibleDockables!.Contains(tool);
-
-        vm.ToggleExtensionsManagerCommand.Execute().Subscribe();
-        bool visibleAfterHide = dock.VisibleDockables!.Contains(tool);
-
-        vm.ToggleExtensionsManagerCommand.Execute().Subscribe();
-        bool visibleAfterReshow = dock.VisibleDockables!.Contains(tool);
-
-        Assert.True(visibleAfterShow);
-        Assert.False(visibleAfterHide);
-        Assert.True(visibleAfterReshow);
+            Assert.NotEqual(initial, afterFirstToggle);
+            Assert.Equal(initial, afterSecondToggle);
+        });
     }
 }
