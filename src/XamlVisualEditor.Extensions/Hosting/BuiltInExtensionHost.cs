@@ -24,6 +24,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly ILanguageNavigationService _navigation;
     private readonly INavigationHistoryService _navigationHistory;
     private readonly IAnimationEditorHost _animationEditor;
+    private readonly ICollaborationHost _collaboration;
     private readonly ICollaborationPanelHost _collaborationPanel;
     private readonly IDebugSettingsHost _debugSettings;
     private readonly ILspSettingsHost _lspSettings;
@@ -54,6 +55,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         ILanguageNavigationService navigation,
         INavigationHistoryService navigationHistory,
         IAnimationEditorHost animationEditor,
+        ICollaborationHost collaboration,
         ICollaborationPanelHost collaborationPanel,
         IDebugSettingsHost debugSettings,
         ILspSettingsHost lspSettings,
@@ -81,6 +83,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _navigation = navigation;
         _navigationHistory = navigationHistory;
         _animationEditor = animationEditor;
+        _collaboration = collaboration;
         _collaborationPanel = collaborationPanel;
         _debugSettings = debugSettings;
         _lspSettings = lspSettings;
@@ -129,6 +132,7 @@ public sealed class BuiltInExtensionHost : IDisposable
 
         IExtensionStorage storage = new InMemoryExtensionStorage();
         IExtensionLogger logger = new NullExtensionLogger();
+        IExtensionPermissions permissions = new ExtensionPermissionService(extensionId, _settings, _window);
 
         return new ExtensionContext(
             extensionId,
@@ -149,6 +153,7 @@ public sealed class BuiltInExtensionHost : IDisposable
             _navigation,
             _navigationHistory,
             _animationEditor,
+            _collaboration,
             _collaborationPanel,
             _debugSettings,
             _lspSettings,
@@ -156,6 +161,7 @@ public sealed class BuiltInExtensionHost : IDisposable
             _diagnostics,
             _propertyEditors,
             _terminal,
+            permissions,
             _viewHost,
             _settings,
             storage,

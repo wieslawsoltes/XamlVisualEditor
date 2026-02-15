@@ -30,6 +30,7 @@ public sealed class ExtensionContext
         ILanguageNavigationService navigation,
         INavigationHistoryService navigationHistory,
         IAnimationEditorHost animationEditor,
+        ICollaborationHost collaboration,
         ICollaborationPanelHost collaborationPanel,
         IDebugSettingsHost debugSettings,
         ILspSettingsHost lspSettings,
@@ -37,6 +38,7 @@ public sealed class ExtensionContext
         IDiagnosticsService diagnostics,
         IPropertyEditorRegistry propertyEditors,
         ITerminalBridge terminal,
+        IExtensionPermissions permissions,
         IExtensionViewHost viewHost,
         ISettings settings,
         IExtensionStorage storage,
@@ -61,6 +63,7 @@ public sealed class ExtensionContext
         Navigation = navigation;
         NavigationHistory = navigationHistory;
         AnimationEditor = animationEditor;
+        Collaboration = collaboration;
         CollaborationPanel = collaborationPanel;
         DebugSettings = debugSettings;
         LspSettings = lspSettings;
@@ -68,6 +71,7 @@ public sealed class ExtensionContext
         Diagnostics = diagnostics;
         PropertyEditors = propertyEditors;
         Terminal = terminal;
+        Permissions = permissions;
         ViewHost = viewHost;
         Settings = settings;
         Storage = storage;
@@ -129,6 +133,9 @@ public sealed class ExtensionContext
     /// <summary>Gets the animation editor host services.</summary>
     public IAnimationEditorHost AnimationEditor { get; }
 
+    /// <summary>Gets collaboration session services.</summary>
+    public ICollaborationHost Collaboration { get; }
+
     /// <summary>Gets the collaboration panel host services.</summary>
     public ICollaborationPanelHost CollaborationPanel { get; }
 
@@ -149,6 +156,9 @@ public sealed class ExtensionContext
 
     /// <summary>Gets the terminal bridge service.</summary>
     public ITerminalBridge Terminal { get; }
+
+    /// <summary>Gets runtime permission services for the extension.</summary>
+    public IExtensionPermissions Permissions { get; }
 
     /// <summary>Gets the extension view host service.</summary>
     public IExtensionViewHost ViewHost { get; }

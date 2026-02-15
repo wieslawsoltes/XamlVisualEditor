@@ -30,7 +30,8 @@ public sealed record ExtensionToolbarContribution(
     string? Tooltip,
     string? Location,
     string? Group,
-    int Priority = 0);
+    int Priority = 0,
+    string? IconPathData = null);
 
 public sealed record ExtensionCommandPaletteContribution(string CommandId, string Title, string? Category);
 
@@ -50,7 +51,9 @@ public sealed record ExtensionViewContribution(
     ExtensionViewType Type,
     ExtensionViewLocation Location,
     int Priority,
-    bool ActivateByDefault = false);
+    bool ActivateByDefault = false,
+    string? ContainerId = null,
+    bool PersistDockState = true);
 
 /// <summary>Known menu locations for extensions.</summary>
 public static class ExtensionMenuLocations
@@ -59,6 +62,7 @@ public static class ExtensionMenuLocations
     public const string FileNew = "menu.file.new";
     public const string Edit = "menu.edit";
     public const string View = "menu.view";
+    public const string Debug = "menu.debug";
     public const string Tools = "menu.tools";
     public const string ToolsWorkspace = "menu.tools.workspace";
     public const string Extensions = "menu.extensions";
