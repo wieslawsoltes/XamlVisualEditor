@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.FileExplorerExtension;
 
@@ -19,21 +20,143 @@ public interface IFileExplorerIconProvider
     object? GetIcon(string path, bool isDirectory);
 }
 
+public sealed class ExtensionSystemIconService : ISystemIconService
+{
+    private readonly ThemeFileExplorerIconProvider _themeProvider;
+    private readonly Dictionary<NativeIconCacheKey, object> _nativeCache = new();
+    private readonly object _sync = new();
+
+    public ExtensionSystemIconService()
+    {
+        _themeProvider = new ThemeFileExplorerIconProvider(ResolveTheme());
+    }
+
+    public object? GetIcon(string? path, bool isDirectory, object? fallbackIcon = null, int iconSize = 16)
+    {
+        object? nativeIcon = TryGetNativeIcon(path, isDirectory, iconSize);
+        if (nativeIcon is not null)
+        {
+            return nativeIcon;
+        }
+
+        if (fallbackIcon is not null)
+        {
+            return fallbackIcon;
+        }
+
+        return _themeProvider.GetIcon(path ?? string.Empty, isDirectory);
+    }
+
+    public object? GetFileIcon(string? path, object? fallbackIcon = null, int iconSize = 16)
+    {
+        return GetIcon(path, isDirectory: false, fallbackIcon, iconSize);
+    }
+
+    public object? GetFolderIcon(string? path, object? fallbackIcon = null, int iconSize = 16)
+    {
+        return GetIcon(path, isDirectory: true, fallbackIcon, iconSize);
+    }
+
+    private object? TryGetNativeIcon(string? path, bool isDirectory, int iconSize)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        NativeIconCacheKey cacheKey = new(iconSize, ResolveCacheKey(path, isDirectory));
+        lock (_sync)
+        {
+            if (_nativeCache.TryGetValue(cacheKey, out object? cached))
+            {
+                return cached;
+            }
+        }
+
+        object? icon = null;
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                icon = WindowsNativeIconLoader.TryLoad(path, isDirectory, iconSize);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                icon = MacNativeIconLoader.TryLoad(path, iconSize);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                icon = LinuxNativeIconLoader.TryLoad(path, iconSize);
+            }
+        }
+        catch
+        {
+            icon = null;
+        }
+
+        if (icon is not null)
+        {
+            lock (_sync)
+            {
+                _nativeCache[cacheKey] = icon;
+            }
+        }
+
+        return icon;
+    }
+
+    private static string ResolveCacheKey(string path, bool isDirectory)
+    {
+        if (isDirectory)
+        {
+            return "dir";
+        }
+
+        string extension = Path.GetExtension(path);
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return "file";
+        }
+
+        return extension.ToLowerInvariant();
+    }
+
+    private static FileExplorerIconTheme ResolveTheme()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return FileExplorerIconTheme.Mac;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return FileExplorerIconTheme.Windows;
+        }
+
+        return FileExplorerIconTheme.Linux;
+    }
+
+    private readonly record struct NativeIconCacheKey(int IconSize, string Token);
+}
+
 public static class FileExplorerIconProviderFactory
 {
-    public static IFileExplorerIconProvider Create(FileExplorerIconProviderKind kind, int iconSize)
+    public static IFileExplorerIconProvider Create(
+        FileExplorerIconProviderKind kind,
+        int iconSize,
+        ISystemIconService? systemIcons = null)
     {
         return kind switch
         {
-            FileExplorerIconProviderKind.Native => CreateNativeProvider(iconSize),
+            FileExplorerIconProviderKind.Native => CreateNativeProvider(iconSize, systemIcons),
             _ => CreateThemeProvider()
         };
     }
 
-    private static IFileExplorerIconProvider CreateNativeProvider(int iconSize)
+    private static IFileExplorerIconProvider CreateNativeProvider(int iconSize, ISystemIconService? systemIcons)
     {
         IFileExplorerIconProvider fallback = CreateThemeProvider();
-        return new NativeFileExplorerIconProvider(iconSize, fallback);
+        return new NativeFileExplorerIconProvider(iconSize, fallback, systemIcons);
     }
 
     private static IFileExplorerIconProvider CreateThemeProvider()
@@ -70,72 +193,23 @@ public sealed class ThemeFileExplorerIconProvider : IFileExplorerIconProvider
 public sealed class NativeFileExplorerIconProvider : IFileExplorerIconProvider
 {
     private readonly int _iconSize;
+    private readonly ISystemIconService _systemIcons;
     private readonly IFileExplorerIconProvider _fallback;
-    private readonly Dictionary<string, object?> _cache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _sync = new();
 
-    public NativeFileExplorerIconProvider(int iconSize, IFileExplorerIconProvider fallback)
+    public NativeFileExplorerIconProvider(
+        int iconSize,
+        IFileExplorerIconProvider fallback,
+        ISystemIconService? systemIcons = null)
     {
         _iconSize = iconSize;
         _fallback = fallback;
+        _systemIcons = systemIcons ?? new ExtensionSystemIconService();
     }
 
     public object? GetIcon(string path, bool isDirectory)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return _fallback.GetIcon(path, isDirectory);
-        }
-
-        string cacheKey = isDirectory ? "dir" : ResolveFileCacheKey(path);
-        lock (_sync)
-        {
-            if (_cache.TryGetValue(cacheKey, out object? cached))
-            {
-                return cached;
-            }
-        }
-
-        object? icon = null;
-        try
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                icon = WindowsNativeIconLoader.TryLoad(path, isDirectory, _iconSize);
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                icon = MacNativeIconLoader.TryLoad(path, _iconSize);
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                icon = LinuxNativeIconLoader.TryLoad(path, _iconSize);
-            }
-        }
-        catch
-        {
-            icon = null;
-        }
-
-        icon ??= _fallback.GetIcon(path, isDirectory);
-
-        lock (_sync)
-        {
-            _cache[cacheKey] = icon;
-        }
-
-        return icon;
-    }
-
-    private static string ResolveFileCacheKey(string path)
-    {
-        string extension = Path.GetExtension(path);
-        if (string.IsNullOrWhiteSpace(extension))
-        {
-            return "file";
-        }
-
-        return extension.ToLowerInvariant();
+        object? fallbackIcon = _fallback.GetIcon(path, isDirectory);
+        return _systemIcons.GetIcon(path, isDirectory, fallbackIcon, _iconSize);
     }
 }
 

@@ -33,6 +33,7 @@ public sealed class FileExplorerExtension : IXveExtension
     private IExtensionContributionRegistry? _contributions;
     private string? _extensionId;
     private IDisposable? _viewRegistration;
+    private ISystemIconService? _systemIcons;
 
     public FileExplorerExtension(
         IWorkspaceInfo workspaceInfo,
@@ -52,6 +53,7 @@ public sealed class FileExplorerExtension : IXveExtension
         _workspaceHost = context.WorkspaceHost;
         _contributions = context.Contributions;
         _extensionId = context.ExtensionId;
+        _systemIcons = context.SystemIcons;
         context.Subscriptions.Add(context.DialogHost.RegisterDialog(
             OpenFolderDialogId,
             viewModel => new OpenFolderDialog { DataContext = viewModel }));
@@ -116,7 +118,7 @@ public sealed class FileExplorerExtension : IXveExtension
         bool showHidden = _settings.Get(ShowHiddenKey, true);
         FileExplorerIconProviderKind kind = ParseIconProvider(_settings.Get<string>(IconProviderKey));
         int iconSize = NormalizeIconSize(_settings.Get(IconSizeKey, 16));
-        IFileExplorerIconProvider iconProvider = FileExplorerIconProviderFactory.Create(kind, iconSize);
+        IFileExplorerIconProvider iconProvider = FileExplorerIconProviderFactory.Create(kind, iconSize, _systemIcons);
         IWindow window = _window ?? throw new InvalidOperationException("Window services not available.");
         IWorkspaceHost workspaceHost = _workspaceHost ?? throw new InvalidOperationException("Workspace host not available.");
         return new FileExplorerTreeDataProvider(_workspaceInfo, _editor, window, workspaceHost, iconProvider, showHidden);
@@ -211,7 +213,7 @@ public sealed class FileExplorerExtension : IXveExtension
         bool showHidden = _settings.Get(ShowHiddenKey, true);
         FileExplorerIconProviderKind kind = ParseIconProvider(_settings.Get<string>(IconProviderKey));
         int iconSize = NormalizeIconSize(_settings.Get(IconSizeKey, 16));
-        IFileExplorerIconProvider iconProvider = FileExplorerIconProviderFactory.Create(kind, iconSize);
+        IFileExplorerIconProvider iconProvider = FileExplorerIconProviderFactory.Create(kind, iconSize, _systemIcons);
         _provider.UpdateSettings(iconProvider, showHidden);
     }
 

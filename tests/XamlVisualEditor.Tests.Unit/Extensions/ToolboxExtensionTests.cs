@@ -120,6 +120,7 @@ public sealed class ToolboxExtensionTests
             new InMemoryWorkspace(),
             new WorkspaceModelAdapter(workspaceInfo, workspaceCommands, new StubWorkspaceService()),
             workspaceInfo,
+            new StubSystemIconService(),
             window,
             new InMemoryDialogHost(),
             new InMemoryWorkspaceHost(),
@@ -142,6 +143,18 @@ public sealed class ToolboxExtensionTests
             new InMemoryExtensionStorage(),
             new StubExtensionLogger(),
             new List<IDisposable>());
+    }
+
+    private sealed class StubSystemIconService : ISystemIconService
+    {
+        public object? GetIcon(string? path, bool isDirectory, object? fallbackIcon = null, int iconSize = 16)
+            => fallbackIcon;
+
+        public object? GetFileIcon(string? path, object? fallbackIcon = null, int iconSize = 16)
+            => fallbackIcon;
+
+        public object? GetFolderIcon(string? path, object? fallbackIcon = null, int iconSize = 16)
+            => fallbackIcon;
     }
 
     private sealed class StubExtensionViewHost : IExtensionViewHost

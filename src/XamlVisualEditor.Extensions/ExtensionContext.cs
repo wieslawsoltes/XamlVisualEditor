@@ -22,6 +22,7 @@ public sealed class ExtensionContext
         IWorkspace workspace,
         IWorkspaceModel workspaceModel,
         IWorkspaceInfo workspaceInfo,
+        ISystemIconService systemIcons,
         IWindow window,
         IDialogHost dialogHost,
         IWorkspaceHost workspaceHost,
@@ -55,6 +56,7 @@ public sealed class ExtensionContext
         Workspace = workspace;
         WorkspaceModel = workspaceModel;
         WorkspaceInfo = workspaceInfo;
+        SystemIcons = systemIcons;
         Window = window;
         DialogHost = dialogHost;
         WorkspaceHost = workspaceHost;
@@ -108,6 +110,9 @@ public sealed class ExtensionContext
 
     /// <summary>Gets the workspace info.</summary>
     public IWorkspaceInfo WorkspaceInfo { get; }
+
+    /// <summary>Gets the system icon service.</summary>
+    public ISystemIconService SystemIcons { get; }
 
     /// <summary>Gets the window service.</summary>
     public IWindow Window { get; }

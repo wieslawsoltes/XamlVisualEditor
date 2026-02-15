@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:dg="using:Avalonia.Controls"
              xmlns:dh="using:Avalonia.Controls.DataGridHierarchical"
+             xmlns:media="using:Avalonia.Media"
              xmlns:vm="using:XamlVisualEditor.Shell.ViewModels"
              xmlns:v="using:XamlVisualEditor.App.Views"
              x:DataType="vm:SolutionExplorerViewModel"
@@ -46,7 +47,16 @@
                          FontSize="10"
                          FontWeight="SemiBold"
                          IsVisible="{CompiledBinding IsRunnableButNotStartup}" />
-              <TextBlock Text="{CompiledBinding Icon}" />
+              <ContentControl Content="{CompiledBinding Icon}">
+                <ContentControl.DataTemplates>
+                  <DataTemplate x:DataType="media:IImage">
+                    <Image Width="16" Height="16" Source="{CompiledBinding .}" />
+                  </DataTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{CompiledBinding .}" />
+                  </DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
               <TextBlock Text="{CompiledBinding Name}" />
             </StackPanel>
           </Grid>

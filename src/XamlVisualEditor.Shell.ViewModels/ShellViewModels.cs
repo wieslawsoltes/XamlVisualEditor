@@ -2166,7 +2166,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// <summary>
     /// Gets the solution explorer ViewModel.
     /// </summary>
-    public SolutionExplorerViewModel SolutionExplorer { get; } = new();
+    public SolutionExplorerViewModel SolutionExplorer { get; }
 
     /// <summary>
     /// Gets the workspace projects.
@@ -2603,7 +2603,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IExtensionViewRegistry? extensionViewRegistry = null,
         IExtensionManager? extensionManager = null,
         ILogger<MainWindowViewModel>? logger = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ISystemIconService? systemIconService = null)
     {
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
@@ -2624,6 +2625,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         ExtensionManager = new ExtensionManagerViewModel(
             extensionManager ?? new NullExtensionManager(),
             () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
+        SolutionExplorer = new SolutionExplorerViewModel(systemIconService);
 
         if (_extensionContributions is not null)
         {
@@ -7115,8 +7117,8 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
     /// <summary>Gets the display name.</summary>
     public string Name { get; }
 
-    /// <summary>Gets the icon identifier (emoji for simplicity).</summary>
-    public string Icon { get; }
+    /// <summary>Gets the icon object (image or fallback text).</summary>
+    public object? Icon { get; }
 
     /// <summary>Gets the full path (for files) or project path (for projects).</summary>
     public string? FullPath { get; }
@@ -7167,7 +7169,7 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
 
     public SolutionExplorerNodeViewModel(
         string name,
-        string icon,
+        object? icon,
         SolutionExplorerNodeKind kind,
         string? fullPath = null,
         ProjectModel? project = null)
@@ -7187,7 +7189,10 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
     /// <summary>
     /// Creates a Solution Explorer tree from a WorkspaceModel.
     /// </summary>
-    public static SolutionExplorerNodeViewModel FromWorkspace(WorkspaceModel workspace, string? solutionName = null)
+    public static SolutionExplorerNodeViewModel FromWorkspace(
+        WorkspaceModel workspace,
+        string? solutionName = null,
+        ISystemIconService? systemIcons = null)
     {
         string rootName = solutionName ?? "Solution";
         SolutionExplorerNodeViewModel root = new(rootName, "🗂", SolutionExplorerNodeKind.Solution);
@@ -7199,27 +7204,30 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
         IReadOnlyList<ProjectModel> projects = ProjectSelection.DeduplicateProjectsByPath(workspace.Projects);
         foreach (ProjectModel project in projects)
         {
+            object projectIcon = GetIconWithFallback(systemIcons, project.ProjectPath, isDirectory: false, fallbackIcon: "📦");
             SolutionExplorerNodeViewModel projectNode = new(
-                project.Name, "📦", SolutionExplorerNodeKind.Project, project.ProjectPath, project);
+                project.Name, projectIcon, SolutionExplorerNodeKind.Project, project.ProjectPath, project);
 
             SolutionExplorerNodeViewModel projectParent = root;
             if (workspace.ProjectFolders.TryGetValue(project.ProjectPath, out string? folderPath) &&
                 !string.IsNullOrWhiteSpace(folderPath))
             {
-                projectParent = EnsureFolderPath(root, folderNodes, folderPath);
+                projectParent = EnsureFolderPath(root, folderNodes, folderPath, systemIcons);
             }
 
-            AddProjectFiles(projectNode, project.Files);
+            AddProjectFiles(projectNode, project.Files, systemIcons);
 
             // References folder
             if (project.References.Count > 0)
             {
-                SolutionExplorerNodeViewModel refsFolder = new("References", "📚", SolutionExplorerNodeKind.Folder);
+                object referencesFolderIcon = GetIconWithFallback(systemIcons, null, isDirectory: true, fallbackIcon: "📚");
+                SolutionExplorerNodeViewModel refsFolder = new("References", referencesFolderIcon, SolutionExplorerNodeKind.Folder);
 
                 foreach (AssemblyReference asmRef in project.References)
                 {
+                    object referenceIcon = GetIconWithFallback(systemIcons, asmRef.Path, isDirectory: false, fallbackIcon: "🔗");
                     SolutionExplorerNodeViewModel refNode = new(
-                        asmRef.Name, "🔗", SolutionExplorerNodeKind.Reference, asmRef.Path);
+                        asmRef.Name, referenceIcon, SolutionExplorerNodeKind.Reference, asmRef.Path);
                     refsFolder.Children.Add(refNode);
                 }
 
@@ -7234,10 +7242,12 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
 
     private static void AddProjectFiles(
         SolutionExplorerNodeViewModel projectNode,
-        IReadOnlyList<ProjectFileModel> files)
+        IReadOnlyList<ProjectFileModel> files,
+        ISystemIconService? systemIcons)
     {
         Dictionary<string, SolutionExplorerNodeViewModel> folders =
             new(StringComparer.OrdinalIgnoreCase);
+        string? projectDirectory = Path.GetDirectoryName(projectNode.FullPath);
 
         foreach (ProjectFileModel file in files)
         {
@@ -7254,7 +7264,9 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
                 string folderPath = string.Join('/', parts.Take(i + 1));
                 if (!folders.TryGetValue(folderPath, out SolutionExplorerNodeViewModel? folderNode))
                 {
-                    folderNode = new SolutionExplorerNodeViewModel(parts[i], "📁", SolutionExplorerNodeKind.Folder);
+                    string folderPathOnDisk = ResolveFolderPath(projectDirectory, folderPath);
+                    object folderIcon = GetIconWithFallback(systemIcons, folderPathOnDisk, isDirectory: true, fallbackIcon: "📁");
+                    folderNode = new SolutionExplorerNodeViewModel(parts[i], folderIcon, SolutionExplorerNodeKind.Folder, folderPathOnDisk);
                     folders[folderPath] = folderNode;
                     current.Children.Add(folderNode);
                 }
@@ -7268,7 +7280,7 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
                 : SolutionExplorerNodeKind.File;
 
             SolutionExplorerNodeViewModel fileNode = new(
-                fileName, GetFileIcon(file.FilePath), kind, file.FilePath);
+                fileName, GetFileIcon(file.FilePath, systemIcons), kind, file.FilePath);
             current.Children.Add(fileNode);
         }
     }
@@ -7276,7 +7288,8 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
     private static SolutionExplorerNodeViewModel EnsureFolderPath(
         SolutionExplorerNodeViewModel root,
         Dictionary<string, SolutionExplorerNodeViewModel> folderNodes,
-        string folderPath)
+        string folderPath,
+        ISystemIconService? systemIcons = null)
     {
         string[] segments = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         SolutionExplorerNodeViewModel current = root;
@@ -7290,7 +7303,8 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
 
             if (!folderNodes.TryGetValue(currentPath, out SolutionExplorerNodeViewModel? node))
             {
-                node = new SolutionExplorerNodeViewModel(segment, "📁", SolutionExplorerNodeKind.SolutionFolder);
+                object folderIcon = GetIconWithFallback(systemIcons, currentPath, isDirectory: true, fallbackIcon: "📁");
+                node = new SolutionExplorerNodeViewModel(segment, folderIcon, SolutionExplorerNodeKind.SolutionFolder);
                 folderNodes[currentPath] = node;
                 current.Children.Add(node);
             }
@@ -7307,10 +7321,10 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
             || filePath.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetFileIcon(string filePath)
+    private static object GetFileIcon(string filePath, ISystemIconService? systemIcons)
     {
         string ext = System.IO.Path.GetExtension(filePath).ToLowerInvariant();
-        return ext switch
+        string fallbackIcon = ext switch
         {
             ".axaml" => "📄",
             ".xaml" => "📄",
@@ -7320,6 +7334,28 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
             ".md" => "📝",
             _ => "📄"
         };
+
+        return GetIconWithFallback(systemIcons, filePath, isDirectory: false, fallbackIcon);
+    }
+
+    private static object GetIconWithFallback(
+        ISystemIconService? systemIcons,
+        string? path,
+        bool isDirectory,
+        object fallbackIcon)
+    {
+        return systemIcons?.GetIcon(path, isDirectory, fallbackIcon) ?? fallbackIcon;
+    }
+
+    private static string ResolveFolderPath(string? projectDirectory, string relativeFolderPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectDirectory))
+        {
+            return relativeFolderPath.Replace('/', Path.DirectorySeparatorChar);
+        }
+
+        string normalized = relativeFolderPath.Replace('/', Path.DirectorySeparatorChar);
+        return Path.Combine(projectDirectory, normalized);
     }
 }
 
@@ -7356,6 +7392,7 @@ public enum SolutionExplorerNodeKind
 public sealed class SolutionExplorerViewModel : ReactiveObject
 {
     private const string FilterPropertyPath = "Item.Name";
+    private readonly ISystemIconService? _systemIcons;
 
     public SolutionExplorerNodeViewModel? Root { get; set; }
 
@@ -7393,8 +7430,9 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
 
     public ReactiveCommand<Unit, Unit> SetStartupProjectCommand { get; }
 
-    public SolutionExplorerViewModel()
+    public SolutionExplorerViewModel(ISystemIconService? systemIcons = null)
     {
+        _systemIcons = systemIcons;
         SortingModel = new SortingModel();
         FilteringModel = new FilteringModel();
         SearchModel = new SearchModel
@@ -7522,7 +7560,7 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
     /// </summary>
     public void LoadWorkspace(WorkspaceModel workspace, string? solutionName = null)
     {
-        Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName);
+        Root = SolutionExplorerNodeViewModel.FromWorkspace(workspace, solutionName, _systemIcons);
         CollapseAll(Root);
         WireFileOpen(Root);
         SetRoot(Root);

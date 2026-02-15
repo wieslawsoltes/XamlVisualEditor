@@ -33,6 +33,7 @@ using System.Threading;
 using DotNetTemplatesExtensionEntry = XamlVisualEditor.DotNetTemplatesExtension.DotNetTemplatesExtension;
 using DapDebuggingExtensionEntry = XamlVisualEditor.Debugging.DapExtension.DapDebuggingExtension;
 using DotNetSdkDebuggingExtensionEntry = XamlVisualEditor.Debugging.DotNetSdkExtension.DotNetSdkDebuggingExtension;
+using ExtensionSystemIconServiceEntry = XamlVisualEditor.FileExplorerExtension.ExtensionSystemIconService;
 using FileExplorerExtensionEntry = XamlVisualEditor.FileExplorerExtension.FileExplorerExtension;
 using SolutionExplorerExtensionEntry = XamlVisualEditor.SolutionExplorerExtension.SolutionExplorerExtension;
 using ToolboxExtensionEntry = XamlVisualEditor.ToolboxExtension.ToolboxExtension;
@@ -144,6 +145,7 @@ public sealed class App : Application
         services.AddSingleton<IWorkspace, InMemoryWorkspace>();
         services.AddSingleton<IWindow, AppWindow>();
         services.AddSingleton<ISettings, InMemorySettingsStore>();
+        services.AddSingleton<ISystemIconService, ExtensionSystemIconServiceEntry>();
         services.AddSingleton<IPropertyEditorRegistry, PropertyEditorRegistry>();
         services.AddSingleton<IWorkspaceCommands>(sp => sp.GetRequiredService<MainWindowViewModel>());
         services.AddSingleton<MainWindowProvider>();

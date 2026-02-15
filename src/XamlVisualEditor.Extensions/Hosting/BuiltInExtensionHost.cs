@@ -16,6 +16,7 @@ public sealed class BuiltInExtensionHost : IDisposable
     private readonly IWorkspace _workspace;
     private readonly IWorkspaceModel _workspaceModel;
     private readonly IWorkspaceInfo _workspaceInfo;
+    private readonly ISystemIconService _systemIcons;
     private readonly IWindow _window;
     private readonly IDialogHost _dialogHost;
     private readonly IWorkspaceHost _workspaceHost;
@@ -47,6 +48,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         IWorkspace workspace,
         IWorkspaceModel workspaceModel,
         IWorkspaceInfo workspaceInfo,
+        ISystemIconService systemIcons,
         IWindow window,
         IDialogHost dialogHost,
         IWorkspaceHost workspaceHost,
@@ -75,6 +77,7 @@ public sealed class BuiltInExtensionHost : IDisposable
         _workspace = workspace;
         _workspaceModel = workspaceModel;
         _workspaceInfo = workspaceInfo;
+        _systemIcons = systemIcons;
         _window = window;
         _dialogHost = dialogHost;
         _workspaceHost = workspaceHost;
@@ -145,6 +148,7 @@ public sealed class BuiltInExtensionHost : IDisposable
             _workspace,
             _workspaceModel,
             _workspaceInfo,
+            _systemIcons,
             _window,
             _dialogHost,
             _workspaceHost,
