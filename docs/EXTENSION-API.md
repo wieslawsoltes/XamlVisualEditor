@@ -25,12 +25,14 @@ This is the current native .NET extension API surface. All types live in the
 - `Navigation` (`ILanguageNavigationService`)
 - `NavigationHistory` (`INavigationHistoryService`)
 - `AnimationEditor` (`IAnimationEditorHost`)
+- `Collaboration` (`ICollaborationHost`)
 - `CollaborationPanel` (`ICollaborationPanelHost`)
 - `DebugSettings` (`IDebugSettingsHost`)
 - `LspSettings` (`ILspSettingsHost`)
 - `Editor` (`IEditorServices`)
 - `Diagnostics` (`IDiagnosticsService`)
 - `Terminal` (`ITerminalBridge`)
+- `Permissions` (`IExtensionPermissions`)
 - `ViewHost` (`IExtensionViewHost`)
 - `Settings` (`ISettings`)
 - `Storage` (`IExtensionStorage`)
@@ -91,6 +93,49 @@ This is the current native .NET extension API surface. All types live in the
   - `OutputChannelCleared` event
   - `CreateStatusBarItem(StatusBarAlignment alignment, int priority)`
 
+- `IExtensionPermissions`
+  - `Declare(IReadOnlyList<ExtensionCapabilityDeclaration> capabilities)`
+  - `RequestAsync(string capabilityId, CancellationToken ct)`
+  - `GetRememberedAsync(CancellationToken ct)`
+  - `ClearRememberedAsync(string? capabilityId, CancellationToken ct)`
+  - `AccessAudited` event (`ExtensionPermissionAuditEventArgs`)
+  - `Changed` event (`ExtensionPermissionChangedEventArgs`)
+
+### Permission model
+
+- Extensions must declare capabilities before requesting them.
+- Requests are resolved with a runtime quick-pick prompt:
+  - `Allow once`
+  - `Always allow`
+  - `Deny once`
+  - `Always deny`
+- Remembered decisions are stored per extension in user settings under:
+  - `extensions.permissions.<extensionId>`
+- Every request raises an audit event that includes source (`Prompt`, `Remembered`, `Undeclared`, `Dismissed`) and decision metadata.
+
+- `ITerminalBridge`
+  - `CreateAsync(TerminalCreateRequest request, CancellationToken ct)`
+  - `SendTextAsync(Guid terminalId, string text, CancellationToken ct)`
+  - `GetTerminalsAsync(CancellationToken ct)`
+  - `GetActiveTerminalIdAsync(CancellationToken ct)`
+  - `CloseAsync(Guid terminalId, CancellationToken ct)`
+  - `RunTaskAsync(TaskExecutionRequest request, CancellationToken ct)`
+  - `TerminalCreated` event (`TerminalChangedEventArgs`)
+  - `TerminalClosed` event (`TerminalChangedEventArgs`)
+  - `ActiveTerminalChanged` event (`ActiveTerminalChangedEventArgs`)
+  - `TerminalOutput` event (`TerminalOutputEventArgs`)
+  - `TerminalExited` event (`TerminalExitEventArgs`)
+  - `TerminalDimensionsChanged` event (`TerminalDimensionsChangedEventArgs`)
+
+### Task execution
+
+- `TaskExecutionRequest` accepts:
+  - `taskId`, `command`, `arguments`, `workingDirectory`, `problemMatchers`
+- `TaskProblemMatcher` supports regex capture groups for:
+  - file path, line, column, message
+- `RunTaskAsync` returns `TaskExecutionResult` with:
+  - `exitCode`, `output` lines, and parsed `problems` (`TaskProblemMatch`)
+
 - `IViews`
   - `RegisterTreeDataProvider<T>(string viewId, ITreeDataProvider<T> provider)`
   - `RegisterWebviewViewProvider(string viewId, IWebviewViewProvider provider)`
@@ -126,15 +171,35 @@ This is the current native .NET extension API surface. All types live in the
 
 - `IAnimationEditorHost`
   - `ViewModel` (host-owned animation editor view model)
+  - `BeginTransaction(string name)`
+  - `RefreshPreviewAsync(CancellationToken ct)`
+
+- `ICollaborationHost`
+  - `IsSessionActive`, `SessionId`, `StatusMessage`
+  - `GetParticipants()`
+  - `SessionChanged` event
+  - `ParticipantsChanged` event
+  - `StartSessionAsync(CancellationToken ct)`
+  - `JoinSessionAsync(string sessionId, CancellationToken ct)`
+  - `LeaveSessionAsync(CancellationToken ct)`
+  - `CreateShareLinkAsync(CancellationToken ct)`
+  - `InviteAsync(string invitee, CancellationToken ct)`
 
 - `ICollaborationPanelHost`
   - `ViewModel` (host-owned collaboration panel view model)
 
 - `IDebugSettingsHost`
-  - `ViewModel` (host-owned debug settings view model)
+  - `GetState()`
+  - `SetAdapterPathAsync(string adapterPath, CancellationToken ct)`
+  - `SetAutoDownloadToolsAsync(bool autoDownloadTools, CancellationToken ct)`
+  - `DownloadNetcoredbgAsync(CancellationToken ct)`
+  - `Changed` event (`DebugSettingsChangedEventArgs`)
 
 - `ILspSettingsHost`
-  - `ViewModel` (host-owned LSP settings view model)
+  - `SettingsPath`
+  - `LoadServersAsync(CancellationToken ct)`
+  - `SaveServersAsync(IReadOnlyList<LspServerSettings> servers, CancellationToken ct)`
+  - `Changed` event (`LspSettingsChangedEventArgs`)
 
 - `DesignerPropertyInfo`
   - `Name`, `PropertyType`, `Value`, `IsReadOnly`
@@ -157,6 +222,12 @@ This is the current native .NET extension API surface. All types live in the
 - `ISettings`
   - `Get<T>(string section, T? defaultValue = default)`
   - `UpdateAsync(string section, object? value, SettingsTarget target, CancellationToken ct)`
+  - `RegisterSchema(SettingsSectionSchema schema)`
+  - `GetSchemas()`
+  - `TryGetSchema(string section, out SettingsSectionSchema schema)`
+  - `Validate(string section, object? value)`
+  - `SubscribeSection<T>(string section, Action<SettingsSectionChangedEventArgs<T>> handler)`
+  - `SectionChanged` event (`SettingsSectionChangedEventArgs`)
 
 - `IExtensionStorage`
   - `GetAsync<T>(string key, CancellationToken ct)`
@@ -182,10 +253,23 @@ This is the current native .NET extension API surface. All types live in the
   - `menu.extensions`
 
 - `IExtensionViewHost`
+  - `VisibilityChanged` event (`ExtensionViewVisibilityChangedEventArgs`)
+  - `FocusChanged` event (`ExtensionViewFocusChangedEventArgs`)
   - `ShowAsync(string viewId, CancellationToken ct)`
   - `ToggleAsync(string viewId, CancellationToken ct)`
   - `IsVisibleAsync(string viewId, CancellationToken ct)`
   - `ActivateAsync(string viewId, CancellationToken ct)`
+
+### ExtensionViewContribution
+
+- `ViewId` (string, required)
+- `Title` (string, required)
+- `Type` (`ExtensionViewType`)
+- `Location` (`ExtensionViewLocation`)
+- `Priority` (int)
+- `ActivateByDefault` (bool, default `false`)
+- `ContainerId` (optional string; custom dock container id)
+- `PersistDockState` (bool, default `true`; persistence hint for layout save/restore)
 
 - `IPropertyEditorRegistry`
   - `Register(PropertyEditorDescriptor descriptor)`
@@ -232,6 +316,13 @@ This is the current native .NET extension API surface. All types live in the
 - `ILanguageNavigationService`
   - `FindDefinitionsAsync(LanguagePositionContext context, CancellationToken ct)`
   - `FindReferencesAsync(LanguagePositionContext context, CancellationToken ct)`
+  - `FindImplementationsAsync(LanguagePositionContext context, CancellationToken ct)`
+  - `GetWorkspaceSymbolsAsync(LanguageSymbolQuery query, CancellationToken ct)`
+  - `PrepareRenameAsync(LanguagePositionContext context, CancellationToken ct)`
+  - `RenameAsync(LanguageRenameContext context, CancellationToken ct)`
+  - `GetCodeActionsAsync(LanguageCodeActionContext context, CancellationToken ct)`
+  - `ResolveCodeActionAsync(LanguageCodeAction action, CancellationToken ct)`
+  - `ApplyCodeActionAsync(LanguageCodeAction action, CancellationToken ct)`
 
 - `INavigationHistoryService`
   - `CanNavigateBack` / `CanNavigateForward`
