@@ -7,6 +7,7 @@ using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.TextMate;
+using Avalonia.Styling;
 using Serilog;
 using ReactiveUI;
 using TextMateSharp.Grammars;
@@ -28,6 +29,8 @@ public sealed partial class TextFileView : UserControl
     private OverloadInsightWindow? _insightWindow;
     private TextEditor? _textEditor;
     private CompositeDisposable? _vmSubscriptions;
+    private RegistryOptions? _registryOptions;
+    private ThemeName? _currentTextMateTheme;
     private bool _suppressCaretUpdate;
     private bool _suppressSelectionUpdate;
     private CancellationTokenSource? _hoverCts;
@@ -66,6 +69,9 @@ public sealed partial class TextFileView : UserControl
 
         _vmSubscriptions?.Dispose();
         _vmSubscriptions = null;
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        _registryOptions = null;
+        _currentTextMateTheme = null;
         _textEditor = null;
     }
 
@@ -74,6 +80,7 @@ public sealed partial class TextFileView : UserControl
         if (_textEditor is not null && DataContext is TextDocumentViewModel vm)
         {
             BindViewModel(vm);
+            ApplyGrammar(vm);
         }
     }
 
@@ -86,8 +93,9 @@ public sealed partial class TextFileView : UserControl
             return;
         }
 
-        RegistryOptions registryOptions = new(ThemeName.DarkPlus);
-        _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+        ApplyTextMateTheme();
 
         _textEditor.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
         _textEditor.TextArea.TextEntered += OnTextEntered;
@@ -103,8 +111,13 @@ public sealed partial class TextFileView : UserControl
         if (DataContext is TextDocumentViewModel vm)
         {
             BindViewModel(vm);
-            ApplyGrammar(vm, registryOptions);
+            ApplyGrammar(vm);
         }
+    }
+
+    private void OnActualThemeVariantChanged(object? sender, EventArgs e)
+    {
+        ApplyTextMateTheme();
     }
 
     private void BindViewModel(TextDocumentViewModel vm)
@@ -193,16 +206,47 @@ public sealed partial class TextFileView : UserControl
         _vmSubscriptions.Add(semanticTokenSubscription);
     }
 
-    private void ApplyGrammar(TextDocumentViewModel vm, RegistryOptions registryOptions)
+    private void ApplyTextMateTheme()
     {
-        if (_textMateInstallation is null)
+        if (_textEditor is null)
+        {
+            return;
+        }
+
+        ThemeName targetTheme = ResolveTextMateTheme(ActualThemeVariant);
+        if (_textMateInstallation is not null && _registryOptions is not null && _currentTextMateTheme == targetTheme)
+        {
+            return;
+        }
+
+        _textMateInstallation?.Dispose();
+        _registryOptions = new RegistryOptions(targetTheme);
+        _textMateInstallation = _textEditor.InstallTextMate(_registryOptions);
+        _currentTextMateTheme = targetTheme;
+
+        if (DataContext is TextDocumentViewModel vm)
+        {
+            ApplyGrammar(vm);
+        }
+    }
+
+    private static ThemeName ResolveTextMateTheme(ThemeVariant themeVariant)
+    {
+        return themeVariant == ThemeVariant.Light
+            ? ThemeName.LightPlus
+            : ThemeName.DarkPlus;
+    }
+
+    private void ApplyGrammar(TextDocumentViewModel vm)
+    {
+        if (_textMateInstallation is null || _registryOptions is null)
         {
             return;
         }
 
         if (!string.IsNullOrWhiteSpace(vm.LanguageId))
         {
-            string? scope = registryOptions.GetScopeByLanguageId(vm.LanguageId);
+            string? scope = _registryOptions.GetScopeByLanguageId(vm.LanguageId);
             if (!string.IsNullOrWhiteSpace(scope))
             {
                 _textMateInstallation.SetGrammar(scope);

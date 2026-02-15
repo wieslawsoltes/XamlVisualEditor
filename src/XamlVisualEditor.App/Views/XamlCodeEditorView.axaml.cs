@@ -12,6 +12,7 @@ using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.TextMate;
+using Avalonia.Styling;
 using ReactiveUI;
 using System.Reactive.Disposables;
 using Serilog;
@@ -40,7 +41,7 @@ public sealed partial class XamlCodeEditorView : UserControl
     private TextEditor? _textEditor;
     private EventHandler? _caretPositionChangedHandler;
     private CompositeDisposable? _vmSubscriptions;
-    private bool _textMateInstalled;
+    private ThemeName? _currentTextMateTheme;
     private bool _suppressCaretUpdate;
     private FoldingManager? _foldingManager;
     private readonly XmlFoldingStrategy _foldingStrategy = new();
@@ -62,7 +63,8 @@ public sealed partial class XamlCodeEditorView : UserControl
         // Dispose TextMate native resources
         _textMateInstallation?.Dispose();
         _textMateInstallation = null;
-        _textMateInstalled = false;
+        _currentTextMateTheme = null;
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
 
         _completionWindow?.Close();
         _completionWindow = null;
@@ -114,14 +116,11 @@ public sealed partial class XamlCodeEditorView : UserControl
             return;
         }
 
-        // Install TextMate with XML grammar for XAML highlighting (once)
-        if (!_textMateInstalled)
-        {
-            RegistryOptions registryOptions = new(ThemeName.DarkPlus);
-            _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
-            _textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("xml"));
-            _textMateInstalled = true;
-        }
+        ActualThemeVariantChanged -= OnActualThemeVariantChanged;
+        ActualThemeVariantChanged += OnActualThemeVariantChanged;
+
+        // Install TextMate with XML grammar for XAML highlighting.
+        ApplyTextMateTheme();
 
         // Wire up caret position tracking
         _caretPositionChangedHandler = (_, _) =>
@@ -166,6 +165,39 @@ public sealed partial class XamlCodeEditorView : UserControl
         {
             BindViewModel(codeVm);
         }
+    }
+
+    private void OnActualThemeVariantChanged(object? sender, EventArgs e)
+    {
+        ApplyTextMateTheme();
+    }
+
+    private void ApplyTextMateTheme()
+    {
+        if (_textEditor is null)
+        {
+            return;
+        }
+
+        ThemeName targetTheme = ResolveTextMateTheme(ActualThemeVariant);
+        if (_textMateInstallation is not null && _currentTextMateTheme == targetTheme)
+        {
+            return;
+        }
+
+        _textMateInstallation?.Dispose();
+
+        RegistryOptions registryOptions = new(targetTheme);
+        _textMateInstallation = _textEditor.InstallTextMate(registryOptions);
+        _textMateInstallation.SetGrammar(registryOptions.GetScopeByLanguageId("xml"));
+        _currentTextMateTheme = targetTheme;
+    }
+
+    private static ThemeName ResolveTextMateTheme(ThemeVariant themeVariant)
+    {
+        return themeVariant == ThemeVariant.Light
+            ? ThemeName.LightPlus
+            : ThemeName.DarkPlus;
     }
 
     /// <summary>
