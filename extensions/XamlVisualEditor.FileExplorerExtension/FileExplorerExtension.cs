@@ -11,6 +11,8 @@ public sealed class FileExplorerExtension : IXveExtension
     private const string ViewId = "fileExplorer.panel";
     private const string OpenFolderDialogId = "fileExplorer.openFolderDialog";
     private const string OpenFolderCommandId = "fileExplorer.openFolder";
+    private const string OpenFolderIconPath =
+        "M3 5.5v6.6l1.5-2.6A3 3 0 0 1 7.1 8H15v-.5c0-.83-.67-1.5-1.5-1.5h-4a.5.5 0 0 1-.35-.15l-1.71-1.7A.5.5 0 0 0 7.09 4H4.5C3.67 4 3 4.67 3 5.5Zm1.28 10.48.22.02h9.4a2 2 0 0 0 1.73-1l2.17-3.75A1.5 1.5 0 0 0 16.5 9H7.1a2 2 0 0 0-1.73 1L3.2 13.75a1.5 1.5 0 0 0 1.08 2.23ZM2 14.46V5.5A2.5 2.5 0 0 1 4.5 3h2.59c.4 0 .78.16 1.06.44L9.7 5h3.79A2.5 2.5 0 0 1 16 7.5V8h.5a2.5 2.5 0 0 1 2.16 3.75L16.5 15.5a3 3 0 0 1-2.6 1.5H4.5a2.54 2.54 0 0 1-1.62-.6A2.5 2.5 0 0 1 2 14.46Z";
     private const string ToggleHiddenCommandId = "fileExplorer.toggleHidden";
     private const string SetIconProviderCommandId = "fileExplorer.setIconProvider";
     private const string SetViewLocationCommandId = "fileExplorer.setViewLocation";
@@ -86,7 +88,14 @@ public sealed class FileExplorerExtension : IXveExtension
 
         ExtensionToolbarContribution[] toolbarItems =
         {
-            new(OpenFolderCommandId, "Open Folder", "Open a folder", ExtensionToolbarLocations.Main, "workspace", 5)
+            new(
+                OpenFolderCommandId,
+                "Open Folder",
+                "Open a folder",
+                ExtensionToolbarLocations.Main,
+                "workspace",
+                5,
+                OpenFolderIconPath)
         };
         context.Subscriptions.Add(context.Contributions.RegisterToolbarItems(context.ExtensionId, toolbarItems));
 
