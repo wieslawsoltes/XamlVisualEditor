@@ -169,3 +169,35 @@ References:
 - Avoid static state (except truly immutable constants).
 - Prefer explicit types where clarity is improved; avoid `var` in public APIs.
 - All public APIs must be documented and unit-tested.
+
+## 14) Fluent icons path data (required)
+
+References:
+- https://github.com/microsoft/fluentui-system-icons
+- https://www.npmjs.com/package/@fluentui/svg-icons
+
+- Use Microsoft Fluent System Icons for all `PathIcon`/`IconPathData` geometry.
+- Do not hand-draw or invent SVG path strings for product UI icons.
+- Prefer `regular` variants for standard UI chrome.
+- Prefer `20` size source icons for toolbar usage; render using the existing control size in XAML.
+- Keep icon path data in named constants (for example `OpenFolderIconPath`) and reuse it.
+
+### How to get Fluent icon path data
+
+1. Pick an icon name from the Fluent icon catalog (for example `folder_open_20_regular`).
+2. Download the SVG from npm/unpkg, for example:
+   `https://unpkg.com/@fluentui/svg-icons@<version>/icons/<icon-name>.svg`
+3. Copy the value of the SVG `<path d="..."/>` attribute exactly.
+4. Use that value directly in `PathIcon.Data` or extension `IconPathData`.
+5. If an icon contains multiple `<path>` elements, choose a Fluent icon variant with a single path for `PathIcon.Data`, or compose a geometry only when needed.
+
+### CLI workflow (example)
+
+```bash
+npm view @fluentui/svg-icons version
+npm pack @fluentui/svg-icons@<version>
+tar -xzf fluentui-svg-icons-<version>.tgz
+cat package/icons/folder_open_20_regular.svg
+```
+
+Then copy the `d` attribute from the `<path>` element into code.
