@@ -4,43 +4,43 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Avalonia -->
-    <PackageVersion Include="Avalonia" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.Desktop" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.DesignerSupport" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.Remote.Protocol" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.11" />
-    <PackageVersion Include="Avalonia.Skia" Version="11.3.11" />
+    <PackageVersion Include="Avalonia" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.Desktop" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.DesignerSupport" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.Remote.Protocol" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <PackageVersion Include="Avalonia.Skia" Version="11.3.12" />
     <PackageVersion Include="ProDiagnostics" Version="11.3.11-preview.8" />
     <PackageVersion Include="ProDataGrid" Version="11.3.11-preview.14" />
-    <PackageVersion Include="Avalonia.Headless.XUnit" Version="11.3.11" />
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="11.3.12" />
     <!-- AvaloniaEdit -->
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="11.4.1" />
     <!-- Dock -->
-    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.13" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.13" />
-    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.13" />
-    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.13" />
+    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.16" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.16" />
+    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.16" />
+    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.16" />
     <!-- ReactiveUI -->
     <PackageVersion Include="ReactiveUI" Version="22.3.1" />
     <PackageVersion Include="ReactiveUI.Fody" Version="19.5.41" />
     <PackageVersion Include="ReactiveUI.Avalonia" Version="11.3.8" />
     <!-- MSBuild / Roslyn -->
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
-    <PackageVersion Include="Microsoft.Build.Framework" Version="18.0.2" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="18.3.3" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.0.0" />
     <!-- DI -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.2" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <!-- Logging -->
-    <PackageVersion Include="Serilog" Version="4.3.0" />
+    <PackageVersion Include="Serilog" Version="4.3.1" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
     <!-- TextMate -->
@@ -48,7 +48,7 @@
     <!-- Testing -->
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <!-- System.Reactive -->
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <!-- Xaml.Behaviors -->
