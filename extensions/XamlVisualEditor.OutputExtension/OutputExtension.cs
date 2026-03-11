@@ -12,6 +12,9 @@ public sealed class OutputExtension : IXveExtension
     private const string ProblemsViewId = "problems.panel";
     private const string ToggleOutputCommandId = "output.toggleView";
     private const string ToggleProblemsCommandId = "problems.toggleView";
+    private const string ShowProblemsCommandId = "problems.show";
+    private const string NextProblemCommandId = "problems.next";
+    private const string PreviousProblemCommandId = "problems.previous";
 
     public async Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
     {
@@ -24,6 +27,40 @@ public sealed class OutputExtension : IXveExtension
         context.Subscriptions.Add(context.Commands.Register(
             ToggleProblemsCommandId,
             _ => context.ViewHost.ToggleAsync(ProblemsViewId, CancellationToken.None)));
+        context.Subscriptions.Add(context.Commands.Register(
+            ShowProblemsCommandId,
+            _ => context.ViewHost.ShowAsync(ProblemsViewId, CancellationToken.None)));
+        context.Subscriptions.Add(context.Commands.Register(
+            NextProblemCommandId,
+            _ => NavigateProblemAsync(context, problemsViewModel, 1, CancellationToken.None)));
+        context.Subscriptions.Add(context.Commands.Register(
+            PreviousProblemCommandId,
+            _ => NavigateProblemAsync(context, problemsViewModel, -1, CancellationToken.None)));
+
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            ShowProblemsCommandId,
+            new CommandMetadata(
+                "Problems: Show Problems",
+                "View",
+                When: "hasWorkspace",
+                Keybinding: "Ctrl+Shift+M",
+                Priority: 36)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            NextProblemCommandId,
+            new CommandMetadata(
+                "Problems: Next Problem",
+                "Navigation",
+                When: "hasWorkspace",
+                Keybinding: "F8",
+                Priority: 37)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            PreviousProblemCommandId,
+            new CommandMetadata(
+                "Problems: Previous Problem",
+                "Navigation",
+                When: "hasWorkspace",
+                Keybinding: "Shift+F8",
+                Priority: 38)));
 
         context.Subscriptions.Add(context.Contributions.RegisterViews(
             context.ExtensionId,
@@ -61,6 +98,14 @@ public sealed class OutputExtension : IXveExtension
                     ExtensionMenuLocations.View,
                     "views.bottom",
                     35)
+            }));
+        context.Subscriptions.Add(context.Contributions.RegisterCommandPaletteItems(
+            context.ExtensionId,
+            new[]
+            {
+                new ExtensionCommandPaletteContribution(ShowProblemsCommandId, "Problems: Show Problems", "View"),
+                new ExtensionCommandPaletteContribution(NextProblemCommandId, "Problems: Next Problem", "Navigation"),
+                new ExtensionCommandPaletteContribution(PreviousProblemCommandId, "Problems: Previous Problem", "Navigation")
             }));
 
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
@@ -109,6 +154,20 @@ public sealed class OutputExtension : IXveExtension
         context.Subscriptions.Add(Disposable.Create(problemsViewModel.Dispose));
 
         await problemsViewModel.InitializeAsync(cancellationToken);
+    }
+
+    private static async Task NavigateProblemAsync(
+        ExtensionContext context,
+        ProblemsPanelViewModel problemsViewModel,
+        int delta,
+        CancellationToken cancellationToken)
+    {
+        await context.ViewHost.ShowAsync(ProblemsViewId, cancellationToken).ConfigureAwait(false);
+        bool navigated = await problemsViewModel.NavigateToRelativeAsync(delta, cancellationToken).ConfigureAwait(false);
+        if (!navigated)
+        {
+            await context.Window.ShowInformationMessageAsync("No diagnostics available.", cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private sealed class OutputPanelViewProvider : ICustomViewProvider

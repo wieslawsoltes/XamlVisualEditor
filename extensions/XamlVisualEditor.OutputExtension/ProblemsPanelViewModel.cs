@@ -283,6 +283,51 @@ public sealed class ProblemsPanelViewModel : ReactiveObject, IDisposable
         UpdateEntriesFromSnapshots();
     }
 
+    public async Task<bool> NavigateToRelativeAsync(int delta, CancellationToken cancellationToken)
+    {
+        if (delta == 0)
+        {
+            return false;
+        }
+
+        List<DiagnosticEntryViewModel> filtered = GetFilteredEntries();
+        if (filtered.Count == 0)
+        {
+            return false;
+        }
+
+        int direction = delta > 0 ? 1 : -1;
+        int currentIndex = SelectedDiagnostic is null
+            ? (direction > 0 ? -1 : 0)
+            : filtered.IndexOf(SelectedDiagnostic);
+        if (currentIndex < 0)
+        {
+            currentIndex = direction > 0 ? -1 : 0;
+        }
+
+        int nextIndex = currentIndex;
+        int steps = Math.Abs(delta);
+        for (int i = 0; i < steps; i++)
+        {
+            nextIndex = direction > 0
+                ? (nextIndex + 1) % filtered.Count
+                : (nextIndex - 1 + filtered.Count) % filtered.Count;
+        }
+
+        DiagnosticEntryViewModel next = filtered[nextIndex];
+        SelectedDiagnostic = next;
+        SelectedRow = Model.FindNode(next);
+
+        LanguageLocation location = new()
+        {
+            FilePath = next.FilePath,
+            Range = next.Range
+        };
+
+        await _editor.OpenLocationAsync(location, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     public void Dispose()
     {
         _loadCts?.Cancel();
