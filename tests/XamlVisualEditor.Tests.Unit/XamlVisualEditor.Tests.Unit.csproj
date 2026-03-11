@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.FileExplorerExtension\XamlVisualEditor.FileExplorerExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.WorkspaceExtension\XamlVisualEditor.WorkspaceExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.ToolboxExtension\XamlVisualEditor.ToolboxExtension.csproj" />
+    <ProjectReference Include="..\..\extensions\XamlVisualEditor.NavigationExtension\XamlVisualEditor.NavigationExtension.csproj" />
     <ProjectReference Include="..\..\extensions\XamlVisualEditor.Debugging.DotNetSdkExtension\XamlVisualEditor.Debugging.DotNetSdkExtension.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.Animation\XamlVisualEditor.Animation.csproj" />
     <ProjectReference Include="..\..\src\XamlVisualEditor.CodeEditor\XamlVisualEditor.CodeEditor.csproj" />
