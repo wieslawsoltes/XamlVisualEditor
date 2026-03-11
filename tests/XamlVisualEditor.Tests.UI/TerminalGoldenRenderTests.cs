@@ -19,7 +19,7 @@ namespace XamlVisualEditor.Tests.UI;
 public sealed class TerminalGoldenRenderTests
 {
     private const string GoldenHashPath = "TestData/terminal/basic.sha256";
-    private const string SequencePath = "TestData/terminal/basic.log";
+    private const string SequencePath = "TestData/terminal/basic.seq";
 
     [AvaloniaFact]
     public async Task BasicSequence_RenderHash_MatchesGolden()

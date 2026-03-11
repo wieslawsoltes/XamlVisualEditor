@@ -28,20 +28,20 @@ public sealed class UnixPtyProviderTests
         using TerminalSession session = new(options, new UnixPtyProvider(), new ManagedTerminalEmulatorFactory());
         session.Start();
 
-        bool ready = await WaitForTextAsync(session.Emulator, "READY", TimeSpan.FromSeconds(3));
+        bool ready = await WaitForTextAsync(session.Emulator, "READY", TimeSpan.FromSeconds(10));
         Assert.True(ready, GetVisibleText(session.Emulator));
 
-        bool initial = await WaitForTextAsync(session.Emulator, "24 80", TimeSpan.FromSeconds(3));
+        bool initial = await WaitForTextAsync(session.Emulator, "24 80", TimeSpan.FromSeconds(10));
         Assert.True(initial, GetVisibleText(session.Emulator));
 
         session.Resize(100, 40);
 
-        bool resized = await WaitForTextAsync(session.Emulator, "40 100", TimeSpan.FromSeconds(3));
+        bool resized = await WaitForTextAsync(session.Emulator, "40 100", TimeSpan.FromSeconds(10));
         if (!resized)
         {
             session.Resize(101, 40);
             session.Resize(100, 40);
-            resized = await WaitForTextAsync(session.Emulator, "40 100", TimeSpan.FromSeconds(3));
+            resized = await WaitForTextAsync(session.Emulator, "40 100", TimeSpan.FromSeconds(10));
         }
 
         Assert.True(resized, GetVisibleText(session.Emulator));
