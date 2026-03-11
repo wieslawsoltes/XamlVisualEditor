@@ -40,7 +40,7 @@ public sealed class CollaborationPanelHostAdapter : ICollaborationPanelHost, ICo
         PublishParticipantsChanged();
     }
 
-    public object? ViewModel => _mainViewModel.Collaboration;
+    public ICollaborationPanelModel? PanelModel => _mainViewModel.Collaboration;
 
     public bool IsSessionActive => _mainViewModel.Collaboration.IsSessionActive;
 

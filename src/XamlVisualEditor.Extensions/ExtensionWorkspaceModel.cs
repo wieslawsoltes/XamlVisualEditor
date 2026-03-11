@@ -29,6 +29,9 @@ public interface IWorkspaceModel
 
     /// <summary>Cleans workspace outputs.</summary>
     Task CleanAsync(CancellationToken cancellationToken);
+
+    /// <summary>Sets the startup project for run/debug operations.</summary>
+    Task SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken cancellationToken);
 }
 
 /// <summary>Workspace model change event args.</summary>

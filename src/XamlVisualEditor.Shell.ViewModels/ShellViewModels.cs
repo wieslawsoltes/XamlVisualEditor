@@ -2129,7 +2129,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private readonly Dictionary<string, ExtensionTool> _extensionTools = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ExtensionViewModel> _extensionViews = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ICommand> _extensionCommandsById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IDisposable> _extensionCommandSubscriptionsById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ExtensionStatusBarItemViewModel> _statusBarItemsById = new(StringComparer.Ordinal);
     private string? _activeExtensionViewId;
+    private int ClipboardVersion { get; set; }
 
     /// <summary>
     /// Gets the open documents.
@@ -2242,6 +2245,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets extension-provided command palette items.
     /// </summary>
     public ObservableCollection<ExtensionCommandPaletteItemViewModel> CommandPaletteItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided left status bar items.
+    /// </summary>
+    public ObservableCollection<ExtensionStatusBarItemViewModel> LeftStatusBarItems { get; } = new();
+
+    /// <summary>
+    /// Gets extension-provided right status bar items.
+    /// </summary>
+    public ObservableCollection<ExtensionStatusBarItemViewModel> RightStatusBarItems { get; } = new();
 
     /// <summary>
     /// Gets extension-provided keybinding items.
@@ -2572,7 +2585,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private ReactiveCommand<Unit, Unit> ToggleBreakpointCommand { get; }
     private ReactiveCommand<Unit, Unit> StartRunCommand { get; }
     private ReactiveCommand<Unit, Unit> StopRunCommand { get; }
-    private ReactiveCommand<ProjectModel, Unit> SetStartupProjectCommand { get; }
 
     // Terminal Commands
     private ReactiveCommand<Unit, Unit> NewTerminalCommand { get; }
@@ -2625,7 +2637,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         ExtensionManager = new ExtensionManagerViewModel(
             extensionManager ?? new NullExtensionManager(),
             () => ExtensionPackageOpenInteraction.Handle(Unit.Default).ToTask());
-        SolutionExplorer = new SolutionExplorerViewModel(systemIconService);
+        SolutionExplorer = new SolutionExplorerViewModel(systemIconService, _extensionCommands);
 
         if (_extensionContributions is not null)
         {
@@ -2738,6 +2750,48 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IObservable<bool> hasActiveDoc = this.WhenAnyValue(x => x.ActiveDocument).Select(d => d is not null);
         IObservable<bool> hasDesignerDoc = this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(d => d is not null);
         IObservable<bool> hasTextDoc = this.WhenAnyValue(x => x.ActiveTextDocument).Select(d => d is not null);
+        IObservable<bool> hasEditableDoc = hasDesignerDoc.CombineLatest(hasTextDoc, (designer, text) => designer || text);
+        IObservable<bool> hasDesignerSelection = ObserveDesignerDocumentState(
+            doc => doc.SelectedNodeId is not null,
+            doc => doc.WhenAnyValue(x => x.SelectedNodeId).Select(_ => Unit.Default));
+        IObservable<bool> canUndoDesigner = ObserveDesignerDocumentState(
+            doc => doc.SyncEngine.UndoRedo.CanUndo,
+            doc => doc.SyncEngine.SyncEvents.Select(_ => Unit.Default));
+        IObservable<bool> canRedoDesigner = ObserveDesignerDocumentState(
+            doc => doc.SyncEngine.UndoRedo.CanRedo,
+            doc => doc.SyncEngine.SyncEvents.Select(_ => Unit.Default));
+        IObservable<bool> hasTextSelection = ObserveTextDocumentState(
+            doc => GetTextSelectionLength(doc) > 0,
+            doc => doc.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength).Select(_ => Unit.Default));
+        IObservable<bool> canDeleteText = ObserveTextDocumentState(
+            doc =>
+            {
+                int textLength = doc.Document.TextLength;
+                if (GetTextSelectionLength(doc) > 0)
+                {
+                    return true;
+                }
+
+                int caretOffset = Math.Clamp(doc.CaretOffset, 0, textLength);
+                return caretOffset < textLength;
+            },
+            doc => doc.WhenAnyValue(x => x.SelectionStart, x => x.SelectionLength).Select(_ => Unit.Default),
+            doc => doc.WhenAnyValue(x => x.CaretOffset).Select(_ => Unit.Default),
+            ObserveTextDocumentTextChanges);
+        IObservable<bool> canUndoText = ObserveTextDocumentState(
+            doc => doc.Document.UndoStack.CanUndo,
+            ObserveTextDocumentTextChanges);
+        IObservable<bool> canRedoText = ObserveTextDocumentState(
+            doc => doc.Document.UndoStack.CanRedo,
+            ObserveTextDocumentTextChanges);
+        IObservable<bool> hasClipboardText = this.WhenAnyValue(x => x.ClipboardVersion)
+            .Select(_ => !string.IsNullOrEmpty(_clipboard))
+            .StartWith(!string.IsNullOrEmpty(_clipboard));
+        IObservable<bool> canUndoEdit = canUndoDesigner.CombineLatest(canUndoText, (designer, text) => designer || text);
+        IObservable<bool> canRedoEdit = canRedoDesigner.CombineLatest(canRedoText, (designer, text) => designer || text);
+        IObservable<bool> canCutOrCopy = hasDesignerSelection.CombineLatest(hasTextSelection, (designer, text) => designer || text);
+        IObservable<bool> canDeleteEdit = hasDesignerSelection.CombineLatest(canDeleteText, (designer, text) => designer || text);
+        IObservable<bool> canPasteEdit = hasEditableDoc.CombineLatest(hasClipboardText, (editable, clipboard) => editable && clipboard);
         SaveDocumentCommand = ReactiveCommand.CreateFromTask(SaveActiveDocumentAsync, hasActiveDoc);
         SaveAllCommand = ReactiveCommand.CreateFromTask(SaveAllAsync);
         ExitCommand = ReactiveCommand.Create(() =>
@@ -2790,13 +2844,25 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         // Edit commands
         UndoCommand = ReactiveCommand.Create(() =>
         {
-            ActiveDesignerDocument?.SyncEngine.Undo();
-        }, hasDesignerDoc);
+            if (ActiveDesignerDocument is not null)
+            {
+                ActiveDesignerDocument.SyncEngine.Undo();
+                return;
+            }
+
+            ActiveTextDocument?.Document.UndoStack.Undo();
+        }, canUndoEdit);
 
         RedoCommand = ReactiveCommand.Create(() =>
         {
-            ActiveDesignerDocument?.SyncEngine.Redo();
-        }, hasDesignerDoc);
+            if (ActiveDesignerDocument is not null)
+            {
+                ActiveDesignerDocument.SyncEngine.Redo();
+                return;
+            }
+
+            ActiveTextDocument?.Document.UndoStack.Redo();
+        }, canRedoEdit);
 
         CutCommand = ReactiveCommand.Create(() =>
         {
@@ -2807,14 +2873,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 {
                     XamlSerializationService ser = new();
                     MutableAstDocument tempDoc = new() { Root = node };
-                    _clipboard = ser.Serialize(tempDoc);
+                    SetClipboardText(ser.Serialize(tempDoc));
                     parent.Children.Remove(node);
                     ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
                     ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
                         ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                    return;
                 }
             }
-        }, hasDesignerDoc);
+
+            if (ActiveTextDocument is not null && TryGetSelectedText(ActiveTextDocument, out string selectedText))
+            {
+                SetClipboardText(selectedText);
+                ReplaceTextSelection(ActiveTextDocument, string.Empty);
+            }
+        }, canCutOrCopy);
 
         CopyCommand = ReactiveCommand.Create(() =>
         {
@@ -2825,14 +2898,25 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 {
                     XamlSerializationService ser = new();
                     MutableAstDocument tempDoc = new() { Root = node };
-                    _clipboard = ser.Serialize(tempDoc);
+                    SetClipboardText(ser.Serialize(tempDoc));
+                    return;
                 }
             }
-        }, hasDesignerDoc);
+
+            if (ActiveTextDocument is not null && TryGetSelectedText(ActiveTextDocument, out string selectedText))
+            {
+                SetClipboardText(selectedText);
+            }
+        }, canCutOrCopy);
 
         PasteCommand = ReactiveCommand.Create(() =>
         {
-            if (!string.IsNullOrEmpty(_clipboard) && ActiveDesignerDocument is not null)
+            if (string.IsNullOrEmpty(_clipboard))
+            {
+                return;
+            }
+
+            if (ActiveDesignerDocument is not null)
             {
                 // Parse the clipboard XAML and add to selected parent or root
                 XamlParsingService parser = new();
@@ -2854,8 +2938,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                             ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
                     }
                 }
+
+                return;
             }
-        }, hasDesignerDoc);
+
+            if (ActiveTextDocument is not null)
+            {
+                ReplaceTextSelection(ActiveTextDocument, _clipboard);
+            }
+        }, canPasteEdit);
 
         DeleteCommand = ReactiveCommand.Create(() =>
         {
@@ -2868,17 +2959,26 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     ActiveDesignerDocument.SetSelectedNode(null, ActiveDesignerDocument.SelectionSource);
                     ActiveDesignerDocument.SyncEngine.NotifyAstChanged(
                         ActiveDesignerDocument.SyncEngine.CurrentDocument!, SyncSource.DesignSurface);
+                    return;
                 }
             }
-        }, hasDesignerDoc);
+
+            if (ActiveTextDocument is not null)
+            {
+                DeleteTextSelectionOrCharacter(ActiveTextDocument);
+            }
+        }, canDeleteEdit);
 
         SelectAllCommand = ReactiveCommand.Create(() =>
         {
             if (ActiveDesignerDocument is not null)
             {
                 ActiveDesignerDocument.CodeEditor.SelectAll();
+                return;
             }
-        }, hasDesignerDoc);
+
+            SelectAllText(ActiveTextDocument);
+        }, hasEditableDoc);
 
         // View commands
         ToggleBreakpointsCommand = ReactiveCommand.Create(() =>
@@ -2944,11 +3044,11 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         ToggleBreakpointCommand = ReactiveCommand.Create(ToggleBreakpointAtCaret, hasActiveDoc);
         StartRunCommand = ReactiveCommand.CreateFromTask(StartRunAsync, canStartRun);
         StopRunCommand = ReactiveCommand.CreateFromTask(StopRunAsync, this.WhenAnyValue(x => x.IsRunActive));
-        SetStartupProjectCommand = ReactiveCommand.Create<ProjectModel>(SetActiveProject);
 
         NewTerminalCommand = ReactiveCommand.Create(CreateTerminalSession);
 
         ShowCommandPaletteCommand = ReactiveCommand.CreateFromTask(ShowCommandPaletteAsync);
+        RefreshExtensionCommandEnablement();
         IDisposable extensionCommandEnablementSubscription = Observable.Merge(
                 this.WhenAnyValue(x => x.ActiveDocument).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(_ => Unit.Default),
@@ -2957,6 +3057,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 this.WhenAnyValue(x => x.CanNavigateBack).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.CanNavigateForward).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.IsRunActive).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.Debugger.HasDebuggerService).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.State).Select(_ => Unit.Default))
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(_ => RefreshExtensionCommandEnablement());
@@ -3148,7 +3249,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         _disposables.Add(collaborationStatusSubscription);
 
         SolutionExplorer.FileOpenRequested += path => { _ = OpenFromSolutionExplorerAsync(path); };
-        SolutionExplorer.StartupProjectSelected += project => SetActiveProject(project);
 
         IDisposable activeDocumentTypeSubscription = this.WhenAnyValue(x => x.ActiveDocument)
             .Subscribe(doc =>
@@ -3163,11 +3263,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         _disposables.Add(activeDocumentTypeSubscription);
     }
 
-    internal Task ExecuteShellCommandAsync(ShellCommandKind command, CancellationToken cancellationToken)
+    private Task ExecuteReactiveCommandAsync(
+        ReactiveCommand<Unit, Unit> reactiveCommand,
+        CancellationToken cancellationToken)
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
-            return ExecuteShellCommandCoreAsync(command, cancellationToken);
+            return ExecuteReactiveCommandCoreAsync(reactiveCommand, cancellationToken);
         }
 
         TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -3175,7 +3277,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             try
             {
-                await ExecuteShellCommandCoreAsync(command, cancellationToken).ConfigureAwait(false);
+                await ExecuteReactiveCommandCoreAsync(reactiveCommand, cancellationToken).ConfigureAwait(false);
                 completion.TrySetResult();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -3190,45 +3292,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         return completion.Task;
     }
 
-    private Task ExecuteShellCommandCoreAsync(ShellCommandKind command, CancellationToken cancellationToken)
+    private static Task ExecuteReactiveCommandCoreAsync(
+        ReactiveCommand<Unit, Unit> reactiveCommand,
+        CancellationToken cancellationToken)
     {
-        ReactiveCommand<Unit, Unit>? reactiveCommand = command switch
-        {
-            ShellCommandKind.Undo => UndoCommand,
-            ShellCommandKind.Redo => RedoCommand,
-            ShellCommandKind.Cut => CutCommand,
-            ShellCommandKind.Copy => CopyCommand,
-            ShellCommandKind.Paste => PasteCommand,
-            ShellCommandKind.Delete => DeleteCommand,
-            ShellCommandKind.SelectAll => SelectAllCommand,
-            ShellCommandKind.RenameSymbol => RenameSymbolCommand,
-            ShellCommandKind.FormatDocument => FormatDocumentCommand,
-            ShellCommandKind.ShowCodeActions => CodeActionsCommand,
-            ShellCommandKind.ShowDocumentSymbols => DocumentSymbolsCommand,
-            ShellCommandKind.ShowWorkspaceSymbols => WorkspaceSymbolsCommand,
-            ShellCommandKind.ToggleBreakpoints => ToggleBreakpointsCommand,
-            ShellCommandKind.ToggleCallStack => ToggleCallStackCommand,
-            ShellCommandKind.ToggleLocals => ToggleLocalsCommand,
-            ShellCommandKind.ToggleWatches => ToggleWatchesCommand,
-            ShellCommandKind.StartDebug => StartDebugCommand,
-            ShellCommandKind.StopDebug => StopDebugCommand,
-            ShellCommandKind.ContinueDebug => ContinueDebugCommand,
-            ShellCommandKind.StepOver => StepOverCommand,
-            ShellCommandKind.StepIn => StepInCommand,
-            ShellCommandKind.StepOut => StepOutCommand,
-            ShellCommandKind.PauseDebug => PauseDebugCommand,
-            ShellCommandKind.ToggleBreakpoint => ToggleBreakpointCommand,
-            ShellCommandKind.StartRun => StartRunCommand,
-            ShellCommandKind.StopRun => StopRunCommand,
-            ShellCommandKind.NewTerminal => NewTerminalCommand,
-            _ => null
-        };
-
-        if (reactiveCommand is null)
-        {
-            return Task.CompletedTask;
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
         if (reactiveCommand is ICommand commandBinding && !commandBinding.CanExecute(null))
         {
@@ -3254,6 +3321,133 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) || e.EventArgs.PropertyName == propertyName)
             .Select(_ => valueProvider())
             .StartWith(valueProvider());
+    }
+
+    private IObservable<bool> ObserveDesignerDocumentState(
+        Func<DesignerDocumentViewModel, bool> evaluator,
+        params Func<DesignerDocumentViewModel, IObservable<Unit>>[] changeSources)
+    {
+        return this.WhenAnyValue(x => x.ActiveDesignerDocument)
+            .Select(doc => doc is null
+                ? Observable.Return(false)
+                : ObserveDocumentState(doc, evaluator, changeSources))
+            .Switch();
+    }
+
+    private IObservable<bool> ObserveTextDocumentState(
+        Func<TextDocumentViewModel, bool> evaluator,
+        params Func<TextDocumentViewModel, IObservable<Unit>>[] changeSources)
+    {
+        return this.WhenAnyValue(x => x.ActiveTextDocument)
+            .Select(doc => doc is null
+                ? Observable.Return(false)
+                : ObserveDocumentState(doc, evaluator, changeSources))
+            .Switch();
+    }
+
+    private static IObservable<bool> ObserveDocumentState<TDocument>(
+        TDocument document,
+        Func<TDocument, bool> evaluator,
+        params Func<TDocument, IObservable<Unit>>[] changeSources)
+    {
+        if (changeSources.Length == 0)
+        {
+            return Observable.Return(evaluator(document));
+        }
+
+        return Observable.Merge(changeSources.Select(source => source(document)))
+            .Select(_ => evaluator(document))
+            .StartWith(evaluator(document));
+    }
+
+    private static IObservable<Unit> ObserveTextDocumentTextChanges(TextDocumentViewModel document)
+    {
+        return Observable.FromEventPattern<EventHandler, EventArgs>(
+                h => document.Document.TextChanged += h,
+                h => document.Document.TextChanged -= h)
+            .Select(_ => Unit.Default);
+    }
+
+    private void SetClipboardText(string? text)
+    {
+        if (string.Equals(_clipboard, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _clipboard = text;
+        ClipboardVersion++;
+        this.RaisePropertyChanged(nameof(ClipboardVersion));
+        RefreshExtensionCommandEnablement();
+    }
+
+    private static int GetTextSelectionLength(TextDocumentViewModel document)
+    {
+        int start = Math.Clamp(document.SelectionStart, 0, document.Document.TextLength);
+        return Math.Clamp(document.SelectionLength, 0, document.Document.TextLength - start);
+    }
+
+    private static bool TryGetSelectedText(TextDocumentViewModel document, out string text)
+    {
+        int start = Math.Clamp(document.SelectionStart, 0, document.Document.TextLength);
+        int length = GetTextSelectionLength(document);
+        if (length == 0)
+        {
+            text = string.Empty;
+            return false;
+        }
+
+        text = document.Document.GetText(start, length);
+        return true;
+    }
+
+    private static void ReplaceTextSelection(TextDocumentViewModel document, string replacement)
+    {
+        int textLength = document.Document.TextLength;
+        int length = GetTextSelectionLength(document);
+        int start = length > 0
+            ? Math.Clamp(document.SelectionStart, 0, textLength)
+            : Math.Clamp(document.CaretOffset, 0, textLength);
+
+        document.Document.Replace(start, length, replacement);
+
+        int nextOffset = Math.Clamp(start + replacement.Length, 0, document.Document.TextLength);
+        document.SelectionStart = nextOffset;
+        document.SelectionLength = 0;
+        document.SetCaretOffset(nextOffset);
+    }
+
+    private static void DeleteTextSelectionOrCharacter(TextDocumentViewModel document)
+    {
+        int length = GetTextSelectionLength(document);
+        if (length > 0)
+        {
+            ReplaceTextSelection(document, string.Empty);
+            return;
+        }
+
+        int offset = Math.Clamp(document.CaretOffset, 0, document.Document.TextLength);
+        if (offset >= document.Document.TextLength)
+        {
+            return;
+        }
+
+        document.Document.Remove(offset, 1);
+        document.SelectionStart = offset;
+        document.SelectionLength = 0;
+        document.SetCaretOffset(offset);
+    }
+
+    private static void SelectAllText(TextDocumentViewModel? document)
+    {
+        if (document is null)
+        {
+            return;
+        }
+
+        document.SelectionStart = 0;
+        document.SelectionLength = document.Document.TextLength;
+        document.SetCaretOffset(document.Document.TextLength);
     }
 
     private async System.Threading.Tasks.Task NewDocumentAsync()
@@ -3968,8 +4162,16 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             ExtensionToolbarItems.Clear();
             MainToolbarItems.Clear();
             CommandPaletteItems.Clear();
+            LeftStatusBarItems.Clear();
+            RightStatusBarItems.Clear();
             ExtensionKeyBindings.Clear();
             _extensionCommandsById.Clear();
+            foreach (IDisposable subscription in _extensionCommandSubscriptionsById.Values)
+            {
+                subscription.Dispose();
+            }
+            _extensionCommandSubscriptionsById.Clear();
+            _statusBarItemsById.Clear();
             RefreshExtensionCommandEnablement();
             RefreshExtensionViews();
             return;
@@ -4224,6 +4426,100 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
     }
 
+    public void UpsertStatusBarItem(
+        string itemId,
+        string text,
+        string? tooltip,
+        string? commandId,
+        StatusBarAlignment alignment,
+        int priority,
+        bool isVisible)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        ObservableCollection<ExtensionStatusBarItemViewModel> target =
+            alignment == StatusBarAlignment.Left ? LeftStatusBarItems : RightStatusBarItems;
+        ObservableCollection<ExtensionStatusBarItemViewModel> other =
+            alignment == StatusBarAlignment.Left ? RightStatusBarItems : LeftStatusBarItems;
+
+        if (!_statusBarItemsById.TryGetValue(itemId, out ExtensionStatusBarItemViewModel? item))
+        {
+            item = new ExtensionStatusBarItemViewModel(
+                itemId,
+                text,
+                tooltip,
+                commandId,
+                alignment,
+                priority,
+                string.IsNullOrWhiteSpace(commandId) ? null : CreateExtensionCommand(commandId));
+            _statusBarItemsById[itemId] = item;
+        }
+        else
+        {
+            item.Text = text;
+            item.Tooltip = tooltip;
+            item.CommandId = commandId;
+            item.Alignment = alignment;
+            item.Priority = priority;
+            item.Command = string.IsNullOrWhiteSpace(commandId) ? null : CreateExtensionCommand(commandId);
+        }
+
+        if (!isVisible)
+        {
+            target.Remove(item);
+            other.Remove(item);
+            return;
+        }
+
+        other.Remove(item);
+        if (!target.Contains(item))
+        {
+            target.Add(item);
+        }
+
+        SortStatusBarItems(target);
+    }
+
+    public void RemoveStatusBarItem(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+        {
+            return;
+        }
+
+        if (!_statusBarItemsById.Remove(itemId, out ExtensionStatusBarItemViewModel? item))
+        {
+            return;
+        }
+
+        LeftStatusBarItems.Remove(item);
+        RightStatusBarItems.Remove(item);
+    }
+
+    private static void SortStatusBarItems(ObservableCollection<ExtensionStatusBarItemViewModel> items)
+    {
+        List<ExtensionStatusBarItemViewModel> sorted = items
+            .OrderByDescending(item => item.Priority)
+            .ThenBy(item => item.Text, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        for (int index = 0; index < sorted.Count; index++)
+        {
+            ExtensionStatusBarItemViewModel expected = sorted[index];
+            if (!ReferenceEquals(items[index], expected))
+            {
+                int currentIndex = items.IndexOf(expected);
+                if (currentIndex >= 0)
+                {
+                    items.Move(currentIndex, index);
+                }
+            }
+        }
+    }
+
     private ICommand CreateExtensionCommand(string commandId)
     {
         if (_extensionCommandsById.TryGetValue(commandId, out ICommand? existing))
@@ -4235,11 +4531,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             () => ExecuteExtensionCommandAsync(commandId),
             () => IsExtensionCommandEnabled(commandId));
         _extensionCommandsById[commandId] = command;
+        EnsureExtensionCommandSubscription(commandId, command);
         return command;
     }
 
     private void RefreshExtensionCommandEnablement()
     {
+        AttachExtensionCommandSubscriptions();
+
         foreach (ICommand command in _extensionCommandsById.Values)
         {
             if (command is ExtensionAsyncCommand extensionCommand)
@@ -4313,6 +4612,22 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             activeCommandIds.Add(item.CommandId);
         }
 
+        foreach (ExtensionStatusBarItemViewModel item in LeftStatusBarItems)
+        {
+            if (!string.IsNullOrWhiteSpace(item.CommandId))
+            {
+                activeCommandIds.Add(item.CommandId);
+            }
+        }
+
+        foreach (ExtensionStatusBarItemViewModel item in RightStatusBarItems)
+        {
+            if (!string.IsNullOrWhiteSpace(item.CommandId))
+            {
+                activeCommandIds.Add(item.CommandId);
+            }
+        }
+
         List<string> staleKeys = _extensionCommandsById.Keys
             .Where(key => !activeCommandIds.Contains(key))
             .ToList();
@@ -4320,17 +4635,106 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         foreach (string key in staleKeys)
         {
             _extensionCommandsById.Remove(key);
+            if (_extensionCommandSubscriptionsById.TryGetValue(key, out IDisposable? subscription))
+            {
+                subscription.Dispose();
+                _extensionCommandSubscriptionsById.Remove(key);
+            }
         }
     }
 
     private bool IsExtensionCommandEnabled(string commandId)
     {
-        if (_commandMetadata is null || !_commandMetadata.TryGet(commandId, out CommandMetadata metadata))
+        if (_commandMetadata is not null && _commandMetadata.TryGet(commandId, out CommandMetadata metadata))
+        {
+            if (!EvaluateWhenExpressionForContext(metadata.When))
+            {
+                return false;
+            }
+        }
+
+        if (!TryGetHostCommand(commandId, out ICommand? hostCommand))
         {
             return true;
         }
 
-        return EvaluateWhenExpressionForContext(metadata.When);
+        if (hostCommand is null)
+        {
+            return true;
+        }
+
+        return hostCommand.CanExecute(null);
+    }
+
+    private void AttachExtensionCommandSubscriptions()
+    {
+        foreach ((string commandId, ICommand command) in _extensionCommandsById)
+        {
+            if (command is ExtensionAsyncCommand extensionCommand)
+            {
+                EnsureExtensionCommandSubscription(commandId, extensionCommand);
+            }
+        }
+    }
+
+    private void EnsureExtensionCommandSubscription(string commandId, ExtensionAsyncCommand extensionCommand)
+    {
+        if (_extensionCommandSubscriptionsById.ContainsKey(commandId))
+        {
+            return;
+        }
+
+        if (!TryGetHostCommand(commandId, out ICommand? hostCommand))
+        {
+            return;
+        }
+
+        if (hostCommand is null)
+        {
+            return;
+        }
+
+        EventHandler handler = (_, _) => extensionCommand.NotifyCanExecuteChanged();
+        hostCommand.CanExecuteChanged += handler;
+        _extensionCommandSubscriptionsById[commandId] =
+            Disposable.Create(() => hostCommand.CanExecuteChanged -= handler);
+    }
+
+    private bool TryGetHostCommand(string commandId, out ICommand? command)
+    {
+        command = commandId switch
+        {
+            "editing.undo" => UndoCommand,
+            "editing.redo" => RedoCommand,
+            "editing.cut" => CutCommand,
+            "editing.copy" => CopyCommand,
+            "editing.paste" => PasteCommand,
+            "editing.delete" => DeleteCommand,
+            "editing.selectAll" => SelectAllCommand,
+            "navigation.renameSymbol" => RenameSymbolCommand,
+            "navigation.formatDocument" => FormatDocumentCommand,
+            "navigation.codeActions" => CodeActionsCommand,
+            "navigation.documentSymbols" => DocumentSymbolsCommand,
+            "navigation.workspaceSymbols" => WorkspaceSymbolsCommand,
+            "debug.breakpoints.toggleView" => ToggleBreakpointsCommand,
+            "debug.callStack.toggleView" => ToggleCallStackCommand,
+            "debug.locals.toggleView" => ToggleLocalsCommand,
+            "debug.watches.toggleView" => ToggleWatchesCommand,
+            "debug.start" => StartDebugCommand,
+            "debug.stop" => StopDebugCommand,
+            "debug.continue" => ContinueDebugCommand,
+            "debug.stepOver" => StepOverCommand,
+            "debug.stepIn" => StepInCommand,
+            "debug.stepOut" => StepOutCommand,
+            "debug.pause" => PauseDebugCommand,
+            "debug.toggleBreakpoint" => ToggleBreakpointCommand,
+            "run.start" => StartRunCommand,
+            "run.stop" => StopRunCommand,
+            "terminal.new" => NewTerminalCommand,
+            _ => null
+        };
+
+        return command is not null;
     }
 
     private bool EvaluateWhenExpressionForContext(string? when)
@@ -5168,35 +5572,59 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         ActiveProjectPath = projectPath;
 
-        if (_projectLookup.TryGetValue(projectPath, out ProjectModel? project))
+        ProjectModel? project = ResolveProjectByPath(projectPath);
+        if (project is not null)
         {
             SetActiveProject(project);
             return;
         }
 
-        if (_workspace is not null)
+        SolutionExplorer.SetStartupProjectPath(projectPath);
+    }
+
+    private ProjectModel? ResolveProjectByPath(string projectPath, string? targetFramework = null)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath))
         {
-            ProjectModel? match = null;
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(targetFramework) && _workspace is not null)
+        {
             foreach (ProjectModel candidate in _workspace.Projects)
             {
-                if (!string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(candidate.TargetFramework, targetFramework, StringComparison.OrdinalIgnoreCase))
                 {
-                    continue;
+                    return candidate;
                 }
-
-                match = match is null
-                    ? candidate
-                    : ProjectSelection.ChoosePreferredProject(match, candidate);
-            }
-
-            if (match is not null)
-            {
-                SetActiveProject(match);
-                return;
             }
         }
 
-        SolutionExplorer.SetStartupProjectPath(projectPath);
+        if (_projectLookup.TryGetValue(projectPath, out ProjectModel? fromLookup))
+        {
+            return fromLookup;
+        }
+
+        if (_workspace is null)
+        {
+            return null;
+        }
+
+        ProjectModel? match = null;
+        foreach (ProjectModel candidate in _workspace.Projects)
+        {
+            if (!string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            match = match is null
+                ? candidate
+                : ProjectSelection.ChoosePreferredProject(match, candidate);
+        }
+
+        return match;
     }
 
     private async System.Threading.Tasks.Task EnsureProjectBuiltAsync(ProjectModel project, bool suppressWarnings)
@@ -6765,6 +7193,111 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         return RunWorkspaceCommandAsync("clean");
     }
 
+    Task IWorkspaceCommands.SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            SetActiveProject(null);
+            return Task.CompletedTask;
+        }
+
+        ProjectModel? project = ResolveProjectByPath(projectPath, targetFramework);
+        if (project is not null)
+        {
+            SetActiveProject(project);
+            return Task.CompletedTask;
+        }
+
+        SetActiveProjectByPath(projectPath);
+        return Task.CompletedTask;
+    }
+
+    Task IWorkspaceCommands.UndoAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(UndoCommand, cancellationToken);
+
+    Task IWorkspaceCommands.RedoAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(RedoCommand, cancellationToken);
+
+    Task IWorkspaceCommands.CutAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(CutCommand, cancellationToken);
+
+    Task IWorkspaceCommands.CopyAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(CopyCommand, cancellationToken);
+
+    Task IWorkspaceCommands.PasteAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(PasteCommand, cancellationToken);
+
+    Task IWorkspaceCommands.DeleteAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(DeleteCommand, cancellationToken);
+
+    Task IWorkspaceCommands.SelectAllAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(SelectAllCommand, cancellationToken);
+
+    Task IWorkspaceCommands.RenameSymbolAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(RenameSymbolCommand, cancellationToken);
+
+    Task IWorkspaceCommands.FormatDocumentAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(FormatDocumentCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ShowCodeActionsAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(CodeActionsCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ShowDocumentSymbolsAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(DocumentSymbolsCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ShowWorkspaceSymbolsAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(WorkspaceSymbolsCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ToggleBreakpointsAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(ToggleBreakpointsCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ToggleCallStackAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(ToggleCallStackCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ToggleLocalsAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(ToggleLocalsCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ToggleWatchesAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(ToggleWatchesCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StartDebugAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StartDebugCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StopDebugAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StopDebugCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ContinueDebugAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(ContinueDebugCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StepOverAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StepOverCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StepInAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StepInCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StepOutAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StepOutCommand, cancellationToken);
+
+    Task IWorkspaceCommands.PauseDebugAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(PauseDebugCommand, cancellationToken);
+
+    Task IWorkspaceCommands.ToggleBreakpointAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(ToggleBreakpointCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StartRunAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StartRunCommand, cancellationToken);
+
+    Task IWorkspaceCommands.StopRunAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(StopRunCommand, cancellationToken);
+
+    Task IWorkspaceCommands.NewTerminalAsync(CancellationToken cancellationToken) =>
+        ExecuteReactiveCommandAsync(NewTerminalCommand, cancellationToken);
+
     private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(string command)
     {
         if (string.IsNullOrEmpty(_workspacePath) || _workspace is null)
@@ -7060,6 +7593,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             _extensionViewRegistry.Changed -= OnExtensionViewsChanged;
         }
+
+        foreach (IDisposable subscription in _extensionCommandSubscriptionsById.Values)
+        {
+            subscription.Dispose();
+        }
+        _extensionCommandSubscriptionsById.Clear();
 
         _outputChannel?.Dispose();
 
@@ -7389,10 +7928,12 @@ public enum SolutionExplorerNodeKind
 /// <summary>
 /// ViewModel for the Solution Explorer tool panel.
 /// </summary>
-public sealed class SolutionExplorerViewModel : ReactiveObject
+public sealed class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel
 {
     private const string FilterPropertyPath = "Item.Name";
+    private const string SetStartupProjectCommandId = "workspace.setStartupProject";
     private readonly ISystemIconService? _systemIcons;
+    private readonly ICommands? _extensionCommands;
 
     public SolutionExplorerNodeViewModel? Root { get; set; }
 
@@ -7423,16 +7964,14 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
     /// <summary>Raised when a XAML file is opened from the tree.</summary>
     public event Action<string>? FileOpenRequested;
 
-    /// <summary>Raised when a project is marked as startup.</summary>
-    public event Action<ProjectModel?>? StartupProjectSelected;
-
     public ReactiveCommand<Unit, Unit> OpenSelectedCommand { get; }
 
     public ReactiveCommand<Unit, Unit> SetStartupProjectCommand { get; }
 
-    public SolutionExplorerViewModel(ISystemIconService? systemIcons = null)
+    public SolutionExplorerViewModel(ISystemIconService? systemIcons = null, ICommands? extensionCommands = null)
     {
         _systemIcons = systemIcons;
+        _extensionCommands = extensionCommands;
         SortingModel = new SortingModel();
         FilteringModel = new FilteringModel();
         SearchModel = new SearchModel
@@ -7474,7 +8013,9 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
                             && (node.Kind == SolutionExplorerNodeKind.File || node.Kind == SolutionExplorerNodeKind.XamlFile)
                             && !string.IsNullOrWhiteSpace(node.FullPath));
         IObservable<bool> canSetStartup = this.WhenAnyValue(x => x.SelectedNode)
-            .Select(node => node?.Kind == SolutionExplorerNodeKind.Project && node.Project is not null);
+            .Select(node => _extensionCommands is not null
+                            && node?.Kind == SolutionExplorerNodeKind.Project
+                            && node.Project is not null);
 
         OpenSelectedCommand = ReactiveCommand.Create(() =>
         {
@@ -7484,12 +8025,19 @@ public sealed class SolutionExplorerViewModel : ReactiveObject
             }
         }, canOpen);
 
-        SetStartupProjectCommand = ReactiveCommand.Create(() =>
+        SetStartupProjectCommand = ReactiveCommand.CreateFromTask(async () =>
         {
             if (SelectedNode?.Kind == SolutionExplorerNodeKind.Project &&
                 SelectedNode.Project is not null)
             {
-                StartupProjectSelected?.Invoke(SelectedNode.Project);
+                await _extensionCommands!.ExecuteAsync(
+                    SetStartupProjectCommandId,
+                    new object?[]
+                    {
+                        SelectedNode.Project.ProjectPath,
+                        SelectedNode.Project.TargetFramework
+                    },
+                    CancellationToken.None);
             }
         }, canSetStartup);
     }

@@ -40,23 +40,23 @@ public sealed class SolutionExplorerExtension : IXveExtension
             }));
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             ViewId,
-            new SolutionExplorerViewProvider(_solutionExplorerHost.ViewModel)));
+            new SolutionExplorerViewProvider(_solutionExplorerHost.PanelModel)));
 
         return Task.CompletedTask;
     }
 
     private sealed class SolutionExplorerViewProvider : ICustomViewProvider
     {
-        private readonly object? _viewModel;
+        private readonly ISolutionExplorerPanelModel? _panelModel;
 
-        public SolutionExplorerViewProvider(object? viewModel)
+        public SolutionExplorerViewProvider(ISolutionExplorerPanelModel? panelModel)
         {
-            _viewModel = viewModel;
+            _panelModel = panelModel;
         }
 
         public object? CreateViewModel()
         {
-            return _viewModel;
+            return _panelModel;
         }
     }
 }

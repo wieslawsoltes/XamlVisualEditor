@@ -10,16 +10,16 @@ This document tracks extension migration status and extension packaging/installa
 - `propertyEditor.panel`: migrated (`extensions/XamlVisualEditor.PropertyEditorExtension`)
 - `visualTree.panel` + `logicalTree.panel`: migrated (`extensions/XamlVisualEditor.TreeInspectorExtension`)
 - `output.panel` + `problems.panel`: migrated (`extensions/XamlVisualEditor.OutputExtension`)
-- `references.panel` + navigation commands: migrated (`extensions/XamlVisualEditor.NavigationExtension`)
+- `references.panel` + navigation commands (definition/references/history/quick-open/go-to-line): migrated (`extensions/XamlVisualEditor.NavigationExtension`)
 - `animationEditor.panel`: migrated (`extensions/XamlVisualEditor.AnimationEditorExtension`)
 - `collaboration.panel`: migrated (`extensions/XamlVisualEditor.CollaborationExtension`)
 - `debugSettings.panel`: migrated (`extensions/XamlVisualEditor.DebugSettingsExtension`)
 - `lspSettings.panel`: migrated (`extensions/XamlVisualEditor.LspSettingsExtension`)
+- `workspace.setStartupProject`: migrated to extension command + workspace API contract (`extensions/XamlVisualEditor.WorkspaceExtension`, `src/XamlVisualEditor.Extensions`)
+- Editing/debug/run/terminal extension commands: migrated from shell bridge to typed `IWorkspaceCommands` APIs (`extensions/XamlVisualEditor.WorkspaceExtension`, `src/XamlVisualEditor.Extensions`)
 
 ### Remaining migration focus
 
-- Keep reducing shell-owned command handlers in `MainWindowViewModel`.
-- Continue replacing host adapters that expose raw host ViewModels with typed extension APIs.
 - Keep hardening terminal/task and settings schema APIs in `XamlVisualEditor.Extensions`.
 
 ### Related docs
@@ -27,6 +27,8 @@ This document tracks extension migration status and extension packaging/installa
 - API reference: `docs/EXTENSION-API.md`
 - Internal migration guide: `docs/EXTENSION-MIGRATION-GUIDE.md`
 - Shell command audit: `docs/SHELL-COMMAND-AUDIT.md`
+- Full migration plan: `docs/EXTENSION-FULL-MIGRATION-PLAN.md`
+- Migration closure plan: `docs/EXTENSION-MIGRATION-CLOSURE-PLAN.md`
 
 ## Packaging (NuGet)
 

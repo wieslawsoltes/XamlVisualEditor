@@ -71,10 +71,10 @@ public sealed class AnimationEditorExtension : IXveExtension
                     "Animation")
             }));
 
-        object? viewModel = context.AnimationEditor.ViewModel;
+        IAnimationEditorPanelModel? panelModel = context.AnimationEditor.PanelModel;
         context.Subscriptions.Add(context.Views.RegisterCustomViewProvider(
             AnimationViewId,
-            new AnimationEditorViewProvider(viewModel)));
+            new AnimationEditorViewProvider(panelModel)));
 
         return Task.CompletedTask;
     }
@@ -87,16 +87,16 @@ public sealed class AnimationEditorExtension : IXveExtension
 
     private sealed class AnimationEditorViewProvider : ICustomViewProvider
     {
-        private readonly object? _viewModel;
+        private readonly IAnimationEditorPanelModel? _panelModel;
 
-        public AnimationEditorViewProvider(object? viewModel)
+        public AnimationEditorViewProvider(IAnimationEditorPanelModel? panelModel)
         {
-            _viewModel = viewModel;
+            _panelModel = panelModel;
         }
 
         public object? CreateViewModel()
         {
-            return _viewModel;
+            return _panelModel;
         }
     }
 }

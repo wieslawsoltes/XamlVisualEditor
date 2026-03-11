@@ -6,6 +6,7 @@ using System.Reactive.Linq;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Collaboration;
+using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Collaboration.UI;
 
@@ -63,7 +64,7 @@ public sealed class ParticipantViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the collaboration panel UI.
 /// </summary>
-public sealed class CollaborationPanelViewModel : ReactiveObject, IDisposable
+public sealed class CollaborationPanelViewModel : ReactiveObject, IDisposable, ICollaborationPanelModel
 {
     private readonly CompositeDisposable _disposables = new();
 

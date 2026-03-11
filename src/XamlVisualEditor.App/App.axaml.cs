@@ -83,6 +83,10 @@ public sealed class App : Application
 
             MainWindowProvider windowProvider = Services.GetRequiredService<MainWindowProvider>();
             windowProvider.MainWindow = mainWindow;
+            if (Services.GetService<IWindow>() is AppWindow appWindow)
+            {
+                appWindow.SyncStatusBarItems();
+            }
 
             string? startupPath = StartupArgs.GetWorkspacePath(desktop.Args);
             if (!string.IsNullOrWhiteSpace(startupPath))
@@ -142,7 +146,7 @@ public sealed class App : Application
         services.AddSingleton<WorkspaceInfoService>();
         services.AddSingleton<IWorkspaceInfo>(sp => sp.GetRequiredService<WorkspaceInfoService>());
         services.AddSingleton<IWorkspaceInfoUpdater>(sp => sp.GetRequiredService<WorkspaceInfoService>());
-        services.AddSingleton<IWorkspace, InMemoryWorkspace>();
+        services.AddSingleton<IWorkspace, FileSystemWorkspace>();
         services.AddSingleton<IWindow, AppWindow>();
         services.AddSingleton<ISettings, InMemorySettingsStore>();
         services.AddSingleton<ISystemIconService, ExtensionSystemIconServiceEntry>();
@@ -190,7 +194,6 @@ public sealed class App : Application
         services.AddSingleton<IDebugSettingsHost, DebugSettingsHostAdapter>();
         services.AddSingleton<ILspSettingsHost, LspSettingsHostAdapter>();
         services.AddSingleton<IEditorServices, EditorServicesAdapter>();
-        services.AddSingleton<IShellCommandBridge, ShellCommandBridgeAdapter>();
         services.AddSingleton<IDesignerHost, ShellDesignerHost>();
         services.AddSingleton<IWorkspaceModel, WorkspaceModelAdapter>();
         services.AddSingleton<IDiagnosticsService, DiagnosticsServiceAdapter>();

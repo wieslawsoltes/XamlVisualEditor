@@ -95,6 +95,47 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
     public bool HasIcon => !string.IsNullOrWhiteSpace(IconPathData);
 }
 
+public sealed class ExtensionStatusBarItemViewModel : ReactiveObject
+{
+    public ExtensionStatusBarItemViewModel(
+        string itemId,
+        string text,
+        string? tooltip,
+        string? commandId,
+        StatusBarAlignment alignment,
+        int priority,
+        ICommand? command)
+    {
+        ItemId = itemId;
+        Text = text;
+        Tooltip = tooltip;
+        CommandId = commandId;
+        Alignment = alignment;
+        Priority = priority;
+        Command = command;
+    }
+
+    public string ItemId { get; }
+
+    [Reactive]
+    public string Text { get; set; }
+
+    [Reactive]
+    public string? Tooltip { get; set; }
+
+    [Reactive]
+    public string? CommandId { get; set; }
+
+    [Reactive]
+    public StatusBarAlignment Alignment { get; set; }
+
+    [Reactive]
+    public int Priority { get; set; }
+
+    [Reactive]
+    public ICommand? Command { get; set; }
+}
+
 public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject
 {
     public ExtensionCommandPaletteItemViewModel(string commandId, string title, string? category)

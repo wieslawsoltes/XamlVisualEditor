@@ -338,7 +338,7 @@ public sealed class ToolboxExtensionTests
 
     private sealed class StubAnimationEditorHost : IAnimationEditorHost
     {
-        public object? ViewModel => null;
+        public IAnimationEditorPanelModel? PanelModel => null;
 
         public IDisposable BeginTransaction(string name)
         {
@@ -359,7 +359,7 @@ public sealed class ToolboxExtensionTests
 
         public string StatusMessage => string.Empty;
 
-        public object? ViewModel => null;
+        public ICollaborationPanelModel? PanelModel => null;
 
         public event EventHandler<CollaborationSessionChangedEventArgs>? SessionChanged;
 
@@ -452,6 +452,34 @@ public sealed class ToolboxExtensionTests
         public Task BuildWorkspaceAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RebuildWorkspaceAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task CleanWorkspaceAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UndoAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RedoAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task CutAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task CopyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PasteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task DeleteAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SelectAllAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RenameSymbolAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task FormatDocumentAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShowCodeActionsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShowDocumentSymbolsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShowWorkspaceSymbolsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ToggleBreakpointsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ToggleCallStackAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ToggleLocalsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ToggleWatchesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StartDebugAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopDebugAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ContinueDebugAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StepOverAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StepInAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StepOutAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task PauseDebugAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ToggleBreakpointAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StartRunAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task StopRunAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task NewTerminalAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class StubEditorServices : IEditorServices

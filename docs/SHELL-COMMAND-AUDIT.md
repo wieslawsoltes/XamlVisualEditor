@@ -37,9 +37,13 @@ Scope: `MainWindowViewModel` command surface in `src/XamlVisualEditor.Shell.View
 - Editing pipeline: `UndoCommand`, `RedoCommand`, `CutCommand`, `CopyCommand`, `PasteCommand`, `DeleteCommand`, `SelectAllCommand`
 - Language/navigation UX: `RenameSymbolCommand`, `FormatDocumentCommand`, `CodeActionsCommand`, `DocumentSymbolsCommand`, `WorkspaceSymbolsCommand`
 - Debug/run controls: `StartDebugCommand`, `StopDebugCommand`, `ContinueDebugCommand`, `StepOverCommand`, `StepInCommand`, `StepOutCommand`, `PauseDebugCommand`, `ToggleBreakpointCommand`, `StartRunCommand`, `StopRunCommand`
-- Workspace/run configuration: `SetStartupProjectCommand`
 - Terminal: `NewTerminalCommand`
 - Debug panel toggles: `ToggleBreakpointsCommand`, `ToggleCallStackCommand`, `ToggleLocalsCommand`, `ToggleWatchesCommand`
+
+## Recently Migrated
+
+- Workspace/run configuration: startup project selection now routes through extension command `workspace.setStartupProject` and `IWorkspaceCommands.SetStartupProjectAsync` API contract.
+- Editing/debug/run/terminal extension commands now call typed `IWorkspaceCommands` APIs directly; `IShellCommandBridge` indirection has been removed.
 
 ## Extension-Owned Command Domains (Already Migrated)
 
@@ -58,4 +62,4 @@ Scope: `MainWindowViewModel` command surface in `src/XamlVisualEditor.Shell.View
 
 ## Next Cleanup Step
 
-Move the non-core shell commands listed above to extension command registrations and keep shell command ownership limited to lifecycle/layout orchestration.
+Reduce raw host ViewModel exposure in extension adapters (`ISolutionExplorerPanelHost`, `IAnimationEditorHost`, `ICollaborationPanelHost`) and keep shell command ownership limited to lifecycle/layout orchestration.

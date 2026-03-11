@@ -9,12 +9,13 @@ using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using XamlVisualEditor.Animation;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Xaml.Ast;
 using XamlVisualEditor.Sync;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable
+public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAnimationEditorPanelModel
 {
     private const double DefaultDurationSeconds = 1.0;
     private const double DefaultFrameRate = 60.0;

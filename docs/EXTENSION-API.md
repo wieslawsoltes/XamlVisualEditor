@@ -53,6 +53,9 @@ This is the current native .NET extension API surface. All types live in the
   - arg0: `typeName` (string, required)
   - arg1: `xmlNamespace` (string, required)
   - arg2: `parentNodeId` (string GUID, optional)
+- The `workspace.setStartupProject` command expects:
+  - arg0: `projectPath` (string, required)
+  - arg1: `targetFramework` (string, optional)
 
 ### Toolbox catalog settings
 
@@ -71,6 +74,13 @@ This is the current native .NET extension API surface. All types live in the
   - `Register(string commandId, CommandMetadata metadata)`
   - `TryGet(string commandId, out CommandMetadata metadata)`
   - `GetAll()`
+
+- `IWorkspaceCommands`
+  - Workspace lifecycle: `LoadWorkspaceAsync`, `RestoreWorkspaceAsync`, `BuildWorkspaceAsync`, `RebuildWorkspaceAsync`, `CleanWorkspaceAsync`
+  - Startup project selection: `SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken ct)`
+  - Editing commands: `UndoAsync`, `RedoAsync`, `CutAsync`, `CopyAsync`, `PasteAsync`, `DeleteAsync`, `SelectAllAsync`
+  - Navigation commands: `RenameSymbolAsync`, `FormatDocumentAsync`, `ShowCodeActionsAsync`, `ShowDocumentSymbolsAsync`, `ShowWorkspaceSymbolsAsync`
+  - Debug/run/terminal commands: `ToggleBreakpointsAsync`, `ToggleCallStackAsync`, `ToggleLocalsAsync`, `ToggleWatchesAsync`, `StartDebugAsync`, `StopDebugAsync`, `ContinueDebugAsync`, `StepOverAsync`, `StepInAsync`, `StepOutAsync`, `PauseDebugAsync`, `ToggleBreakpointAsync`, `StartRunAsync`, `StopRunAsync`, `NewTerminalAsync`
 
 - `IWorkspace`
   - `FindFilesAsync(string includeGlob, string? excludeGlob, CancellationToken ct)`
@@ -170,7 +180,7 @@ This is the current native .NET extension API surface. All types live in the
   - `BeginTransaction(string name)`
 
 - `IAnimationEditorHost`
-  - `ViewModel` (host-owned animation editor view model)
+  - `PanelModel` (`IAnimationEditorPanelModel`, host-owned animation editor panel model)
   - `BeginTransaction(string name)`
   - `RefreshPreviewAsync(CancellationToken ct)`
 
@@ -186,7 +196,10 @@ This is the current native .NET extension API surface. All types live in the
   - `InviteAsync(string invitee, CancellationToken ct)`
 
 - `ICollaborationPanelHost`
-  - `ViewModel` (host-owned collaboration panel view model)
+  - `PanelModel` (`ICollaborationPanelModel`, host-owned collaboration panel model)
+
+- `ISolutionExplorerPanelHost`
+  - `PanelModel` (`ISolutionExplorerPanelModel`, host-owned solution explorer panel model)
 
 - `IDebugSettingsHost`
   - `GetState()`
@@ -218,6 +231,7 @@ This is the current native .NET extension API surface. All types live in the
   - `BuildAsync(CancellationToken ct)`
   - `RebuildAsync(CancellationToken ct)`
   - `CleanAsync(CancellationToken ct)`
+  - `SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken ct)`
 
 - `ISettings`
   - `Get<T>(string section, T? defaultValue = default)`
@@ -248,6 +262,7 @@ This is the current native .NET extension API surface. All types live in the
   - `menu.file.new`
   - `menu.edit`
   - `menu.view`
+  - `menu.debug`
   - `menu.tools`
   - `menu.tools.workspace`
   - `menu.extensions`

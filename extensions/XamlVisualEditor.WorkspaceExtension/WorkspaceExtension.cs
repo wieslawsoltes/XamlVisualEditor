@@ -9,6 +9,7 @@ public sealed class WorkspaceExtension : IXveExtension
     private const string BuildCommandId = "workspace.build";
     private const string RebuildCommandId = "workspace.rebuild";
     private const string CleanCommandId = "workspace.clean";
+    private const string SetStartupProjectCommandId = "workspace.setStartupProject";
     private const string WorkspaceGroup = "0.workspace";
 
     private const string UndoCommandId = "editing.undo";
@@ -49,17 +50,14 @@ public sealed class WorkspaceExtension : IXveExtension
 
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly IWorkspaceInfo _workspaceInfo;
-    private readonly IShellCommandBridge _shellCommandBridge;
     private IWindow? _window;
 
     public WorkspaceExtension(
         IWorkspaceCommands workspaceCommands,
-        IWorkspaceInfo workspaceInfo,
-        IShellCommandBridge shellCommandBridge)
+        IWorkspaceInfo workspaceInfo)
     {
         _workspaceCommands = workspaceCommands;
         _workspaceInfo = workspaceInfo;
-        _shellCommandBridge = shellCommandBridge;
     }
 
     public Task ActivateAsync(ExtensionContext context, CancellationToken cancellationToken)
@@ -75,8 +73,11 @@ public sealed class WorkspaceExtension : IXveExtension
             ExecuteIfLoadedAsync(_workspaceCommands.RebuildWorkspaceAsync)));
         context.Subscriptions.Add(context.Commands.Register(CleanCommandId, _ =>
             ExecuteIfLoadedAsync(_workspaceCommands.CleanWorkspaceAsync)));
+        context.Subscriptions.Add(context.Commands.Register(
+            SetStartupProjectCommandId,
+            commandContext => SetStartupProjectAsync(commandContext.Arguments)));
 
-        RegisterShellCommands(context);
+        RegisterIdeCommands(context);
         RegisterCommandMetadata(context);
         RegisterMenuContributions(context);
         RegisterToolbarContributions(context);
@@ -85,70 +86,70 @@ public sealed class WorkspaceExtension : IXveExtension
         return Task.CompletedTask;
     }
 
-    private void RegisterShellCommands(ExtensionContext context)
+    private void RegisterIdeCommands(ExtensionContext context)
     {
-        context.Subscriptions.Add(RegisterShellCommand(context, UndoCommandId, ShellCommandKind.Undo));
-        context.Subscriptions.Add(RegisterShellCommand(context, RedoCommandId, ShellCommandKind.Redo));
-        context.Subscriptions.Add(RegisterShellCommand(context, CutCommandId, ShellCommandKind.Cut));
-        context.Subscriptions.Add(RegisterShellCommand(context, CopyCommandId, ShellCommandKind.Copy));
-        context.Subscriptions.Add(RegisterShellCommand(context, PasteCommandId, ShellCommandKind.Paste));
-        context.Subscriptions.Add(RegisterShellCommand(context, DeleteCommandId, ShellCommandKind.Delete));
-        context.Subscriptions.Add(RegisterShellCommand(context, SelectAllCommandId, ShellCommandKind.SelectAll));
-        context.Subscriptions.Add(RegisterShellCommand(context, RenameSymbolCommandId, ShellCommandKind.RenameSymbol));
-        context.Subscriptions.Add(RegisterShellCommand(context, FormatDocumentCommandId, ShellCommandKind.FormatDocument));
-        context.Subscriptions.Add(RegisterShellCommand(context, CodeActionsCommandId, ShellCommandKind.ShowCodeActions));
-        context.Subscriptions.Add(RegisterShellCommand(context, DocumentSymbolsCommandId, ShellCommandKind.ShowDocumentSymbols));
-        context.Subscriptions.Add(RegisterShellCommand(context, WorkspaceSymbolsCommandId, ShellCommandKind.ShowWorkspaceSymbols));
-        context.Subscriptions.Add(RegisterShellCommand(context, ToggleBreakpointsCommandId, ShellCommandKind.ToggleBreakpoints));
-        context.Subscriptions.Add(RegisterShellCommand(context, ToggleCallStackCommandId, ShellCommandKind.ToggleCallStack));
-        context.Subscriptions.Add(RegisterShellCommand(context, ToggleLocalsCommandId, ShellCommandKind.ToggleLocals));
-        context.Subscriptions.Add(RegisterShellCommand(context, ToggleWatchesCommandId, ShellCommandKind.ToggleWatches));
-        context.Subscriptions.Add(RegisterShellCommand(context, StartDebugCommandId, ShellCommandKind.StartDebug));
-        context.Subscriptions.Add(RegisterShellCommand(context, StopDebugCommandId, ShellCommandKind.StopDebug));
-        context.Subscriptions.Add(RegisterShellCommand(context, ContinueDebugCommandId, ShellCommandKind.ContinueDebug));
-        context.Subscriptions.Add(RegisterShellCommand(context, StepOverCommandId, ShellCommandKind.StepOver));
-        context.Subscriptions.Add(RegisterShellCommand(context, StepInCommandId, ShellCommandKind.StepIn));
-        context.Subscriptions.Add(RegisterShellCommand(context, StepOutCommandId, ShellCommandKind.StepOut));
-        context.Subscriptions.Add(RegisterShellCommand(context, PauseDebugCommandId, ShellCommandKind.PauseDebug));
-        context.Subscriptions.Add(RegisterShellCommand(context, ToggleBreakpointCommandId, ShellCommandKind.ToggleBreakpoint));
-        context.Subscriptions.Add(RegisterShellCommand(context, StartRunCommandId, ShellCommandKind.StartRun));
-        context.Subscriptions.Add(RegisterShellCommand(context, StopRunCommandId, ShellCommandKind.StopRun));
-        context.Subscriptions.Add(RegisterShellCommand(context, NewTerminalCommandId, ShellCommandKind.NewTerminal));
+        context.Subscriptions.Add(RegisterIdeCommand(context, UndoCommandId, _workspaceCommands.UndoAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, RedoCommandId, _workspaceCommands.RedoAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, CutCommandId, _workspaceCommands.CutAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, CopyCommandId, _workspaceCommands.CopyAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, PasteCommandId, _workspaceCommands.PasteAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, DeleteCommandId, _workspaceCommands.DeleteAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, SelectAllCommandId, _workspaceCommands.SelectAllAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, RenameSymbolCommandId, _workspaceCommands.RenameSymbolAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, FormatDocumentCommandId, _workspaceCommands.FormatDocumentAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, CodeActionsCommandId, _workspaceCommands.ShowCodeActionsAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, DocumentSymbolsCommandId, _workspaceCommands.ShowDocumentSymbolsAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, WorkspaceSymbolsCommandId, _workspaceCommands.ShowWorkspaceSymbolsAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, ToggleBreakpointsCommandId, _workspaceCommands.ToggleBreakpointsAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, ToggleCallStackCommandId, _workspaceCommands.ToggleCallStackAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, ToggleLocalsCommandId, _workspaceCommands.ToggleLocalsAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, ToggleWatchesCommandId, _workspaceCommands.ToggleWatchesAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StartDebugCommandId, _workspaceCommands.StartDebugAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StopDebugCommandId, _workspaceCommands.StopDebugAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, ContinueDebugCommandId, _workspaceCommands.ContinueDebugAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StepOverCommandId, _workspaceCommands.StepOverAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StepInCommandId, _workspaceCommands.StepInAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StepOutCommandId, _workspaceCommands.StepOutAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, PauseDebugCommandId, _workspaceCommands.PauseDebugAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, ToggleBreakpointCommandId, _workspaceCommands.ToggleBreakpointAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StartRunCommandId, _workspaceCommands.StartRunAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, StopRunCommandId, _workspaceCommands.StopRunAsync));
+        context.Subscriptions.Add(RegisterIdeCommand(context, NewTerminalCommandId, _workspaceCommands.NewTerminalAsync));
     }
 
-    private IDisposable RegisterShellCommand(
+    private static IDisposable RegisterIdeCommand(
         ExtensionContext context,
         string commandId,
-        ShellCommandKind kind)
+        Func<CancellationToken, Task> handler)
     {
         return context.Commands.Register(
             commandId,
-            _ => _shellCommandBridge.ExecuteAsync(kind, CancellationToken.None));
+            _ => handler(CancellationToken.None));
     }
 
     private void RegisterCommandMetadata(ExtensionContext context)
     {
         context.Subscriptions.Add(context.CommandMetadata.Register(
             UndoCommandId,
-            new CommandMetadata("Edit: Undo", "Edit", When: "hasDesignerDocument", Keybinding: "Ctrl+Z", Priority: 0)));
+            new CommandMetadata("Edit: Undo", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+Z", Priority: 0)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             RedoCommandId,
-            new CommandMetadata("Edit: Redo", "Edit", When: "hasDesignerDocument", Keybinding: "Ctrl+Y", Priority: 10)));
+            new CommandMetadata("Edit: Redo", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+Y", Priority: 10)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             CutCommandId,
-            new CommandMetadata("Edit: Cut", "Edit", When: "hasDesignerDocument", Keybinding: "Ctrl+X", Priority: 20)));
+            new CommandMetadata("Edit: Cut", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+X", Priority: 20)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             CopyCommandId,
-            new CommandMetadata("Edit: Copy", "Edit", When: "hasDesignerDocument", Keybinding: "Ctrl+C", Priority: 30)));
+            new CommandMetadata("Edit: Copy", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+C", Priority: 30)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             PasteCommandId,
-            new CommandMetadata("Edit: Paste", "Edit", When: "hasDesignerDocument", Keybinding: "Ctrl+V", Priority: 40)));
+            new CommandMetadata("Edit: Paste", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+V", Priority: 40)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             DeleteCommandId,
-            new CommandMetadata("Edit: Delete", "Edit", When: "hasDesignerDocument", Keybinding: "Delete", Priority: 50)));
+            new CommandMetadata("Edit: Delete", "Edit", When: "hasActiveDocument", Keybinding: "Delete", Priority: 50)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             SelectAllCommandId,
-            new CommandMetadata("Edit: Select All", "Edit", When: "hasDesignerDocument", Keybinding: "Ctrl+A", Priority: 60)));
+            new CommandMetadata("Edit: Select All", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+A", Priority: 60)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             RenameSymbolCommandId,
             new CommandMetadata("Navigation: Rename Symbol", "Navigation", When: "hasTextDocument", Keybinding: "F2", Priority: 70)));
@@ -160,10 +161,10 @@ public sealed class WorkspaceExtension : IXveExtension
             new CommandMetadata("Navigation: Code Actions", "Navigation", When: "hasTextDocument", Priority: 90)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             DocumentSymbolsCommandId,
-            new CommandMetadata("Navigation: Document Symbols", "Navigation", When: "hasTextDocument", Priority: 100)));
+            new CommandMetadata("Navigation: Document Symbols", "Navigation", When: "hasTextDocument", Keybinding: "Ctrl+Shift+O", Priority: 100)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             WorkspaceSymbolsCommandId,
-            new CommandMetadata("Navigation: Workspace Symbols", "Navigation", When: "hasTextDocument", Priority: 110)));
+            new CommandMetadata("Navigation: Workspace Symbols", "Navigation", When: "hasTextDocument", Keybinding: "Ctrl+T", Priority: 110)));
         context.Subscriptions.Add(context.CommandMetadata.Register(
             StartDebugCommandId,
             new CommandMetadata("Debug: Start", "Debug", When: "hasWorkspace && debug.idle && !run.active", Keybinding: "F5", Priority: 120)));
@@ -197,6 +198,9 @@ public sealed class WorkspaceExtension : IXveExtension
         context.Subscriptions.Add(context.CommandMetadata.Register(
             NewTerminalCommandId,
             new CommandMetadata("Terminal: New Terminal", "Tools", Keybinding: "Ctrl+Shift+T", Priority: 220)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            SetStartupProjectCommandId,
+            new CommandMetadata("Workspace: Set Startup Project", "Workspace", When: "hasWorkspace", Priority: 230)));
     }
 
     private void RegisterMenuContributions(ExtensionContext context)
@@ -303,6 +307,26 @@ public sealed class WorkspaceExtension : IXveExtension
         }
 
         return action(CancellationToken.None);
+    }
+
+    private Task SetStartupProjectAsync(IReadOnlyList<object?>? args)
+    {
+        if (!_workspaceCommands.HasWorkspace)
+        {
+            return ShowNoWorkspaceAsync();
+        }
+
+        if (args is null
+            || args.Count == 0
+            || args[0] is not string projectPath
+            || string.IsNullOrWhiteSpace(projectPath))
+        {
+            return _window?.ShowWarningMessageAsync("Startup project command requires a project path.", CancellationToken.None)
+                ?? Task.CompletedTask;
+        }
+
+        string? targetFramework = args.Count > 1 ? args[1]?.ToString() : null;
+        return _workspaceCommands.SetStartupProjectAsync(projectPath, targetFramework, CancellationToken.None);
     }
 
     private Task ShowNoWorkspaceAsync()

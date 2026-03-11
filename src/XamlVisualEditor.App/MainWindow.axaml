@@ -123,7 +123,7 @@
             </MenuItem>
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Previewer">
-                    <MenuItem Header="_Start" Command="{CompiledBinding StartPreviewerCommand}" InputGesture="Ctrl+P" />
+                    <MenuItem Header="_Start" Command="{CompiledBinding StartPreviewerCommand}" InputGesture="Ctrl+Alt+P" />
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="Command _Palette..." Command="{CompiledBinding ShowCommandPaletteCommand}" InputGesture="Ctrl+Shift+P" />
@@ -175,7 +175,7 @@
                 <Button ToolTip.Tip="Save (Ctrl+S)" Command="{CompiledBinding SaveDocumentCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M3 5c0-1.1.9-2 2-2h8.38a2 2 0 0 1 1.41.59l1.62 1.62A2 2 0 0 1 17 6.62V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm2-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1v-4.5c0-.83.67-1.5 1.5-1.5h7c.83 0 1.5.67 1.5 1.5V16a1 1 0 0 0 1-1V6.62a1 1 0 0 0-.3-.7L14.1 4.28a1 1 0 0 0-.71-.29H13v2.5c0 .83-.67 1.5-1.5 1.5h-4A1.5 1.5 0 0 1 6 6.5V4H5Zm2 0v2.5c0 .28.22.5.5.5h4a.5.5 0 0 0 .5-.5V4H7Zm7 12v-4.5a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5V16h8Z" />
                 </Button>
-                <Button ToolTip.Tip="Start Previewer (Ctrl+P)" Command="{CompiledBinding StartPreviewerCommand}" Padding="6,4">
+                <Button ToolTip.Tip="Start Previewer (Ctrl+Alt+P)" Command="{CompiledBinding StartPreviewerCommand}" Padding="6,4">
                     <PathIcon Width="16" Height="16" Data="M17.22 8.69a1.5 1.5 0 0 1 0 2.62l-10 5.5A1.5 1.5 0 0 1 5 15.5v-11A1.5 1.5 0 0 1 7.22 3.2l10 5.5Zm-.48 1.75a.5.5 0 0 0 0-.88l-10-5.5A.5.5 0 0 0 6 4.5v11c0 .38.4.62.74.44l10-5.5Z" />
                 </Button>
                 <Button ToolTip.Tip="Command Palette (Ctrl+Shift+P)" Command="{CompiledBinding ShowCommandPaletteCommand}" Padding="6,4">
@@ -238,13 +238,63 @@
                 Height="24"
                 Padding="8,2">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Left"
-                           Text="{CompiledBinding StatusText}"
-                           VerticalAlignment="Center"
-                           FontSize="12"
-                           Foreground="White" />
+                <StackPanel DockPanel.Dock="Left"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Spacing="12">
+                    <TextBlock Text="{CompiledBinding StatusText}"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Foreground="White" />
+                    <ItemsControl ItemsSource="{CompiledBinding LeftStatusBarItems}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExtensionStatusBarItemViewModel">
+                                <Button Command="{CompiledBinding Command}"
+                                        ToolTip.Tip="{CompiledBinding Tooltip}"
+                                        Padding="4,0"
+                                        MinHeight="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="White">
+                                    <TextBlock Text="{CompiledBinding Text}"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               Foreground="White" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                            HorizontalAlignment="Right" Spacing="16">
+                            HorizontalAlignment="Right" Spacing="12">
+                    <ItemsControl ItemsSource="{CompiledBinding RightStatusBarItems}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExtensionStatusBarItemViewModel">
+                                <Button Command="{CompiledBinding Command}"
+                                        ToolTip.Tip="{CompiledBinding Tooltip}"
+                                        Padding="4,0"
+                                        MinHeight="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="White">
+                                    <TextBlock Text="{CompiledBinding Text}"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               Foreground="White" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                     <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="Ln {0}, Col {1}">

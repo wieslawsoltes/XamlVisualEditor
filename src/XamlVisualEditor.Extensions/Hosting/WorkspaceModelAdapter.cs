@@ -90,6 +90,11 @@ public sealed class WorkspaceModelAdapter : IWorkspaceModel, IDisposable
         return _workspaceCommands.CleanWorkspaceAsync(cancellationToken);
     }
 
+    public Task SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken cancellationToken)
+    {
+        return _workspaceCommands.SetStartupProjectAsync(projectPath, targetFramework, cancellationToken);
+    }
+
     public void Dispose()
     {
         _workspaceInfo.WorkspaceChanged -= OnWorkspaceChanged;

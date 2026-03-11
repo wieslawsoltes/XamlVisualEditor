@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -15,6 +16,7 @@ public sealed class AppWindow : IWindow
 {
     private readonly MainWindowProvider _windowProvider;
     private readonly Dictionary<string, AppOutputChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AppStatusBarItem> _statusBarItems = new(StringComparer.Ordinal);
 
     public AppWindow(MainWindowProvider windowProvider)
     {
@@ -107,7 +109,34 @@ public sealed class AppWindow : IWindow
 
     public IStatusBarItem CreateStatusBarItem(StatusBarAlignment alignment, int priority)
     {
-        return new InMemoryStatusBarItem();
+        AppStatusBarItem item = new(
+            Guid.NewGuid().ToString("N"),
+            alignment,
+            priority,
+            PublishStatusBarState,
+            RemoveStatusBarItem);
+
+        lock (_statusBarItems)
+        {
+            _statusBarItems[item.ItemId] = item;
+        }
+
+        PublishStatusBarState(item.GetState());
+        return item;
+    }
+
+    public void SyncStatusBarItems()
+    {
+        List<AppStatusBarState> states;
+        lock (_statusBarItems)
+        {
+            states = _statusBarItems.Values.Select(item => item.GetState()).ToList();
+        }
+
+        foreach (AppStatusBarState state in states)
+        {
+            PublishStatusBarState(state);
+        }
     }
 
     private Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken)
@@ -160,6 +189,46 @@ public sealed class AppWindow : IWindow
         }
 
         OutputChannelRemoved?.Invoke(this, new OutputChannelEventArgs(info));
+    }
+
+    private void PublishStatusBarState(AppStatusBarState state)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (TryGetMainWindowViewModel(out MainWindowViewModel? viewModel))
+            {
+                viewModel!.UpsertStatusBarItem(
+                    state.ItemId,
+                    state.Text,
+                    state.Tooltip,
+                    state.CommandId,
+                    state.Alignment,
+                    state.Priority,
+                    state.IsVisible);
+            }
+        });
+    }
+
+    private void RemoveStatusBarItem(string itemId)
+    {
+        lock (_statusBarItems)
+        {
+            _statusBarItems.Remove(itemId);
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (TryGetMainWindowViewModel(out MainWindowViewModel? viewModel))
+            {
+                viewModel!.RemoveStatusBarItem(itemId);
+            }
+        });
+    }
+
+    private bool TryGetMainWindowViewModel(out MainWindowViewModel? viewModel)
+    {
+        viewModel = _windowProvider.MainWindow?.DataContext as MainWindowViewModel;
+        return viewModel is not null;
     }
 
     private sealed class AppOutputChannel : IOutputChannel
@@ -225,4 +294,166 @@ public sealed class AppWindow : IWindow
             _disposedCallback?.Invoke();
         }
     }
+
+    private sealed class AppStatusBarItem : IStatusBarItem
+    {
+        private readonly object _gate = new();
+        private readonly Action<AppStatusBarState> _stateCallback;
+        private readonly Action<string> _disposedCallback;
+        private bool _isDisposed;
+        private bool _isVisible;
+        private string _text = string.Empty;
+        private string? _tooltip;
+        private string? _commandId;
+
+        public AppStatusBarItem(
+            string itemId,
+            StatusBarAlignment alignment,
+            int priority,
+            Action<AppStatusBarState> stateCallback,
+            Action<string> disposedCallback)
+        {
+            ItemId = itemId;
+            Alignment = alignment;
+            Priority = priority;
+            _stateCallback = stateCallback;
+            _disposedCallback = disposedCallback;
+        }
+
+        public string ItemId { get; }
+
+        public StatusBarAlignment Alignment { get; }
+
+        public int Priority { get; }
+
+        public string Text
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _text;
+                }
+            }
+            set
+            {
+                lock (_gate)
+                {
+                    _text = value ?? string.Empty;
+                }
+
+                PublishState();
+            }
+        }
+
+        public string? Tooltip
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _tooltip;
+                }
+            }
+            set
+            {
+                lock (_gate)
+                {
+                    _tooltip = value;
+                }
+
+                PublishState();
+            }
+        }
+
+        public string? CommandId
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _commandId;
+                }
+            }
+            set
+            {
+                lock (_gate)
+                {
+                    _commandId = value;
+                }
+
+                PublishState();
+            }
+        }
+
+        public void Show()
+        {
+            lock (_gate)
+            {
+                _isVisible = true;
+            }
+
+            PublishState();
+        }
+
+        public void Hide()
+        {
+            lock (_gate)
+            {
+                _isVisible = false;
+            }
+
+            PublishState();
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                _isDisposed = true;
+                _isVisible = false;
+            }
+
+            _disposedCallback(ItemId);
+        }
+
+        public AppStatusBarState GetState()
+        {
+            lock (_gate)
+            {
+                return new AppStatusBarState(
+                    ItemId,
+                    _text,
+                    _tooltip,
+                    _commandId,
+                    Alignment,
+                    Priority,
+                    _isVisible);
+            }
+        }
+
+        private void PublishState()
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _stateCallback(GetState());
+        }
+    }
+
+    private readonly record struct AppStatusBarState(
+        string ItemId,
+        string Text,
+        string? Tooltip,
+        string? CommandId,
+        StatusBarAlignment Alignment,
+        int Priority,
+        bool IsVisible);
 }

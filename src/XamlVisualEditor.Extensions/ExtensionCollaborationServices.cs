@@ -84,9 +84,14 @@ public interface ICollaborationHost
     Task<bool> InviteAsync(string invitee, CancellationToken cancellationToken);
 }
 
-/// <summary>Provides access to the collaboration panel view model.</summary>
+/// <summary>Represents the collaboration panel model exposed to extensions.</summary>
+public interface ICollaborationPanelModel
+{
+}
+
+/// <summary>Provides access to the collaboration panel model.</summary>
 public interface ICollaborationPanelHost
 {
-    /// <summary>Gets the collaboration panel view model.</summary>
-    object? ViewModel { get; }
+    /// <summary>Gets the collaboration panel model.</summary>
+    ICollaborationPanelModel? PanelModel { get; }
 }

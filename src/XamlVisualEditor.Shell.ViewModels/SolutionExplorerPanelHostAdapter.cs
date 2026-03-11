@@ -12,5 +12,5 @@ public sealed class SolutionExplorerPanelHostAdapter : ISolutionExplorerPanelHos
         _mainViewModel = mainViewModel;
     }
 
-    public object? ViewModel => _mainViewModel.SolutionExplorer;
+    public ISolutionExplorerPanelModel? PanelModel => _mainViewModel.SolutionExplorer;
 }

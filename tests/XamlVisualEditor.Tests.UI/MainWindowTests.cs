@@ -289,10 +289,10 @@ public sealed class DockingLayoutTests
     public void MainWindowViewModel_ToggleCommands_Work()
     {
         MainWindowViewModel vm = new();
-        IShellCommandBridge shellBridge = new ShellCommandBridgeAdapter(vm);
+        IWorkspaceCommands workspaceCommands = vm;
 
         bool initial = vm.IsBreakpointsVisible;
-        shellBridge.ExecuteAsync(ShellCommandKind.ToggleBreakpoints, CancellationToken.None)
+        workspaceCommands.ToggleBreakpointsAsync(CancellationToken.None)
             .GetAwaiter()
             .GetResult();
 

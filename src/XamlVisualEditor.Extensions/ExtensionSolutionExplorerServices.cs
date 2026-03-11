@@ -1,8 +1,13 @@
 namespace XamlVisualEditor.Extensions;
 
-/// <summary>Provides access to the solution explorer panel view model.</summary>
+/// <summary>Represents the solution explorer panel model exposed to extensions.</summary>
+public interface ISolutionExplorerPanelModel
+{
+}
+
+/// <summary>Provides access to the solution explorer panel model.</summary>
 public interface ISolutionExplorerPanelHost
 {
-    /// <summary>Gets the host-owned solution explorer view model.</summary>
-    object? ViewModel { get; }
+    /// <summary>Gets the host-owned solution explorer panel model.</summary>
+    ISolutionExplorerPanelModel? PanelModel { get; }
 }

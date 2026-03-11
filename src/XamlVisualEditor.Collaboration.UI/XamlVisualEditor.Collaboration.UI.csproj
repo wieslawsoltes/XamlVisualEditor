@@ -12,5 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
     <ProjectReference Include="..\XamlVisualEditor.Collaboration\XamlVisualEditor.Collaboration.csproj" />
+    <ProjectReference Include="..\XamlVisualEditor.Extensions\XamlVisualEditor.Extensions.csproj" />
   </ItemGroup>
 </Project>

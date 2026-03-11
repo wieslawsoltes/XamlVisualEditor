@@ -18,7 +18,7 @@ public sealed class AnimationEditorHostAdapter : IAnimationEditorHost
         _mainViewModel = mainViewModel;
     }
 
-    public object? ViewModel => _mainViewModel.AnimationEditor;
+    public IAnimationEditorPanelModel? PanelModel => _mainViewModel.AnimationEditor;
 
     public IDisposable BeginTransaction(string name)
     {
