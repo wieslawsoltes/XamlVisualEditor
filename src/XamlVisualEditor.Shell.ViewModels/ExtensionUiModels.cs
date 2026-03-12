@@ -8,6 +8,8 @@ using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia.Threading;
+using Avalonia.Input;
 using Avalonia.Controls.DataGridFiltering;
 using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
@@ -18,7 +20,97 @@ using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class ExtensionMenuItemViewModel : ReactiveObject
+public abstract class ExtensionCommandItemViewModel : ReactiveObject, IDisposable
+{
+    private ICommand? _command;
+    private EventHandler? _canExecuteChangedHandler;
+    private bool _isDisposed;
+    private bool _isEnabled = true;
+
+    protected ExtensionCommandItemViewModel(ICommand? command)
+    {
+        UpdateCommand(command);
+    }
+
+    public ICommand? Command => _command;
+
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        private set => this.RaiseAndSetIfChanged(ref _isEnabled, value);
+    }
+
+    protected void UpdateCommand(ICommand? command)
+    {
+        if (ReferenceEquals(_command, command))
+        {
+            RefreshIsEnabled();
+            return;
+        }
+
+        if (_command is not null && _canExecuteChangedHandler is not null)
+        {
+            _command.CanExecuteChanged -= _canExecuteChangedHandler;
+        }
+
+        _command = command;
+        this.RaisePropertyChanged(nameof(Command));
+
+        if (_command is not null)
+        {
+            _canExecuteChangedHandler = (_, _) => RefreshIsEnabled();
+            _command.CanExecuteChanged += _canExecuteChangedHandler;
+        }
+        else
+        {
+            _canExecuteChangedHandler = null;
+        }
+
+        RefreshIsEnabled();
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (_command is not null && _canExecuteChangedHandler is not null)
+        {
+            _command.CanExecuteChanged -= _canExecuteChangedHandler;
+        }
+
+        _command = null;
+        _canExecuteChangedHandler = null;
+        _isDisposed = true;
+    }
+
+    private void RefreshIsEnabled()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        bool isEnabled = _command?.CanExecute(null) ?? true;
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            IsEnabled = isEnabled;
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_isDisposed)
+            {
+                IsEnabled = _command?.CanExecute(null) ?? true;
+            }
+        }, DispatcherPriority.Background);
+    }
+}
+
+public sealed class ExtensionMenuItemViewModel : ExtensionCommandItemViewModel
 {
     public ExtensionMenuItemViewModel(
         string commandId,
@@ -28,14 +120,15 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
         int priority,
         ICommand command,
         string? inputGesture = null)
+        : base(command)
     {
         CommandId = commandId;
         Title = title;
         Location = location;
         Group = group;
         Priority = priority;
-        Command = command;
-        InputGesture = inputGesture;
+        InputGestureText = inputGesture;
+        InputGesture = ParseInputGesture(inputGesture);
     }
 
     public string CommandId { get; }
@@ -48,13 +141,30 @@ public sealed class ExtensionMenuItemViewModel : ReactiveObject
 
     public int Priority { get; }
 
-    public ICommand Command { get; }
+    public string? InputGestureText { get; }
 
-    public string? InputGesture { get; }
+    public KeyGesture? InputGesture { get; }
+
+    private static KeyGesture? ParseInputGesture(string? inputGesture)
+    {
+        if (string.IsNullOrWhiteSpace(inputGesture))
+        {
+            return null;
+        }
+
+        try
+        {
+            return KeyGesture.Parse(inputGesture);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
 
 
-public sealed class ExtensionToolbarItemViewModel : ReactiveObject
+public sealed class ExtensionToolbarItemViewModel : ExtensionCommandItemViewModel
 {
     public ExtensionToolbarItemViewModel(
         string commandId,
@@ -65,6 +175,7 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
         int priority,
         ICommand command,
         string? iconPathData = null)
+        : base(command)
     {
         CommandId = commandId;
         Title = title;
@@ -72,7 +183,6 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
         Location = location;
         Group = group;
         Priority = priority;
-        Command = command;
         IconPathData = iconPathData;
     }
 
@@ -88,14 +198,12 @@ public sealed class ExtensionToolbarItemViewModel : ReactiveObject
 
     public int Priority { get; }
 
-    public ICommand Command { get; }
-
     public string? IconPathData { get; }
 
     public bool HasIcon => !string.IsNullOrWhiteSpace(IconPathData);
 }
 
-public sealed class ExtensionStatusBarItemViewModel : ReactiveObject
+public sealed class ExtensionStatusBarItemViewModel : ExtensionCommandItemViewModel
 {
     public ExtensionStatusBarItemViewModel(
         string itemId,
@@ -105,6 +213,7 @@ public sealed class ExtensionStatusBarItemViewModel : ReactiveObject
         StatusBarAlignment alignment,
         int priority,
         ICommand? command)
+        : base(command)
     {
         ItemId = itemId;
         Text = text;
@@ -112,7 +221,6 @@ public sealed class ExtensionStatusBarItemViewModel : ReactiveObject
         CommandId = commandId;
         Alignment = alignment;
         Priority = priority;
-        Command = command;
     }
 
     public string ItemId { get; }
@@ -132,8 +240,10 @@ public sealed class ExtensionStatusBarItemViewModel : ReactiveObject
     [Reactive]
     public int Priority { get; set; }
 
-    [Reactive]
-    public ICommand? Command { get; set; }
+    public void SetCommand(ICommand? command)
+    {
+        UpdateCommand(command);
+    }
 }
 
 public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject

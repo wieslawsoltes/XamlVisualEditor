@@ -34,6 +34,9 @@ public sealed class ExtensionCommandMenuIntegrationTests
             await host.ActivateAsync();
             await host.OpenFileAsync(filePath);
 
+            ExtensionMenuItemViewModel copyItem = await host.GetMenuItemAsync(host.ViewModel.EditMenuItems, "editing.copy");
+            ExtensionMenuItemViewModel pasteItem = await host.GetMenuItemAsync(host.ViewModel.EditMenuItems, "editing.paste");
+            ExtensionToolbarItemViewModel copyToolbarItem = await host.GetToolbarItemAsync(host.ViewModel.MainToolbarItems, "editing.copy");
             ExtensionAsyncCommand copyCommand = await host.GetMenuCommandAsync(host.ViewModel.EditMenuItems, "editing.copy");
             ExtensionAsyncCommand pasteCommand = await host.GetMenuCommandAsync(host.ViewModel.EditMenuItems, "editing.paste");
             ExtensionAsyncCommand deleteCommand = await host.GetMenuCommandAsync(host.ViewModel.EditMenuItems, "editing.delete");
@@ -41,6 +44,11 @@ public sealed class ExtensionCommandMenuIntegrationTests
             ExtensionAsyncCommand undoCommand = await host.GetMenuCommandAsync(host.ViewModel.EditMenuItems, "editing.undo");
             ExtensionAsyncCommand redoCommand = await host.GetMenuCommandAsync(host.ViewModel.EditMenuItems, "editing.redo");
 
+            Assert.False(copyItem.IsEnabled);
+            Assert.False(pasteItem.IsEnabled);
+            Assert.False(copyToolbarItem.IsEnabled);
+            Assert.NotNull(copyItem.InputGesture);
+            Assert.NotNull(pasteItem.InputGesture);
             Assert.False(await host.CanExecuteAsync(copyCommand));
             Assert.False(await host.CanExecuteAsync(pasteCommand));
             Assert.False(await host.CanExecuteAsync(redoCommand));
@@ -52,14 +60,19 @@ public sealed class ExtensionCommandMenuIntegrationTests
             await host.SetTextSelectionAsync(start: 0, length: 5);
 
             Assert.True(copyChanged);
+            Assert.True(copyItem.IsEnabled);
+            Assert.True(copyToolbarItem.IsEnabled);
             Assert.True(await host.CanExecuteAsync(copyCommand));
             Assert.True(await host.CanExecuteAsync(deleteCommand));
 
             await host.ExecuteCommandAsync("editing.copy");
+            Assert.True(pasteItem.IsEnabled);
             Assert.True(await host.CanExecuteAsync(pasteCommand));
 
             await host.ExecuteCommandAsync("editing.cut");
             Assert.Equal(" beta", await host.GetActiveTextAsync());
+            Assert.False(copyItem.IsEnabled);
+            Assert.False(copyToolbarItem.IsEnabled);
             Assert.True(await host.CanExecuteAsync(undoCommand));
             Assert.False(await host.CanExecuteAsync(copyCommand));
 
@@ -96,9 +109,12 @@ public sealed class ExtensionCommandMenuIntegrationTests
         using ExtensionMenuTestHost host = new();
         await host.ActivateAsync();
 
+        ExtensionMenuItemViewModel startDebugItem = await host.GetMenuItemAsync(host.ViewModel.DebugMenuItems, "debug.start");
         ExtensionAsyncCommand startDebugCommand = await host.GetMenuCommandAsync(host.ViewModel.DebugMenuItems, "debug.start");
         await host.SetWorkspaceLoadedAsync("/tmp/Test.sln");
 
+        Assert.False(startDebugItem.IsEnabled);
+        Assert.NotNull(startDebugItem.InputGesture);
         Assert.False(await host.CanExecuteAsync(startDebugCommand));
 
         bool changed = false;
@@ -106,6 +122,7 @@ public sealed class ExtensionCommandMenuIntegrationTests
         await host.RegisterDebuggerServiceAsync();
 
         Assert.True(changed);
+        Assert.True(startDebugItem.IsEnabled);
         Assert.True(await host.CanExecuteAsync(startDebugCommand));
     }
 
@@ -236,6 +253,24 @@ public sealed class ExtensionCommandMenuIntegrationTests
         {
             return Dispatcher.UIThread.InvokeAsync(
                 () => Assert.IsType<ExtensionAsyncCommand>(items.Single(item => item.CommandId == commandId).Command),
+                DispatcherPriority.Background).GetTask();
+        }
+
+        public Task<ExtensionMenuItemViewModel> GetMenuItemAsync(
+            System.Collections.ObjectModel.ObservableCollection<ExtensionMenuItemViewModel> items,
+            string commandId)
+        {
+            return Dispatcher.UIThread.InvokeAsync(
+                () => items.Single(item => item.CommandId == commandId),
+                DispatcherPriority.Background).GetTask();
+        }
+
+        public Task<ExtensionToolbarItemViewModel> GetToolbarItemAsync(
+            System.Collections.ObjectModel.ObservableCollection<ExtensionToolbarItemViewModel> items,
+            string commandId)
+        {
+            return Dispatcher.UIThread.InvokeAsync(
+                () => items.Single(item => item.CommandId == commandId),
                 DispatcherPriority.Background).GetTask();
         }
 

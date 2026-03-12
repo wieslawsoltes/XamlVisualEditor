@@ -4150,20 +4150,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     {
         if (_extensionContributions is null)
         {
-            ExtensionMenuItems.Clear();
-            FileMenuItems.Clear();
-            FileNewMenuItems.Clear();
-            FileNewMenuEntries.Clear();
-            ToolsMenuItems.Clear();
-            ViewMenuItems.Clear();
-            DebugMenuItems.Clear();
-            EditMenuItems.Clear();
-            WorkspaceMenuItems.Clear();
-            ExtensionToolbarItems.Clear();
-            MainToolbarItems.Clear();
+            DisposeCollectionItems(ExtensionMenuItems);
+            DisposeCollectionItems(FileMenuItems);
+            DisposeCollectionItems(FileNewMenuItems);
+            DisposeCollectionItems(FileNewMenuEntries);
+            DisposeCollectionItems(ToolsMenuItems);
+            DisposeCollectionItems(ViewMenuItems);
+            DisposeCollectionItems(DebugMenuItems);
+            DisposeCollectionItems(EditMenuItems);
+            DisposeCollectionItems(WorkspaceMenuItems);
+            DisposeCollectionItems(ExtensionToolbarItems);
+            DisposeCollectionItems(MainToolbarItems);
             CommandPaletteItems.Clear();
-            LeftStatusBarItems.Clear();
-            RightStatusBarItems.Clear();
+            ClearStatusBarItems();
             ExtensionKeyBindings.Clear();
             _extensionCommandsById.Clear();
             foreach (IDisposable subscription in _extensionCommandSubscriptionsById.Values)
@@ -4171,7 +4170,6 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 subscription.Dispose();
             }
             _extensionCommandSubscriptionsById.Clear();
-            _statusBarItemsById.Clear();
             RefreshExtensionCommandEnablement();
             RefreshExtensionViews();
             return;
@@ -4264,14 +4262,14 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void UpdateExtensionMenuItems()
     {
-        ExtensionMenuItems.Clear();
-        FileMenuItems.Clear();
-        FileNewMenuItems.Clear();
-        ToolsMenuItems.Clear();
-        ViewMenuItems.Clear();
-        DebugMenuItems.Clear();
-        EditMenuItems.Clear();
-        WorkspaceMenuItems.Clear();
+        DisposeCollectionItems(ExtensionMenuItems);
+        DisposeCollectionItems(FileMenuItems);
+        DisposeCollectionItems(FileNewMenuItems);
+        DisposeCollectionItems(ToolsMenuItems);
+        DisposeCollectionItems(ViewMenuItems);
+        DisposeCollectionItems(DebugMenuItems);
+        DisposeCollectionItems(EditMenuItems);
+        DisposeCollectionItems(WorkspaceMenuItems);
 
         if (_extensionContributions is null)
         {
@@ -4315,7 +4313,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void UpdateFileNewMenuEntries()
     {
-        FileNewMenuEntries.Clear();
+        DisposeCollectionItems(FileNewMenuEntries);
 
         if (NewDocumentCommand is null)
         {
@@ -4333,14 +4331,21 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         foreach (ExtensionMenuItemViewModel item in FileNewMenuItems)
         {
-            FileNewMenuEntries.Add(item);
+            FileNewMenuEntries.Add(new ExtensionMenuItemViewModel(
+                item.CommandId,
+                item.Title,
+                item.Location,
+                item.Group,
+                item.Priority,
+                item.Command ?? NewDocumentCommand,
+                item.InputGestureText));
         }
     }
 
     private void UpdateExtensionToolbarItems()
     {
-        ExtensionToolbarItems.Clear();
-        MainToolbarItems.Clear();
+        DisposeCollectionItems(ExtensionToolbarItems);
+        DisposeCollectionItems(MainToolbarItems);
 
         if (_extensionContributions is null)
         {
@@ -4464,7 +4469,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             item.CommandId = commandId;
             item.Alignment = alignment;
             item.Priority = priority;
-            item.Command = string.IsNullOrWhiteSpace(commandId) ? null : CreateExtensionCommand(commandId);
+            item.SetCommand(string.IsNullOrWhiteSpace(commandId) ? null : CreateExtensionCommand(commandId));
         }
 
         if (!isVisible)
@@ -4497,6 +4502,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         LeftStatusBarItems.Remove(item);
         RightStatusBarItems.Remove(item);
+        item.Dispose();
     }
 
     private static void SortStatusBarItems(ObservableCollection<ExtensionStatusBarItemViewModel> items)
@@ -4855,6 +4861,32 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             : (metadata.Keybinding ?? metadata.MacKeybinding);
 
         return string.IsNullOrWhiteSpace(gesture) ? null : gesture.Trim();
+    }
+
+    private static void DisposeCollectionItems<T>(ObservableCollection<T> items)
+    {
+        foreach (IDisposable disposable in items.OfType<IDisposable>().ToList())
+        {
+            disposable.Dispose();
+        }
+
+        items.Clear();
+    }
+
+    private void ClearStatusBarItems()
+    {
+        foreach (ExtensionStatusBarItemViewModel item in LeftStatusBarItems
+            .Concat(RightStatusBarItems)
+            .Concat(_statusBarItemsById.Values)
+            .Distinct()
+            .ToList())
+        {
+            item.Dispose();
+        }
+
+        LeftStatusBarItems.Clear();
+        RightStatusBarItems.Clear();
+        _statusBarItemsById.Clear();
     }
 
     private void SyncExtensionDockables()
@@ -7635,6 +7667,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             DockFactory.SaveLayout(DockLayout);
         }
+
+        DisposeCollectionItems(ExtensionMenuItems);
+        DisposeCollectionItems(FileMenuItems);
+        DisposeCollectionItems(FileNewMenuItems);
+        DisposeCollectionItems(FileNewMenuEntries);
+        DisposeCollectionItems(ToolsMenuItems);
+        DisposeCollectionItems(ViewMenuItems);
+        DisposeCollectionItems(DebugMenuItems);
+        DisposeCollectionItems(EditMenuItems);
+        DisposeCollectionItems(WorkspaceMenuItems);
+        DisposeCollectionItems(ExtensionToolbarItems);
+        DisposeCollectionItems(MainToolbarItems);
+        ClearStatusBarItems();
 
         foreach (IEditorDocumentViewModel doc in Documents)
         {
