@@ -522,6 +522,7 @@ public sealed class XamlEditorDockFactory : Factory
         if (docDock is not null)
         {
             AddDockable(docDock, doc);
+            SetOwnerRecursive(doc, docDock);
             SetActiveDockable(doc);
             SetFocusedDockable(docDock, doc);
             return doc;
@@ -538,6 +539,7 @@ public sealed class XamlEditorDockFactory : Factory
         if (docDock is not null)
         {
             AddDockable(docDock, doc);
+            SetOwnerRecursive(doc, docDock);
             SetActiveDockable(doc);
             SetFocusedDockable(docDock, doc);
             return doc;
@@ -554,6 +556,7 @@ public sealed class XamlEditorDockFactory : Factory
         if (docDock is not null)
         {
             AddDockable(docDock, doc);
+            SetOwnerRecursive(doc, docDock);
             SetActiveDockable(doc);
             SetFocusedDockable(docDock, doc);
             return doc;
@@ -572,6 +575,7 @@ public sealed class XamlEditorDockFactory : Factory
                 Title = terminalViewModel.Title
             };
             AddDockable(toolDock, tool);
+            SetOwnerRecursive(tool, toolDock);
             SetActiveDockable(tool);
             SetFocusedDockable(toolDock, tool);
             return tool;
@@ -607,6 +611,7 @@ public sealed class XamlEditorDockFactory : Factory
         if (toolDock is not null)
         {
             ExtensionTool tool = new(viewModel);
+            int? desiredInsertIndex = null;
             if (toolDock.VisibleDockables is ObservableCollection<IDockable> dockables)
             {
                 int insertIndex = dockables.Count;
@@ -639,14 +644,24 @@ public sealed class XamlEditorDockFactory : Factory
                     }
                 }
 
-                dockables.Insert(insertIndex, tool);
-                toolDock.IsEmpty = false;
+                desiredInsertIndex = insertIndex;
             }
-            else
+
+            AddDockable(toolDock, tool);
+            SetOwnerRecursive(tool, toolDock);
+            toolDock.IsEmpty = false;
+
+            if (desiredInsertIndex is int targetIndex
+                && toolDock.VisibleDockables is ObservableCollection<IDockable> orderedDockables)
             {
-                AddDockable(toolDock, tool);
-                toolDock.IsEmpty = false;
+                int currentIndex = orderedDockables.IndexOf(tool);
+                int boundedTargetIndex = Math.Clamp(targetIndex, 0, orderedDockables.Count - 1);
+                if (currentIndex >= 0 && currentIndex != boundedTargetIndex)
+                {
+                    orderedDockables.Move(currentIndex, boundedTargetIndex);
+                }
             }
+
             if (toolDock.ActiveDockable is null || viewModel.ActivateByDefault)
             {
                 SetActiveDockable(tool);
@@ -1192,8 +1207,12 @@ public sealed class XamlEditorDockFactory : Factory
             dockable.Owner = owner;
         }
 
+        dockable.Factory ??= this;
+        dockable.DockCapabilityOverrides ??= new DockCapabilityOverrides();
+
         if (dockable is IDock dock)
         {
+            dock.DockCapabilityPolicy ??= new DockCapabilityPolicy();
             dock.Factory ??= this;
             if (dock.VisibleDockables is not null)
             {
@@ -1206,6 +1225,7 @@ public sealed class XamlEditorDockFactory : Factory
 
         if (dockable is IRootDock rootDock)
         {
+            rootDock.RootDockCapabilityPolicy ??= new DockCapabilityPolicy();
             SetOwnerList(rootDock.HiddenDockables, rootDock);
             SetOwnerList(rootDock.LeftPinnedDockables, rootDock);
             SetOwnerList(rootDock.RightPinnedDockables, rootDock);

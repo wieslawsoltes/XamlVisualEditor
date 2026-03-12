@@ -96,6 +96,8 @@ public sealed class App : Application
 
             desktop.ShutdownRequested += (_, _) =>
             {
+                mainWindow.DataContext = null;
+                mainWindow.Content = null;
                 mainVm.Dispose();
                 extensionHost.Dispose();
                 (Services as IDisposable)?.Dispose();
