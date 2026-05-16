@@ -4,6 +4,6 @@
 [submodule "submodules/XamlX"]
 	path = submodules/XamlX
 	url = https://github.com/kekekeks/XamlX.git
-[submodule "submodules/VibeOffice"]
-	path = submodules/VibeOffice
-	url = https://github.com/wieslawsoltes/VibeOffice.git
+[submodule "submodules/ProEdit"]
+	path = submodules/ProEdit
+	url = https://github.com/wieslawsoltes/ProEdit.git
