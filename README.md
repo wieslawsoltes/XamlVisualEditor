@@ -121,6 +121,13 @@ Sample extensions are available in `tools/ExtensionSamples/HelloExtension` and
 dotnet pack tools/ExtensionSamples/HelloExtension/HelloExtension.csproj -c Release
 ```
 
+## NuGet Packages
+
+Reusable libraries and built-in extensions carry repository, license, readme,
+icon, Source Link, and symbol package metadata. Release builds pack the solution
+into `.nupkg` and `.snupkg` artifacts, publish them to NuGet when
+`NUGET_API_KEY` is configured, and attach the packages to the GitHub release.
+
 ## Contributing
 
 Follow the repository engineering rules in `AGENTS.md`: strict SOLID and MVVM,
@@ -131,4 +138,3 @@ for production behavior.
 
 Before opening a pull request, build the solution, run the relevant test projects,
 and build the Lunet documentation site.
-

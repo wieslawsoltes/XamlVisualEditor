@@ -1,5 +1,29 @@
 <Project>
   <PropertyGroup>
+    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.1.0</VersionPrefix>
+    <PackageId Condition="'$(PackageId)' == ''">$(AssemblyName)</PackageId>
+    <Title Condition="'$(Title)' == ''">$(AssemblyName)</Title>
+    <Description Condition="'$(Description)' == ''">$(AssemblyName) package for XamlVisualEditor.</Description>
+    <Authors>Wiesław Šoltés</Authors>
+    <Company>Wiesław Šoltés</Company>
+    <Product>XamlVisualEditor</Product>
+    <Copyright>Copyright (c) Wiesław Šoltés</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/wieslawsoltes/XamlVisualEditor</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/wieslawsoltes/XamlVisualEditor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>app-icon.png</PackageIcon>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Preview packages for XamlVisualEditor components and extensions.</PackageReleaseNotes>
+    <PackageTags Condition="'$(PackageTags)' == ''">xamlvisualeditor;xaml;avalonia;visual-editor;designer;extensions;mvvm;reactiveui;dotnet</PackageTags>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -10,4 +34,10 @@
     <!-- Suppress NuGet vulnerability warnings from transitive MSBuild dependencies -->
     <NoWarn>$(NoWarn);NU1903;NU1902;NU1901</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Link="README.md" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)src/XamlVisualEditor.App/Assets/app-icon.png" Pack="true" PackagePath="\" Link="app-icon.png" Visible="false" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
 </Project>

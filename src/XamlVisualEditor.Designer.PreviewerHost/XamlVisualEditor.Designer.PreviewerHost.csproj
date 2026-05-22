@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
     <RootNamespace>XamlVisualEditor.Designer.PreviewerHost</RootNamespace>
     <AssemblyName>XamlVisualEditor.Designer.PreviewerHost</AssemblyName>
+    <Description>Out-of-process Avalonia preview host for rendering designer documents.</Description>
   </PropertyGroup>
 
   <ItemGroup />
