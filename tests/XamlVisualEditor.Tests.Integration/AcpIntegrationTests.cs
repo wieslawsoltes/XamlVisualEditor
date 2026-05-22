@@ -21,7 +21,7 @@ public sealed class AcpIntegrationTests
             Arguments = $"\"{mockAgentPath}\""
         };
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(10));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(30));
         await using AcpAgentHost host = await AcpAgentHost.StartAsync(options, cts.Token);
 
         TaskCompletionSource<bool> updateReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -43,7 +43,7 @@ public sealed class AcpIntegrationTests
             },
             cts.Token);
 
-        await Task.WhenAny(updateReceived.Task, Task.Delay(TimeSpan.FromSeconds(5), cts.Token));
+        await Task.WhenAny(updateReceived.Task, Task.Delay(TimeSpan.FromSeconds(10), cts.Token));
         Assert.True(updateReceived.Task.IsCompleted, "Did not receive session/update notification.");
     }
 

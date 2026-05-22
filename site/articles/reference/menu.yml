@@ -1,0 +1,7 @@
+articles:
+  - {path: readme.md, title: "Reference"}
+  - {path: project-map.md, title: "Project Map"}
+  - {path: ci-release.md, title: "CI and Release"}
+  - {path: internal-docs.md, title: "Internal Docs"}
+  - {path: contribution-rules.md, title: "Contribution Rules"}
+

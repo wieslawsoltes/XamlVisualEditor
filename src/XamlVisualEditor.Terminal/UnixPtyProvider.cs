@@ -199,8 +199,35 @@ internal static class UnixNative
     public const int PtyNameBufferSize = 128;
     public static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
-    [DllImport("libutil")]
-    public static extern int forkpty(out int master, IntPtr name, IntPtr termp, IntPtr winp);
+    public static int forkpty(out int master, IntPtr name, IntPtr termp, IntPtr winp)
+    {
+        if (!IsLinux)
+        {
+            return forkpty_libutil(out master, name, termp, winp);
+        }
+
+        try
+        {
+            return forkpty_linux_libutil(out master, name, termp, winp);
+        }
+        catch (DllNotFoundException)
+        {
+            return forkpty_linux_libc(out master, name, termp, winp);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return forkpty_linux_libc(out master, name, termp, winp);
+        }
+    }
+
+    [DllImport("libutil.so.1", EntryPoint = "forkpty")]
+    private static extern int forkpty_linux_libutil(out int master, IntPtr name, IntPtr termp, IntPtr winp);
+
+    [DllImport("libc", EntryPoint = "forkpty")]
+    private static extern int forkpty_linux_libc(out int master, IntPtr name, IntPtr termp, IntPtr winp);
+
+    [DllImport("libutil", EntryPoint = "forkpty")]
+    private static extern int forkpty_libutil(out int master, IntPtr name, IntPtr termp, IntPtr winp);
 
     [DllImport("libc")]
     public static extern int execvp(string file, IntPtr argv);

@@ -1,0 +1,6 @@
+articles:
+  - {path: readme.md, title: "Getting Started"}
+  - {path: build-and-run.md, title: "Build and Run"}
+  - {path: first-workspace.md, title: "First Workspace"}
+  - {path: documentation-site.md, title: "Documentation Site"}
+

@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Description>Extension SDK contracts, hosting services, manifests, permissions, and built-in extension infrastructure</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />

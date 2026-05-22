@@ -57,7 +57,11 @@ public sealed class TerminalSession : ITerminalSession
 
         _process = _ptyProvider.StartProcess(_options);
         _cts = new CancellationTokenSource();
-        _readLoop = Task.Run(() => ReadLoopAsync(_process.Output, _cts.Token));
+        _readLoop = Task.Factory.StartNew(
+            () => ReadLoop(_process.Output, _cts.Token),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
     public void Write(ReadOnlySpan<byte> data)
@@ -126,14 +130,14 @@ public sealed class TerminalSession : ITerminalSession
         return mapped;
     }
 
-    private async Task ReadLoopAsync(Stream stream, CancellationToken ct)
+    private void ReadLoop(Stream stream, CancellationToken ct)
     {
         byte[] buffer = new byte[8192];
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                int read = await stream.ReadAsync(buffer, ct);
+                int read = stream.Read(buffer, 0, buffer.Length);
                 if (read <= 0)
                 {
                     break;

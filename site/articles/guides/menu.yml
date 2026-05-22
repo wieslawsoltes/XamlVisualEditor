@@ -1,0 +1,11 @@
+articles:
+  - {path: readme.md, title: "Guides"}
+  - {path: feature-tour.md, title: "Feature Tour"}
+  - {path: visual-designer.md, title: "Visual Designer"}
+  - {path: xaml-editor.md, title: "XAML Editor"}
+  - {path: workspace-language-services.md, title: "Workspace and Language Services"}
+  - {path: debugging-terminal.md, title: "Debugging and Terminal"}
+  - {path: collaboration-agents.md, title: "Collaboration and Agents"}
+  - {path: extension-sdk.md, title: "Extension SDK"}
+  - {path: testing.md, title: "Testing"}
+

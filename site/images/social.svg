@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">XamlVisualEditor social banner</title>
+  <desc id="desc">Project banner for XamlVisualEditor documentation.</desc>
+  <rect width="1200" height="630" fill="#0b1020"/>
+  <rect x="74" y="76" width="1048" height="478" rx="36" fill="#111827" stroke="#334155" stroke-width="4"/>
+  <rect x="112" y="118" width="314" height="392" rx="22" fill="#f8fafc"/>
+  <path d="M170 240l-54 56 54 56" fill="none" stroke="#075cad" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M368 240l54 56-54 56" fill="none" stroke="#075cad" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M288 210l-54 196" fill="none" stroke="#087a73" stroke-width="22" stroke-linecap="round"/>
+  <rect x="482" y="144" width="492" height="306" rx="24" fill="#0f172a" stroke="#55d6c2" stroke-width="8"/>
+  <rect x="524" y="194" width="214" height="116" rx="16" fill="#4cc2ff"/>
+  <rect x="766" y="194" width="172" height="38" rx="12" fill="#d28bff"/>
+  <rect x="766" y="258" width="136" height="32" rx="10" fill="#55d6c2"/>
+  <rect x="524" y="342" width="410" height="24" rx="12" fill="#64748b"/>
+  <text x="112" y="594" fill="#e5f1ff" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="700">XamlVisualEditor</text>
+  <text x="602" y="594" fill="#94a3b8" font-family="Arial, Helvetica, sans-serif" font-size="34">Avalonia XAML visual IDE and extension platform</text>
+</svg>
+
