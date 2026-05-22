@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">XamlVisualEditor logo</title>
+  <desc id="desc">A stylized XAML document and design surface mark.</desc>
+  <rect width="256" height="256" rx="44" fill="#0b1020"/>
+  <rect x="44" y="38" width="108" height="142" rx="16" fill="#f8fafc"/>
+  <path d="M68 82l-22 24 22 24" fill="none" stroke="#075cad" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M128 82l22 24-22 24" fill="none" stroke="#075cad" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M102 72l-20 74" fill="none" stroke="#087a73" stroke-width="12" stroke-linecap="round"/>
+  <rect x="96" y="104" width="110" height="110" rx="18" fill="#1f2937" stroke="#55d6c2" stroke-width="8"/>
+  <rect x="118" y="126" width="66" height="44" rx="8" fill="#4cc2ff"/>
+  <path d="M118 190h66" stroke="#d28bff" stroke-width="10" stroke-linecap="round"/>
+</svg>
+

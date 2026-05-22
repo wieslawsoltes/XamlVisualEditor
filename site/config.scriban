@@ -1,0 +1,20 @@
+# Use the Lunet default templates for docs navigation, layout, search, theme, and syntax highlighting.
+extend "lunet-io/templates"
+
+template_theme_default_mode = "system"
+
+site_project_baseurl = "https://wieslawsoltes.github.io"
+site_project_basepath = environment == "dev" ? "" : "/XamlVisualEditor"
+site_project_name = "XamlVisualEditor"
+site_project_description = "An extensible Avalonia XAML visual editor with a live designer, code editor, language services, debugger tooling, and a native .NET extension model."
+site_project_logo_path = "/images/logo.svg"
+site_project_social_banner_path = "/images/social.svg"
+site_project_package_id = "XamlVisualEditor"
+site_project_github_user = "wieslawsoltes"
+site_project_github_repo = "XamlVisualEditor"
+site_project_owner_name = "Wieslaw Soltes"
+site_project_owner_alias = "wieslawsoltes"
+site_project_owner_url = "https://github.com/wieslawsoltes"
+site_project_twitter_user = "wieslawsoltes"
+
+site_project_init

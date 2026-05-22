@@ -1,0 +1,7 @@
+articles:
+  - {path: readme.md, title: "Concepts"}
+  - {path: architecture.md, title: "Architecture"}
+  - {path: ast-sync.md, title: "XAML AST Sync"}
+  - {path: extension-hosting.md, title: "Extension Hosting"}
+  - {path: service-boundaries.md, title: "Service Boundaries"}
+
