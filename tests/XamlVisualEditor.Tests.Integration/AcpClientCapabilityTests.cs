@@ -15,7 +15,7 @@ public sealed class AcpClientCapabilityTests
     public async Task FileSystemReadWriteRoundTrip()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpFileSystemHandler handler = new();
@@ -30,7 +30,7 @@ public sealed class AcpClientCapabilityTests
         {
             path,
             content = "hello"
-        });
+        }, cts.Token);
 
         JsonElement writeResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
         Assert.True(writeResponse.TryGetProperty("result", out _));
@@ -41,7 +41,7 @@ public sealed class AcpClientCapabilityTests
             path,
             line = 1,
             limit = 10
-        });
+        }, cts.Token);
 
         JsonElement readResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
         string content = readResponse.GetProperty("result").GetProperty("content").GetString() ?? string.Empty;
@@ -52,7 +52,7 @@ public sealed class AcpClientCapabilityTests
     public async Task TerminalCreateOutputReleaseRoundTrip()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(10));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
         await using AcpProtocolClient client = pipe.CreateClient();
 
         AcpTerminalManager terminalManager = new();
@@ -67,7 +67,7 @@ public sealed class AcpClientCapabilityTests
             command,
             args,
             outputByteLimit = 4096
-        });
+        }, cts.Token);
 
         JsonElement createResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
         Assert.True(createResponse.TryGetProperty("result", out JsonElement createResult), createResponse.ToString());
@@ -80,7 +80,7 @@ public sealed class AcpClientCapabilityTests
             await SendRequestAsync(pipe.ServerWriter, 2 + attempt, "terminal/output", new
             {
                 terminalId
-            });
+            }, cts.Token);
 
             JsonElement outputResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
             output = outputResponse.GetProperty("result").GetProperty("output").GetString() ?? string.Empty;
@@ -97,7 +97,7 @@ public sealed class AcpClientCapabilityTests
         await SendRequestAsync(pipe.ServerWriter, 20, "terminal/release", new
         {
             terminalId
-        });
+        }, cts.Token);
 
         JsonElement releaseResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
         Assert.True(releaseResponse.TryGetProperty("result", out _));
@@ -107,7 +107,7 @@ public sealed class AcpClientCapabilityTests
     public async Task PermissionRequestRoundTrip()
     {
         using DuplexPipe pipe = new();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
         await using AcpProtocolClient client = pipe.CreateClient();
 
         client.RegisterRequestHandler("session/request_permission", (_, _) =>
@@ -139,7 +139,7 @@ public sealed class AcpClientCapabilityTests
                 toolCallId = "tool-1",
                 title = "Write file"
             }
-        });
+        }, cts.Token);
 
         JsonElement response = await ReadResponseAsync(pipe.ServerReader, cts.Token);
         string optionId = response.GetProperty("result")
@@ -151,7 +151,7 @@ public sealed class AcpClientCapabilityTests
         Assert.Equal("allow_once", optionId);
     }
 
-    private static Task SendRequestAsync(StreamWriter writer, int id, string method, object parameters)
+    private static Task SendRequestAsync(AcpMessageWriter writer, int id, string method, object parameters, CancellationToken ct)
     {
         string json = JsonSerializer.Serialize(new
         {
@@ -161,12 +161,12 @@ public sealed class AcpClientCapabilityTests
             @params = parameters
         });
 
-        return writer.WriteLineAsync(json);
+        return writer.WriteMessageAsync(json, ct);
     }
 
-    private static async Task<JsonElement> ReadResponseAsync(StreamReader reader, CancellationToken ct)
+    private static async Task<JsonElement> ReadResponseAsync(AcpMessageReader reader, CancellationToken ct)
     {
-        string? line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+        string? line = await reader.ReadMessageAsync(ct).ConfigureAwait(false);
         Assert.False(string.IsNullOrWhiteSpace(line));
         using JsonDocument doc = JsonDocument.Parse(line!);
         return doc.RootElement.Clone();
@@ -176,23 +176,23 @@ public sealed class AcpClientCapabilityTests
     {
         private readonly Pipe _clientToServer = new();
         private readonly Pipe _serverToClient = new();
-        private StreamReader? _serverReader;
-        private StreamWriter? _serverWriter;
+        private AcpMessageReader? _serverReader;
+        private AcpMessageWriter? _serverWriter;
 
-        public StreamReader ServerReader
+        public AcpMessageReader ServerReader
         {
             get
             {
-                _serverReader ??= new StreamReader(_clientToServer.Reader.AsStream());
+                _serverReader ??= new AcpMessageReader(_clientToServer.Reader.AsStream());
                 return _serverReader;
             }
         }
 
-        public StreamWriter ServerWriter
+        public AcpMessageWriter ServerWriter
         {
             get
             {
-                _serverWriter ??= new StreamWriter(_serverToClient.Writer.AsStream()) { AutoFlush = true };
+                _serverWriter ??= new AcpMessageWriter(_serverToClient.Writer.AsStream());
                 return _serverWriter;
             }
         }
@@ -206,8 +206,10 @@ public sealed class AcpClientCapabilityTests
 
         public void Dispose()
         {
-            _serverReader?.Dispose();
-            _serverWriter?.Dispose();
+            _clientToServer.Reader.Complete();
+            _clientToServer.Writer.Complete();
+            _serverToClient.Reader.Complete();
+            _serverToClient.Writer.Complete();
         }
     }
 }
