@@ -187,6 +187,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag-name }}
+          target_commitish: ${{ github.sha }}
           name: XamlVisualEditor v${{ needs.version.outputs.version }}
           prerelease: ${{ needs.version.outputs.is-prerelease == 'true' }}
           generate_release_notes: true

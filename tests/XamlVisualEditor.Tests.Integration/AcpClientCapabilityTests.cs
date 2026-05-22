@@ -59,15 +59,19 @@ public sealed class AcpClientCapabilityTests
         terminalManager.Register(client);
         client.Start(cts.Token);
 
+        string command = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/echo";
+        string[] args = OperatingSystem.IsWindows() ? new[] { "/c", "echo", "hello" } : new[] { "hello" };
+
         await SendRequestAsync(pipe.ServerWriter, 1, "terminal/create", new
         {
-            command = "/bin/echo",
-            args = new[] { "hello" },
+            command,
+            args,
             outputByteLimit = 4096
         });
 
         JsonElement createResponse = await ReadResponseAsync(pipe.ServerReader, cts.Token);
-        string terminalId = createResponse.GetProperty("result").GetProperty("terminalId").GetString() ?? string.Empty;
+        Assert.True(createResponse.TryGetProperty("result", out JsonElement createResult), createResponse.ToString());
+        string terminalId = createResult.GetProperty("terminalId").GetString() ?? string.Empty;
         Assert.False(string.IsNullOrWhiteSpace(terminalId));
 
         string output = string.Empty;
