@@ -131,19 +131,11 @@ public sealed class DebugSettingsExtension : IXveExtension
             return Array.Empty<SettingsValidationIssue>();
         }
 
-        if (value is not DebugSettingsDocument document)
+        if (value is not DebugSettingsDocument)
         {
             return new[]
             {
                 new SettingsValidationIssue("Expected a debug settings document value.")
-            };
-        }
-
-        if (string.IsNullOrWhiteSpace(document.AdapterPath))
-        {
-            return new[]
-            {
-                new SettingsValidationIssue("AdapterPath cannot be empty.", "AdapterPath")
             };
         }
 

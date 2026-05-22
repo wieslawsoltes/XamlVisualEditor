@@ -3,6 +3,8 @@ using System.Reactive.Threading.Tasks;
 using XamlVisualEditor.DebugSettingsExtension;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Debugging;
+using XamlVisualEditor.Extensions.Hosting;
+using DebugSettingsExtensionEntry = XamlVisualEditor.DebugSettingsExtension.DebugSettingsExtension;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Unit.Extensions;
@@ -66,6 +68,61 @@ public sealed class DebugSettingsPanelViewModelTests
         Assert.Equal(1, host.DownloadCalls);
     }
 
+    [Fact]
+    public async Task Extension_AllowsEmptyAdapterPath_WhenAdapterIsNotResolved()
+    {
+        InMemorySettingsStore settings = new();
+        StubDebugSettingsHost host = new("tools/netcoredbg", autoDownloadTools: true, isBusy: false, statusText: "Ready");
+        DebugSettingsExtensionEntry extension = new();
+        ExtensionContext context = CreateContext(settings, host);
+
+        await extension.ActivateAsync(context, CancellationToken.None);
+
+        await host.SetAdapterPathAsync(string.Empty, CancellationToken.None);
+
+        Assert.Equal(string.Empty, host.AdapterPath);
+    }
+
+    private static ExtensionContext CreateContext(
+        ISettings settings,
+        IDebugSettingsHost debugSettingsHost)
+    {
+        return new ExtensionContext(
+            "test.debug-settings",
+            "/tmp",
+            new CommandRegistry(),
+            new CommandMetadataRegistry(),
+            new ExtensionContributionRegistry(),
+            new DebuggerServiceRegistry(),
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            new ExtensionViewRegistry(),
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            debugSettingsHost,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            settings,
+            new InMemoryExtensionStorage(),
+            null!,
+            new List<IDisposable>());
+    }
+
     private sealed class StubDebugSettingsHost : IDebugSettingsHost
     {
         public StubDebugSettingsHost(string adapterPath, bool autoDownloadTools, bool isBusy, string statusText)
@@ -95,6 +152,11 @@ public sealed class DebugSettingsPanelViewModelTests
 
         public Task SetAdapterPathAsync(string adapterPath, CancellationToken cancellationToken)
         {
+            if (string.Equals(AdapterPath, adapterPath, StringComparison.Ordinal))
+            {
+                return Task.CompletedTask;
+            }
+
             AdapterPath = adapterPath;
             Changed?.Invoke(this, new DebugSettingsChangedEventArgs(GetState()));
             return Task.CompletedTask;
@@ -102,6 +164,11 @@ public sealed class DebugSettingsPanelViewModelTests
 
         public Task SetAutoDownloadToolsAsync(bool autoDownloadTools, CancellationToken cancellationToken)
         {
+            if (AutoDownloadTools == autoDownloadTools)
+            {
+                return Task.CompletedTask;
+            }
+
             AutoDownloadTools = autoDownloadTools;
             Changed?.Invoke(this, new DebugSettingsChangedEventArgs(GetState()));
             return Task.CompletedTask;
