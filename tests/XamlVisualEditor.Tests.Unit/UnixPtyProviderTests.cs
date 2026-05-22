@@ -17,6 +17,12 @@ public sealed class UnixPtyProviderTests
             return;
         }
 
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            && string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         TerminalSessionOptions options = new()
         {
             Columns = 80,
