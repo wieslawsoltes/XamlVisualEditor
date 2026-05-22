@@ -208,15 +208,15 @@ internal static class UnixNative
 
         try
         {
-            return forkpty_linux_libutil(out master, name, termp, winp);
+            return forkpty_linux_libc(out master, name, termp, winp);
         }
         catch (DllNotFoundException)
         {
-            return forkpty_linux_libc(out master, name, termp, winp);
+            return forkpty_linux_libutil(out master, name, termp, winp);
         }
         catch (EntryPointNotFoundException)
         {
-            return forkpty_linux_libc(out master, name, termp, winp);
+            return forkpty_linux_libutil(out master, name, termp, winp);
         }
     }
 
