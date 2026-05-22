@@ -17,8 +17,7 @@ public sealed class UnixPtyProviderTests
             return;
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            && string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
