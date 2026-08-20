@@ -352,7 +352,7 @@ jobs:
           sha256sum ./*.zip ./*.nupkg ./*.snupkg | sort -k 2 > SHA256SUMS
 
       - name: Create release
-        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           tag_name: ${{ needs.version.outputs.tag-name }}
           target_commitish: ${{ github.sha }}
