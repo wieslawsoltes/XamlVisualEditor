@@ -42,13 +42,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-results-${{ matrix.os }}
           path: artifacts/test/**/*.trx
@@ -80,7 +80,7 @@ jobs:
 
       - name: Publish test results
         if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@a6ddd83ac95ff4586f5d3aceeb314d9a1841db95 # v3.0.0
         with:
           name: Test Results (${{ matrix.os }})
           path: artifacts/test/**/*.trx
@@ -95,12 +95,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload performance results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: performance-test-results
           path: artifacts/test/**/*.trx
@@ -130,31 +130,56 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
+
+      - name: Determine CI package version
+        id: package-version
+        shell: bash
+        run: |
+          version_prefix=$(dotnet msbuild src/XamlVisualEditor.Core/XamlVisualEditor.Core.csproj -getProperty:VersionPrefix)
+          echo "version=${version_prefix}-ci.${GITHUB_RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore
         run: dotnet restore "${{ env.SOLUTION_FILE }}"
 
       - name: Build
-        run: dotnet build "${{ env.SOLUTION_FILE }}" -c Release --no-restore -p:Version="0.1.0-ci.${{ github.run_number }}" -p:ContinuousIntegrationBuild=true
+        run: dotnet build "${{ env.SOLUTION_FILE }}" -c Release --no-restore -p:Version="${{ steps.package-version.outputs.version }}" -p:ContinuousIntegrationBuild=true
 
       - name: Pack
-        run: dotnet pack "${{ env.SOLUTION_FILE }}" -c Release --no-build -p:Version="0.1.0-ci.${{ github.run_number }}" -p:ContinuousIntegrationBuild=true -o artifacts/packages
+        run: dotnet pack "${{ env.SOLUTION_FILE }}" -c Release --no-build -p:Version="${{ steps.package-version.outputs.version }}" -p:ContinuousIntegrationBuild=true -o artifacts/packages
+
+      - name: Validate sample extension packages
+        run: |
+          dotnet pack tools/ExtensionSamples/HelloExtension/HelloExtension.csproj -c Release -p:ContinuousIntegrationBuild=true -o artifacts/sample-packages
+          dotnet pack tools/ExtensionSamples/LspExtension/LspExtension.csproj -c Release -p:ContinuousIntegrationBuild=true -o artifacts/sample-packages
+
+      - name: Validate release packages and README badges
+        run: ./eng/validate-release-packages.sh artifacts/packages "${{ steps.package-version.outputs.version }}"
 
       - name: Upload NuGet packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.PACKAGE_ARTIFACT_NAME }}
           path: |
             artifacts/packages/*.nupkg
             artifacts/packages/*.snupkg
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload sample extension packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-sample-extension-packages
+          path: |
+            artifacts/sample-packages/*.nupkg
+            artifacts/sample-packages/*.snupkg
           if-no-files-found: error
           retention-days: 7

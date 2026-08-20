@@ -1,13 +1,13 @@
 using System;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
 /// <summary>
 /// Legacy canvas item view model retained for drag/resize behaviors.
 /// </summary>
-public sealed class CanvasEditorItemViewModel : ReactiveObject, IDisposable
+public sealed partial class CanvasEditorItemViewModel : ReactiveObject, IDisposable
 {
     public CanvasEditorItemViewModel(IEditorDocumentViewModel document, bool isOwned)
     {
@@ -24,16 +24,16 @@ public sealed class CanvasEditorItemViewModel : ReactiveObject, IDisposable
     public string FileName => Document.FileName;
 
     [Reactive]
-    public double X { get; set; }
+    public partial double X { get; set; }
 
     [Reactive]
-    public double Y { get; set; }
+    public partial double Y { get; set; }
 
     [Reactive]
-    public double Width { get; set; } = 520;
+    public partial double Width { get; set; } = 520;
 
     [Reactive]
-    public double Height { get; set; } = 360;
+    public partial double Height { get; set; } = 360;
 
     public void Dispose()
     {

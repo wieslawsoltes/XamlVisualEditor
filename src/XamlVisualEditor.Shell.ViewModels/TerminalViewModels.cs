@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reactive;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDisposable
+public sealed partial class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDisposable
 {
     private readonly ITerminalSession _session;
     private TerminalMetrics _metrics;
@@ -23,10 +23,10 @@ public sealed class TerminalViewModel : ReactiveObject, ITerminalViewModel, IDis
     public Guid Id { get; } = Guid.NewGuid();
 
     [Reactive]
-    public string Title { get; private set; } = "Terminal";
+    public partial string Title { get; private set; } = "Terminal";
 
     [Reactive]
-    public bool IsConnected { get; private set; }
+    public partial bool IsConnected { get; private set; }
 
     public TerminalTheme Theme { get; } = TerminalTheme.DefaultDark;
 

@@ -13,7 +13,7 @@ using Dock.Model.ReactiveUI.Controls;
 using Dock.Serializer.SystemTextJson;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Shell.ViewModels;
 
@@ -22,11 +22,11 @@ namespace XamlVisualEditor.Shell;
 /// <summary>
 /// Dock tool for the solution explorer panel.
 /// </summary>
-public sealed class SolutionExplorerTool : Tool
+public sealed partial class SolutionExplorerTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public SolutionExplorerViewModel? SolutionExplorerViewModel { get; set; }
+    public partial SolutionExplorerViewModel? SolutionExplorerViewModel { get; set; }
 
     public SolutionExplorerTool()
     {
@@ -45,11 +45,11 @@ public sealed class SolutionExplorerTool : Tool
 /// <summary>
 /// Dock tool for the output panel.
 /// </summary>
-public sealed class OutputTool : Tool
+public sealed partial class OutputTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public OutputViewModel? OutputViewModel { get; set; }
+    public partial OutputViewModel? OutputViewModel { get; set; }
 
     public OutputTool()
     {
@@ -68,11 +68,11 @@ public sealed class OutputTool : Tool
 /// <summary>
 /// Dock tool for terminal sessions.
 /// </summary>
-public sealed class TerminalTool : Tool
+public sealed partial class TerminalTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public TerminalViewModel? TerminalViewModel { get; set; }
+    public partial TerminalViewModel? TerminalViewModel { get; set; }
 
     public TerminalTool()
     {
@@ -91,11 +91,11 @@ public sealed class TerminalTool : Tool
 /// <summary>
 /// Dock tool for the breakpoints panel.
 /// </summary>
-public sealed class BreakpointsTool : Tool
+public sealed partial class BreakpointsTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public BreakpointsViewModel? BreakpointsViewModel { get; set; }
+    public partial BreakpointsViewModel? BreakpointsViewModel { get; set; }
 
     public BreakpointsTool()
     {
@@ -114,11 +114,11 @@ public sealed class BreakpointsTool : Tool
 /// <summary>
 /// Dock tool for the call stack panel.
 /// </summary>
-public sealed class CallStackTool : Tool
+public sealed partial class CallStackTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public CallStackViewModel? CallStackViewModel { get; set; }
+    public partial CallStackViewModel? CallStackViewModel { get; set; }
 
     public CallStackTool()
     {
@@ -137,11 +137,11 @@ public sealed class CallStackTool : Tool
 /// <summary>
 /// Dock tool for the locals panel.
 /// </summary>
-public sealed class LocalsTool : Tool
+public sealed partial class LocalsTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public LocalsViewModel? LocalsViewModel { get; set; }
+    public partial LocalsViewModel? LocalsViewModel { get; set; }
 
     public LocalsTool()
     {
@@ -160,11 +160,11 @@ public sealed class LocalsTool : Tool
 /// <summary>
 /// Dock tool for the watches panel.
 /// </summary>
-public sealed class WatchesTool : Tool
+public sealed partial class WatchesTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public WatchesViewModel? WatchesViewModel { get; set; }
+    public partial WatchesViewModel? WatchesViewModel { get; set; }
 
     public WatchesTool()
     {
@@ -183,11 +183,11 @@ public sealed class WatchesTool : Tool
 /// <summary>
 /// Dock tool for extension management.
 /// </summary>
-public sealed class ExtensionManagerTool : Tool
+public sealed partial class ExtensionManagerTool : Tool
 {
     [IgnoreDataMember]
     [Reactive]
-    public ExtensionManagerViewModel? ExtensionManagerViewModel { get; set; }
+    public partial ExtensionManagerViewModel? ExtensionManagerViewModel { get; set; }
 
     public ExtensionManagerTool()
     {
@@ -205,13 +205,13 @@ public sealed class ExtensionManagerTool : Tool
 /// <summary>
 /// Dock tool for extension-contributed views.
 /// </summary>
-public sealed class ExtensionTool : Tool
+public sealed partial class ExtensionTool : Tool
 {
     public const string IdPrefix = "Extension:";
 
     [IgnoreDataMember]
     [Reactive]
-    public ExtensionViewModel? ExtensionViewModel { get; set; }
+    public partial ExtensionViewModel? ExtensionViewModel { get; set; }
 
     public string? ViewId { get; set; }
 
@@ -241,7 +241,7 @@ public sealed class ExtensionTool : Tool
 /// <summary>
 /// Dock document for a XAML designer document.
 /// </summary>
-public sealed class DesignerDocument : Document
+public sealed partial class DesignerDocument : Document
 {
     [IgnoreDataMember]
     public DesignerDocumentViewModel DocumentViewModel { get; }
@@ -258,7 +258,7 @@ public sealed class DesignerDocument : Document
 /// <summary>
 /// Dock document for a text file.
 /// </summary>
-public sealed class TextDocument : Document
+public sealed partial class TextDocument : Document
 {
     [IgnoreDataMember]
     public TextDocumentViewModel DocumentViewModel { get; }
@@ -275,11 +275,11 @@ public sealed class TextDocument : Document
 /// <summary>
 /// Dock document for the infinite editor canvas.
 /// </summary>
-public sealed class InfiniteCanvasDocument : Document
+public sealed partial class InfiniteCanvasDocument : Document
 {
     [IgnoreDataMember]
     [Reactive]
-    public InfiniteCanvasViewModel? CanvasViewModel { get; set; }
+    public partial InfiniteCanvasViewModel? CanvasViewModel { get; set; }
 
     public InfiniteCanvasDocument()
     {
@@ -300,7 +300,7 @@ public sealed class InfiniteCanvasDocument : Document
 /// <summary>
 /// Factory that creates the default VS/Blend-style docking layout.
 /// </summary>
-public sealed class XamlEditorDockFactory : Factory
+public sealed partial class XamlEditorDockFactory : Factory
 {
     private static readonly bool LogLayoutWarnings = false;
     private const string SolutionExplorerViewId = "solutionExplorer.panel";

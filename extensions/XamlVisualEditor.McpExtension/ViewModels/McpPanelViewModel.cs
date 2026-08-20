@@ -10,13 +10,13 @@ using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.Mcp;
 
 namespace XamlVisualEditor.McpExtension;
 
-public sealed class McpPermissionEntryViewModel
+public sealed partial class McpPermissionEntryViewModel
 {
     public McpPermissionEntryViewModel(McpWorkspacePermissionEntry entry)
     {
@@ -35,7 +35,7 @@ public sealed class McpPermissionEntryViewModel
     public string AccessLevel { get; }
 }
 
-public sealed class McpPanelViewModel : ReactiveObject, IDisposable
+public sealed partial class McpPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly McpRuntimeController _controller;
     private readonly McpPermissionService _permissions;
@@ -47,37 +47,37 @@ public sealed class McpPanelViewModel : ReactiveObject, IDisposable
     public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
 
     [Reactive]
-    public bool IsEnabled { get; set; }
+    public partial bool IsEnabled { get; set; }
 
     [Reactive]
-    public string SelectedTransport { get; set; } = "both";
+    public partial string SelectedTransport { get; set; } = "both";
 
     [Reactive]
-    public double HttpPort { get; set; } = 4712;
+    public partial double HttpPort { get; set; } = 4712;
 
     [Reactive]
-    public string? HttpPath { get; set; }
+    public partial string? HttpPath { get; set; }
 
     [Reactive]
-    public string StatusText { get; private set; } = "Stopped";
+    public partial string StatusText { get; private set; } = "Stopped";
 
     [Reactive]
-    public string EndpointText { get; private set; } = "stdio + http";
+    public partial string EndpointText { get; private set; } = "stdio + http";
 
     [Reactive]
-    public int ConnectionCount { get; private set; }
+    public partial int ConnectionCount { get; private set; }
 
     [Reactive]
-    public string? LastConnectionAt { get; private set; }
+    public partial string? LastConnectionAt { get; private set; }
 
     [Reactive]
-    public string? WorkspaceId { get; private set; }
+    public partial string? WorkspaceId { get; private set; }
 
     [Reactive]
-    public string? SessionToken { get; private set; }
+    public partial string? SessionToken { get; private set; }
 
     [Reactive]
-    public McpPermissionEntryViewModel? SelectedPermission { get; set; }
+    public partial McpPermissionEntryViewModel? SelectedPermission { get; set; }
 
     public IReadOnlyList<string> TransportOptions { get; } = new[] { "stdio", "http", "both" };
 

@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.NavigationExtension</RootNamespace>
     <Description>Navigation and references extension backed by language services</Description>
   </PropertyGroup>

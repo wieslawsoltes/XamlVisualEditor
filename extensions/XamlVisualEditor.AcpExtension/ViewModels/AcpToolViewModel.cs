@@ -11,12 +11,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Acp;
 
 namespace XamlVisualEditor.AcpExtension;
 
-public sealed class AcpToolViewModel : ReactiveObject, IDisposable
+public sealed partial class AcpToolViewModel : ReactiveObject, IDisposable
 {
     private readonly IAcpService? _service;
     private readonly IAcpProfileStore? _profileStore;
@@ -40,40 +40,40 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
     public ObservableCollection<AcpProfileViewModel> Profiles { get; } = new();
 
     [Reactive]
-    public AcpProfileViewModel? SelectedProfile { get; set; }
+    public partial AcpProfileViewModel? SelectedProfile { get; set; }
 
     [Reactive]
-    public bool IsConnected { get; private set; }
+    public partial bool IsConnected { get; private set; }
 
     [Reactive]
-    public string StatusText { get; private set; } = "Disconnected";
+    public partial string StatusText { get; private set; } = "Disconnected";
 
     [Reactive]
-    public string? ActiveSessionId { get; private set; }
+    public partial string? ActiveSessionId { get; private set; }
 
     [Reactive]
-    public string AgentName { get; private set; } = "Mock Agent";
+    public partial string AgentName { get; private set; } = "Mock Agent";
 
     [Reactive]
-    public string? ApiKeyInput { get; set; }
+    public partial string? ApiKeyInput { get; set; }
 
     [Reactive]
-    public string ApiKeyStatus { get; private set; } = "Unknown";
+    public partial string ApiKeyStatus { get; private set; } = "Unknown";
 
     [Reactive]
-    public string WebAuthStatus { get; private set; } = "Not signed in";
+    public partial string WebAuthStatus { get; private set; } = "Not signed in";
 
     [Reactive]
-    public string? WebAuthUserCode { get; private set; }
+    public partial string? WebAuthUserCode { get; private set; }
 
     [Reactive]
-    public string? WebAuthVerificationUri { get; private set; }
+    public partial string? WebAuthVerificationUri { get; private set; }
 
     [Reactive]
-    public string? WebAuthVerificationUriComplete { get; private set; }
+    public partial string? WebAuthVerificationUriComplete { get; private set; }
 
     [Reactive]
-    public bool IsWebAuthBusy { get; private set; }
+    public partial bool IsWebAuthBusy { get; private set; }
 
     public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
 
@@ -1369,6 +1369,6 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
     }
 }
 
-public sealed record AcpSessionEntry(string SessionId, string Agent, string Status, string LastUpdated);
+public sealed partial record AcpSessionEntry(string SessionId, string Agent, string Status, string LastUpdated);
 
-public sealed record AcpActivityEntry(string Timestamp, string Message, string Kind);
+public sealed partial record AcpActivityEntry(string Timestamp, string Message, string Kind);

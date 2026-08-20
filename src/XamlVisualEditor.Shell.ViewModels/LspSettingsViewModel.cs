@@ -6,28 +6,28 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Lsp;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class LspSettingsViewModel : ReactiveObject
+public sealed partial class LspSettingsViewModel : ReactiveObject
 {
     private readonly ILspSettingsStore? _store;
 
     public ObservableCollection<LspServerEntryViewModel> Servers { get; } = new();
 
     [Reactive]
-    public LspServerEntryViewModel? SelectedServer { get; set; }
+    public partial LspServerEntryViewModel? SelectedServer { get; set; }
 
     [Reactive]
-    public string SettingsPath { get; private set; } = string.Empty;
+    public partial string SettingsPath { get; private set; } = string.Empty;
 
     [Reactive]
-    public string StatusText { get; private set; } = string.Empty;
+    public partial string StatusText { get; private set; } = string.Empty;
 
     [Reactive]
-    public bool RequiresRestart { get; private set; }
+    public partial bool RequiresRestart { get; private set; }
 
     public bool IsAvailable => _store is not null;
 
@@ -129,22 +129,22 @@ public sealed class LspSettingsViewModel : ReactiveObject
     }
 }
 
-public sealed class LspServerEntryViewModel : ReactiveObject
+public sealed partial class LspServerEntryViewModel : ReactiveObject
 {
     [Reactive]
-    public string LanguageId { get; set; } = "";
+    public partial string LanguageId { get; set; } = "";
 
     [Reactive]
-    public string ServerPath { get; set; } = "";
+    public partial string ServerPath { get; set; } = "";
 
     [Reactive]
-    public string Arguments { get; set; } = "";
+    public partial string Arguments { get; set; } = "";
 
     [Reactive]
-    public string WorkingDirectory { get; set; } = "";
+    public partial string WorkingDirectory { get; set; } = "";
 
     [Reactive]
-    public string FileExtensions { get; set; } = "";
+    public partial string FileExtensions { get; set; } = "";
 
     public static LspServerEntryViewModel FromServer(LspServerConfiguration server)
     {

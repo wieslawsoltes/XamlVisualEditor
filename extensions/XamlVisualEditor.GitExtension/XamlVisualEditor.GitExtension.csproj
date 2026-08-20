@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.GitExtension</RootNamespace>
     <Description>Git panel extension views and ViewModels</Description>
   </PropertyGroup>
@@ -8,7 +9,7 @@
     <PackageReference Include="Avalonia.AvaloniaEdit" />
     <PackageReference Include="ProDataGrid" />
     <PackageReference Include="ReactiveUI" />
-    <PackageReference Include="ReactiveUI.Fody" />
+    <PackageReference Include="ReactiveUI.SourceGenerators" PrivateAssets="all" />
     <PackageReference Include="System.Reactive" />
   </ItemGroup>
   <ItemGroup>

@@ -2,53 +2,53 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Acp;
 
 namespace XamlVisualEditor.AcpExtension;
 
-public sealed class AcpProfileViewModel : ReactiveObject
+public sealed partial class AcpProfileViewModel : ReactiveObject
 {
     public string Id { get; }
 
     [Reactive]
-    public string Name { get; set; }
+    public partial string Name { get; set; }
 
     [Reactive]
-    public string? Description { get; set; }
+    public partial string? Description { get; set; }
 
     [Reactive]
-    public string Command { get; set; }
+    public partial string Command { get; set; }
 
     [Reactive]
-    public string ArgumentsText { get; set; }
+    public partial string ArgumentsText { get; set; }
 
     [Reactive]
-    public string? WorkingDirectory { get; set; }
+    public partial string? WorkingDirectory { get; set; }
 
     [Reactive]
-    public string? Model { get; set; }
+    public partial string? Model { get; set; }
 
     [Reactive]
-    public string? ModelEnvVar { get; set; }
+    public partial string? ModelEnvVar { get; set; }
 
     [Reactive]
-    public string? ApiKeyEnvVar { get; set; }
+    public partial string? ApiKeyEnvVar { get; set; }
 
     [Reactive]
-    public string? OAuthClientId { get; set; }
+    public partial string? OAuthClientId { get; set; }
 
     [Reactive]
-    public string? OAuthScopes { get; set; }
+    public partial string? OAuthScopes { get; set; }
 
     [Reactive]
-    public string? OAuthDeviceCodeUrl { get; set; }
+    public partial string? OAuthDeviceCodeUrl { get; set; }
 
     [Reactive]
-    public string? OAuthTokenUrl { get; set; }
+    public partial string? OAuthTokenUrl { get; set; }
 
     [Reactive]
-    public bool UseKeychain { get; set; }
+    public partial bool UseKeychain { get; set; }
 
     public bool IsBuiltIn { get; }
 

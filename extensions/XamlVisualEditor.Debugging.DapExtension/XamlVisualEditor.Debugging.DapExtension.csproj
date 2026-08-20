@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.Debugging.DapExtension</RootNamespace>
     <Description>DAP-backed .NET debugger integration using netcoredbg</Description>
   </PropertyGroup>

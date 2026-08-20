@@ -11,7 +11,7 @@ using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using CoreGitDiffLineKind = XamlVisualEditor.Core.GitDiffLineKind;
 using XamlVisualEditor.Core.Interfaces;
@@ -22,7 +22,7 @@ namespace XamlVisualEditor.GitExtension;
 /// <summary>
 /// ViewModel entry representing a git file change for the panel.
 /// </summary>
-public sealed class GitChangeEntryViewModel : ReactiveObject
+public sealed partial class GitChangeEntryViewModel : ReactiveObject
 {
     public GitChangeEntryViewModel(
         string path,
@@ -99,7 +99,7 @@ public enum GitDiffLineKind
 /// <summary>
 /// ViewModel entry representing a diff line for the preview.
 /// </summary>
-public sealed class GitDiffLineViewModel
+public sealed partial class GitDiffLineViewModel
 {
     public GitDiffLineViewModel(
         GitDiffLineKind kind,
@@ -126,7 +126,7 @@ public sealed class GitDiffLineViewModel
     public int? NewLine { get; }
 }
 
-public sealed class GitPanelViewModel : ReactiveObject, IDisposable
+public sealed partial class GitPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly IGitService? _gitService;
     private readonly IWorkspaceInfo? _workspaceInfo;
@@ -142,43 +142,43 @@ public sealed class GitPanelViewModel : ReactiveObject, IDisposable
     private readonly ObservableAsPropertyHelper<int> _diffLineCount;
 
     [Reactive]
-    public string? RepositoryRoot { get; private set; }
+    public partial string? RepositoryRoot { get; private set; }
 
     [Reactive]
-    public string BranchName { get; private set; } = string.Empty;
+    public partial string BranchName { get; private set; } = string.Empty;
 
     [Reactive]
-    public string? UpstreamName { get; private set; }
+    public partial string? UpstreamName { get; private set; }
 
     [Reactive]
-    public int AheadBy { get; private set; }
+    public partial int AheadBy { get; private set; }
 
     [Reactive]
-    public int BehindBy { get; private set; }
+    public partial int BehindBy { get; private set; }
 
     [Reactive]
-    public bool IsRepository { get; private set; }
+    public partial bool IsRepository { get; private set; }
 
     [Reactive]
-    public string? ErrorMessage { get; private set; }
+    public partial string? ErrorMessage { get; private set; }
 
     [Reactive]
-    public bool IsBusy { get; private set; }
+    public partial bool IsBusy { get; private set; }
 
     [Reactive]
-    public string? SearchText { get; set; }
+    public partial string? SearchText { get; set; }
 
     [Reactive]
-    public string? CommitMessage { get; set; }
+    public partial string? CommitMessage { get; set; }
 
     [Reactive]
-    public string DiffText { get; private set; } = string.Empty;
+    public partial string DiffText { get; private set; } = string.Empty;
 
     [Reactive]
-    public GitChangeEntryViewModel? SelectedStagedChange { get; set; }
+    public partial GitChangeEntryViewModel? SelectedStagedChange { get; set; }
 
     [Reactive]
-    public GitChangeEntryViewModel? SelectedUnstagedChange { get; set; }
+    public partial GitChangeEntryViewModel? SelectedUnstagedChange { get; set; }
 
     public IReadOnlyList<GitChangeEntryViewModel> StagedItems => _stagedItems;
 

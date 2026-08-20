@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.AcpExtension</RootNamespace>
     <Description>ACP extension views and ViewModels</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="ReactiveUI" />
-    <PackageReference Include="ReactiveUI.Fody" />
+    <PackageReference Include="ReactiveUI.SourceGenerators" PrivateAssets="all" />
     <PackageReference Include="System.Reactive" />
   </ItemGroup>
   <ItemGroup>

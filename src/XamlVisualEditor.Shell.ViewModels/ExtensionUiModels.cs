@@ -15,12 +15,12 @@ using Avalonia.Controls.DataGridHierarchical;
 using Avalonia.Controls.DataGridSearching;
 using Avalonia.Controls.DataGridSorting;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public abstract class ExtensionCommandItemViewModel : ReactiveObject, IDisposable
+public abstract partial class ExtensionCommandItemViewModel : ReactiveObject, IDisposable
 {
     private ICommand? _command;
     private EventHandler? _canExecuteChangedHandler;
@@ -110,7 +110,7 @@ public abstract class ExtensionCommandItemViewModel : ReactiveObject, IDisposabl
     }
 }
 
-public sealed class ExtensionMenuItemViewModel : ExtensionCommandItemViewModel
+public sealed partial class ExtensionMenuItemViewModel : ExtensionCommandItemViewModel
 {
     public ExtensionMenuItemViewModel(
         string commandId,
@@ -164,7 +164,7 @@ public sealed class ExtensionMenuItemViewModel : ExtensionCommandItemViewModel
 }
 
 
-public sealed class ExtensionToolbarItemViewModel : ExtensionCommandItemViewModel
+public sealed partial class ExtensionToolbarItemViewModel : ExtensionCommandItemViewModel
 {
     public ExtensionToolbarItemViewModel(
         string commandId,
@@ -203,7 +203,7 @@ public sealed class ExtensionToolbarItemViewModel : ExtensionCommandItemViewMode
     public bool HasIcon => !string.IsNullOrWhiteSpace(IconPathData);
 }
 
-public sealed class ExtensionStatusBarItemViewModel : ExtensionCommandItemViewModel
+public sealed partial class ExtensionStatusBarItemViewModel : ExtensionCommandItemViewModel
 {
     public ExtensionStatusBarItemViewModel(
         string itemId,
@@ -226,19 +226,19 @@ public sealed class ExtensionStatusBarItemViewModel : ExtensionCommandItemViewMo
     public string ItemId { get; }
 
     [Reactive]
-    public string Text { get; set; }
+    public partial string Text { get; set; }
 
     [Reactive]
-    public string? Tooltip { get; set; }
+    public partial string? Tooltip { get; set; }
 
     [Reactive]
-    public string? CommandId { get; set; }
+    public partial string? CommandId { get; set; }
 
     [Reactive]
-    public StatusBarAlignment Alignment { get; set; }
+    public partial StatusBarAlignment Alignment { get; set; }
 
     [Reactive]
-    public int Priority { get; set; }
+    public partial int Priority { get; set; }
 
     public void SetCommand(ICommand? command)
     {
@@ -246,7 +246,7 @@ public sealed class ExtensionStatusBarItemViewModel : ExtensionCommandItemViewMo
     }
 }
 
-public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject
+public sealed partial class ExtensionCommandPaletteItemViewModel : ReactiveObject
 {
     public ExtensionCommandPaletteItemViewModel(string commandId, string title, string? category)
     {
@@ -262,7 +262,7 @@ public sealed class ExtensionCommandPaletteItemViewModel : ReactiveObject
     public string? Category { get; }
 }
 
-public sealed class ExtensionKeyBindingViewModel : ReactiveObject
+public sealed partial class ExtensionKeyBindingViewModel : ReactiveObject
 {
     public ExtensionKeyBindingViewModel(string commandId, string gesture, ICommand command)
     {
@@ -278,7 +278,7 @@ public sealed class ExtensionKeyBindingViewModel : ReactiveObject
     public ICommand Command { get; }
 }
 
-public sealed class ExtensionAsyncCommand : ICommand
+public sealed partial class ExtensionAsyncCommand : ICommand
 {
     private readonly Func<Task> _executeAsync;
     private readonly Func<bool>? _canExecute;
@@ -316,9 +316,9 @@ public sealed class ExtensionAsyncCommand : ICommand
     }
 }
 
-public sealed record CommandPaletteRequest(string Title, IReadOnlyList<ExtensionCommandPaletteItemViewModel> Items);
+public sealed partial record CommandPaletteRequest(string Title, IReadOnlyList<ExtensionCommandPaletteItemViewModel> Items);
 
-public sealed class CommandPaletteDialogViewModel : ReactiveObject
+public sealed partial class CommandPaletteDialogViewModel : ReactiveObject
 {
     public CommandPaletteDialogViewModel(CommandPaletteRequest request)
     {
@@ -352,10 +352,10 @@ public sealed class CommandPaletteDialogViewModel : ReactiveObject
     public ObservableCollection<ExtensionCommandPaletteItemViewModel> FilteredItems { get; } = new();
 
     [Reactive]
-    public ExtensionCommandPaletteItemViewModel? SelectedItem { get; set; }
+    public partial ExtensionCommandPaletteItemViewModel? SelectedItem { get; set; }
 
     [Reactive]
-    public string? FilterText { get; set; }
+    public partial string? FilterText { get; set; }
 
     public Interaction<ExtensionCommandPaletteItemViewModel?, Unit> CloseInteraction { get; } = new();
 
@@ -385,7 +385,7 @@ public sealed class CommandPaletteDialogViewModel : ReactiveObject
     }
 }
 
-public abstract class ExtensionViewModel : ReactiveObject
+public abstract partial class ExtensionViewModel : ReactiveObject
 {
     protected ExtensionViewModel(ExtensionViewContribution contribution)
     {
@@ -416,7 +416,7 @@ public abstract class ExtensionViewModel : ReactiveObject
     public bool PersistDockState { get; }
 }
 
-public sealed class ExtensionWebviewViewModel : ExtensionViewModel
+public sealed partial class ExtensionWebviewViewModel : ExtensionViewModel
 {
     public ExtensionWebviewViewModel(ExtensionViewContribution contribution, string placeholderMessage)
         : base(contribution)
@@ -427,7 +427,7 @@ public sealed class ExtensionWebviewViewModel : ExtensionViewModel
     public string PlaceholderMessage { get; }
 }
 
-public sealed class ExtensionCustomViewModel : ExtensionViewModel
+public sealed partial class ExtensionCustomViewModel : ExtensionViewModel
 {
     public ExtensionCustomViewModel(ExtensionViewContribution contribution, object? viewModel)
         : base(contribution)
@@ -438,7 +438,7 @@ public sealed class ExtensionCustomViewModel : ExtensionViewModel
     public object? ViewModel { get; }
 }
 
-public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
+public sealed partial class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 {
     private const string FilterPropertyPath = "Item.Label";
     private readonly IExtensionTreeDataProvider _provider;
@@ -544,13 +544,13 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
     public ReactiveCommand<Unit, Unit> DeleteSelectedCommand { get; }
 
     [Reactive]
-    public object? SelectedRow { get; set; }
+    public partial object? SelectedRow { get; set; }
 
     [Reactive]
-    public ExtensionTreeNodeViewModel? SelectedNode { get; set; }
+    public partial ExtensionTreeNodeViewModel? SelectedNode { get; set; }
 
     [Reactive]
-    public string? FilterText { get; set; }
+    public partial string? FilterText { get; set; }
 
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
@@ -880,7 +880,7 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
     }
 }
 
-public sealed class ExtensionTreeNodeViewModel : ReactiveObject
+public sealed partial class ExtensionTreeNodeViewModel : ReactiveObject
 {
     private readonly IExtensionTreeDataProvider _provider;
     private readonly Action _refresh;
@@ -983,10 +983,10 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
     public ObservableCollection<ExtensionTreeNodeViewModel> Children { get; } = new();
 
     [Reactive]
-    public bool IsExpanded { get; set; }
+    public partial bool IsExpanded { get; set; }
 
     [Reactive]
-    public bool HasChildren { get; private set; } = true;
+    public partial bool HasChildren { get; private set; } = true;
 
     public Task OpenAsync(CancellationToken cancellationToken)
     {
@@ -1067,7 +1067,7 @@ public sealed class ExtensionTreeNodeViewModel : ReactiveObject
         return new ExtensionTreeNodeViewModel(new LoadingPlaceholder(), item, provider, refresh, isPlaceholder: true);
     }
 
-    private sealed class LoadingPlaceholder
+    private sealed partial class LoadingPlaceholder
     {
     }
 

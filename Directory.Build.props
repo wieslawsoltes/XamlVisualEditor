@@ -16,7 +16,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>app-icon.png</PackageIcon>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Preview packages for XamlVisualEditor components and extensions.</PackageReleaseNotes>
     <PackageTags Condition="'$(PackageTags)' == ''">xamlvisualeditor;xaml;avalonia;visual-editor;designer;extensions;mvvm;reactiveui;dotnet</PackageTags>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
@@ -31,8 +30,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
-    <!-- Suppress NuGet vulnerability warnings from transitive MSBuild dependencies -->
-    <NoWarn>$(NoWarn);NU1903;NU1902;NU1901</NoWarn>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsPackable)' != 'false'">

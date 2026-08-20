@@ -28,7 +28,7 @@ using Dock.Model.Core.Events;
 using Dock.Model.ReactiveUI.Controls;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.CodeEditor;
 using XamlVisualEditor.Collaboration;
 using XamlVisualEditor.Collaboration.UI;
@@ -71,7 +71,7 @@ public interface IEditorDocumentViewModel : IDisposable
 /// <summary>
 /// ViewModel for a XAML document tab (designer + code split view).
 /// </summary>
-public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
+public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
 {
     private readonly CompositeDisposable _disposables = new();
     public bool IsDisposed { get; private set; }
@@ -109,13 +109,13 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// Gets or sets the shared breakpoints view model.
     /// </summary>
     [Reactive]
-    public BreakpointsViewModel? Breakpoints { get; set; }
+    public partial BreakpointsViewModel? Breakpoints { get; set; }
 
     /// <summary>
     /// Gets or sets whether the document is modified.
     /// </summary>
     [Reactive]
-    public bool IsModified { get; set; }
+    public partial bool IsModified { get; set; }
 
     /// <summary>
     /// Gets the title for display (includes dirty indicator).
@@ -137,25 +137,25 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// Gets or sets the active view mode.
     /// </summary>
     [Reactive]
-    public DocumentViewMode ViewMode { get; set; } = DocumentViewMode.Split;
+    public partial DocumentViewMode ViewMode { get; set; } = DocumentViewMode.Split;
 
     /// <summary>
     /// Gets or sets whether the external previewer replaces the in-app designer.
     /// </summary>
     [Reactive]
-    public bool UseExternalPreviewer { get; set; }
+    public partial bool UseExternalPreviewer { get; set; }
 
     /// <summary>
     /// Gets or sets the split orientation when in split view.
     /// </summary>
     [Reactive]
-    public AvOrientation SplitOrientation { get; set; } = AvOrientation.Vertical;
+    public partial AvOrientation SplitOrientation { get; set; } = AvOrientation.Vertical;
 
     /// <summary>
     /// Gets or sets the selected AST node ID (synced between editor, tree, and designer).
     /// </summary>
     [Reactive]
-    public Guid? SelectedNodeId { get; set; }
+    public partial Guid? SelectedNodeId { get; set; }
 
     /// <summary>
     /// Gets the source of the most recent selection change.
@@ -200,13 +200,13 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
     /// Command to start the external previewer for this document.
     /// </summary>
     [Reactive]
-    public System.Windows.Input.ICommand? StartPreviewerCommand { get; set; }
+    public partial System.Windows.Input.ICommand? StartPreviewerCommand { get; set; }
 
     /// <summary>
     /// Gets the active previewer session for this document.
     /// </summary>
     [Reactive]
-    public PreviewerTcpSession? PreviewerSession { get; set; }
+    public partial PreviewerTcpSession? PreviewerSession { get; set; }
 
     /// <summary>
     /// Command to navigate to the selected control definition.
@@ -536,7 +536,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 /// <summary>
 /// ViewModel for a non-XAML text document.
 /// </summary>
-public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
+public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewModel
 {
     private readonly CompositeDisposable _disposables = new();
     public bool IsDisposed { get; private set; }
@@ -553,31 +553,31 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
     public AvaloniaEdit.Document.TextDocument Document { get; } = new();
 
     [Reactive]
-    public int CaretOffset { get; set; }
+    public partial int CaretOffset { get; set; }
 
     [Reactive]
-    public int SelectionStart { get; set; }
+    public partial int SelectionStart { get; set; }
 
     [Reactive]
-    public int SelectionLength { get; set; }
+    public partial int SelectionLength { get; set; }
 
     [Reactive]
-    public int CurrentLine { get; set; } = 1;
+    public partial int CurrentLine { get; set; } = 1;
 
     [Reactive]
-    public int CurrentColumn { get; set; } = 1;
+    public partial int CurrentColumn { get; set; } = 1;
 
     [Reactive]
-    public bool IsModified { get; set; }
+    public partial bool IsModified { get; set; }
 
     [Reactive]
-    public bool WordWrap { get; set; }
+    public partial bool WordWrap { get; set; }
 
     [Reactive]
-    public bool ShowLineNumbers { get; set; } = true;
+    public partial bool ShowLineNumbers { get; set; } = true;
 
     [Reactive]
-    public double FontSize { get; set; } = 14.0;
+    public partial double FontSize { get; set; } = 14.0;
 
     public string? LanguageId { get; }
 
@@ -592,19 +592,19 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
     public XamlVisualEditor.CodeEditor.BreakpointLineColorizer BreakpointLineColorizer { get; } = new();
 
     [Reactive]
-    public int? ExecutionLine { get; set; }
+    public partial int? ExecutionLine { get; set; }
 
     [Reactive]
-    public int BreakpointHighlightVersion { get; private set; }
+    public partial int BreakpointHighlightVersion { get; private set; }
 
     [Reactive]
-    public int SemanticTokenVersion { get; private set; }
+    public partial int SemanticTokenVersion { get; private set; }
 
     /// <summary>
     /// Gets or sets the shared breakpoints view model.
     /// </summary>
     [Reactive]
-    public BreakpointsViewModel? Breakpoints { get; set; }
+    public partial BreakpointsViewModel? Breakpoints { get; set; }
 
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
 
@@ -1131,7 +1131,7 @@ public enum DocumentViewMode
 /// <summary>
 /// ViewModel for a toolbox item.
 /// </summary>
-public sealed class ToolboxItemViewModel : ReactiveObject
+public sealed partial class ToolboxItemViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the display name.
@@ -1157,7 +1157,7 @@ public sealed class ToolboxItemViewModel : ReactiveObject
     /// Gets or sets whether this item is visible after filtering.
     /// </summary>
     [Reactive]
-    public bool IsVisible { get; set; } = true;
+    public partial bool IsVisible { get; set; } = true;
 
     public ToolboxItemViewModel(string displayName, string typeName, string xmlNamespace, string category)
     {
@@ -1171,7 +1171,7 @@ public sealed class ToolboxItemViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the toolbox panel.
 /// </summary>
-public sealed class ToolboxViewModel : ReactiveObject, IDisposable
+public sealed partial class ToolboxViewModel : ReactiveObject, IDisposable
 {
     private readonly CompositeDisposable _disposables = new();
 
@@ -1179,7 +1179,7 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
     /// Gets or sets the search/filter text.
     /// </summary>
     [Reactive]
-    public string? SearchText { get; set; }
+    public partial string? SearchText { get; set; }
 
     /// <summary>
     /// Gets all toolbox items.
@@ -1257,7 +1257,7 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
 /// <summary>
 /// ViewModel for the output/diagnostics panel.
 /// </summary>
-public sealed class OutputViewModel : ReactiveObject, IOutputLogSink
+public sealed partial class OutputViewModel : ReactiveObject, IOutputLogSink
 {
     /// <summary>
     /// Gets the output messages.
@@ -1268,19 +1268,19 @@ public sealed class OutputViewModel : ReactiveObject, IOutputLogSink
     /// Gets or sets the active filter (All, Errors, Warnings).
     /// </summary>
     [Reactive]
-    public string ActiveFilter { get; set; } = "All";
+    public partial string ActiveFilter { get; set; } = "All";
 
     /// <summary>
     /// Gets the error count.
     /// </summary>
     [Reactive]
-    public int ErrorCount { get; set; }
+    public partial int ErrorCount { get; set; }
 
     /// <summary>
     /// Gets the warning count.
     /// </summary>
     [Reactive]
-    public int WarningCount { get; set; }
+    public partial int WarningCount { get; set; }
 
     /// <summary>
     /// Command to clear the output.
@@ -1301,7 +1301,7 @@ public sealed class OutputViewModel : ReactiveObject, IOutputLogSink
     /// Gets or sets the selected output message.
     /// </summary>
     [Reactive]
-    public OutputMessage? SelectedMessage { get; set; }
+    public partial OutputMessage? SelectedMessage { get; set; }
 
     /// <summary>
     /// Interaction to copy output text to the clipboard.
@@ -1553,7 +1553,7 @@ public sealed class OutputViewModel : ReactiveObject, IOutputLogSink
 /// <summary>
 /// Represents a reference or definition location.
 /// </summary>
-public sealed class ReferenceLocationViewModel : ReactiveObject
+public sealed partial class ReferenceLocationViewModel : ReactiveObject
 {
     public string FilePath { get; }
     public int Line { get; }
@@ -1573,7 +1573,7 @@ public sealed class ReferenceLocationViewModel : ReactiveObject
 /// <summary>
 /// Groups reference locations by file.
 /// </summary>
-public sealed class ReferencesGroupViewModel : ReactiveObject
+public sealed partial class ReferencesGroupViewModel : ReactiveObject
 {
     public string FilePath { get; }
     public string FileName { get; }
@@ -1581,7 +1581,7 @@ public sealed class ReferencesGroupViewModel : ReactiveObject
     public string DisplayText => FileName;
 
     [Reactive]
-    public bool IsExpanded { get; set; }
+    public partial bool IsExpanded { get; set; }
 
     public ReferencesGroupViewModel(string filePath)
     {
@@ -1593,7 +1593,7 @@ public sealed class ReferencesGroupViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the references panel.
 /// </summary>
-public sealed class ReferencesViewModel : ReactiveObject
+public sealed partial class ReferencesViewModel : ReactiveObject
 {
     private readonly Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> _navigateAsync;
     private readonly CompositeDisposable _groupDisposables = new();
@@ -1606,16 +1606,16 @@ public sealed class ReferencesViewModel : ReactiveObject
     public HierarchicalModel Model { get; }
 
     [Reactive]
-    public HierarchicalNode? SelectedRow { get; set; }
+    public partial HierarchicalNode? SelectedRow { get; set; }
 
     [Reactive]
-    public object? SelectedItem { get; set; }
+    public partial object? SelectedItem { get; set; }
 
     [Reactive]
-    public int TotalCount { get; private set; }
+    public partial int TotalCount { get; private set; }
 
     [Reactive]
-    public string? FilterText { get; set; }
+    public partial string? FilterText { get; set; }
 
     public SortingModel SortingModel { get; }
 
@@ -1812,25 +1812,25 @@ public sealed class ReferencesViewModel : ReactiveObject
     }
 }
 
-public sealed record DefinitionPickerRequest(
+public sealed partial record DefinitionPickerRequest(
     string Title,
     IReadOnlyList<ReferenceLocationViewModel> Items);
 
-public sealed record CodeActionPickerRequest(
+public sealed partial record CodeActionPickerRequest(
     string Title,
     IReadOnlyList<LanguageCodeAction> Items);
 
 /// <summary>
 /// ViewModel for the definition picker dialog.
 /// </summary>
-public sealed class DefinitionPickerDialogViewModel : ReactiveObject
+public sealed partial class DefinitionPickerDialogViewModel : ReactiveObject
 {
     public string Title { get; }
 
     public ObservableCollection<ReferenceLocationViewModel> Items { get; } = new();
 
     [Reactive]
-    public ReferenceLocationViewModel? SelectedItem { get; set; }
+    public partial ReferenceLocationViewModel? SelectedItem { get; set; }
 
     public Interaction<ReferenceLocationViewModel?, Unit> CloseInteraction { get; } = new();
 
@@ -1860,7 +1860,7 @@ public sealed class DefinitionPickerDialogViewModel : ReactiveObject
     }
 }
 
-public sealed class CodeActionItemViewModel : ReactiveObject
+public sealed partial class CodeActionItemViewModel : ReactiveObject
 {
     public CodeActionItemViewModel(LanguageCodeAction action)
     {
@@ -1877,14 +1877,14 @@ public sealed class CodeActionItemViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the code action picker dialog.
 /// </summary>
-public sealed class CodeActionPickerDialogViewModel : ReactiveObject
+public sealed partial class CodeActionPickerDialogViewModel : ReactiveObject
 {
     public string Title { get; }
 
     public ObservableCollection<CodeActionItemViewModel> Items { get; } = new();
 
     [Reactive]
-    public CodeActionItemViewModel? SelectedItem { get; set; }
+    public partial CodeActionItemViewModel? SelectedItem { get; set; }
 
     public Interaction<LanguageCodeAction?, Unit> CloseInteraction { get; } = new();
 
@@ -1917,13 +1917,13 @@ public sealed class CodeActionPickerDialogViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the rename symbol dialog.
 /// </summary>
-public sealed class RenameSymbolDialogViewModel : ReactiveObject
+public sealed partial class RenameSymbolDialogViewModel : ReactiveObject
 {
     public string Title { get; }
     public string Prompt { get; }
 
     [Reactive]
-    public string Name { get; set; }
+    public partial string Name { get; set; }
 
     public Interaction<string?, Unit> CloseInteraction { get; } = new();
 
@@ -1957,7 +1957,7 @@ public enum ThemeVariantOption
     Dark
 }
 
-public sealed record PreviewerTrustRequest(
+public sealed partial record PreviewerTrustRequest(
     string Title,
     string Message,
     string Location);
@@ -1965,7 +1965,7 @@ public sealed record PreviewerTrustRequest(
 /// <summary>
 /// ViewModel for the previewer trust warning dialog.
 /// </summary>
-public sealed class PreviewerTrustDialogViewModel : ReactiveObject
+public sealed partial class PreviewerTrustDialogViewModel : ReactiveObject
 {
     public string Title { get; }
     public string Message { get; }
@@ -1995,7 +1995,7 @@ public sealed class PreviewerTrustDialogViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for debug tool download consent dialog.
 /// </summary>
-public sealed class DebugToolConsentDialogViewModel : ReactiveObject
+public sealed partial class DebugToolConsentDialogViewModel : ReactiveObject
 {
     public string Title { get; } = "Download Debug Tool";
     public string Message { get; }
@@ -2027,7 +2027,7 @@ public sealed class DebugToolConsentDialogViewModel : ReactiveObject
 /// <summary>
 /// A message in the output panel.
 /// </summary>
-public sealed record OutputMessage(
+public sealed partial record OutputMessage(
     string Level,
     string Text,
     int Line,
@@ -2038,7 +2038,7 @@ public sealed record OutputMessage(
 /// <summary>
 /// Represents a recent file entry.
 /// </summary>
-public sealed class RecentFileEntry
+public sealed partial class RecentFileEntry
 {
     public RecentFileEntry(string filePath)
     {
@@ -2065,7 +2065,7 @@ public enum SaveBehavior
     NoSaving
 }
 
-internal sealed class WorkspaceAssemblySet
+internal sealed partial class WorkspaceAssemblySet
 {
     public WorkspaceAssemblySet(IReadOnlyList<string> all, IReadOnlyList<string> preferred)
     {
@@ -2081,7 +2081,7 @@ internal sealed class WorkspaceAssemblySet
 /// <summary>
 /// Main window ViewModel orchestrating the docking layout and document management.
 /// </summary>
-public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspaceCommands
+public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspaceCommands
 {
     private const int RecentFilesLimit = 10;
     private readonly CompositeDisposable _disposables = new();
@@ -2144,23 +2144,23 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets or sets the active document.
     /// </summary>
     [Reactive]
-    public IEditorDocumentViewModel? ActiveDocument { get; set; }
+    public partial IEditorDocumentViewModel? ActiveDocument { get; set; }
 
     [Reactive]
-    public bool CanNavigateBack { get; private set; }
+    public partial bool CanNavigateBack { get; private set; }
 
     [Reactive]
-    public bool CanNavigateForward { get; private set; }
+    public partial bool CanNavigateForward { get; private set; }
 
     public int ActiveLine => _activeLine.Value;
 
     public int ActiveColumn => _activeColumn.Value;
 
     [Reactive]
-    public DesignerDocumentViewModel? ActiveDesignerDocument { get; private set; }
+    public partial DesignerDocumentViewModel? ActiveDesignerDocument { get; private set; }
 
     [Reactive]
-    public TextDocumentViewModel? ActiveTextDocument { get; private set; }
+    public partial TextDocumentViewModel? ActiveTextDocument { get; private set; }
 
     /// <summary>
     /// Gets the toolbox ViewModel.
@@ -2323,10 +2323,10 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets the active startup project.
     /// </summary>
     [Reactive]
-    public ProjectModel? ActiveProject { get; private set; }
+    public partial ProjectModel? ActiveProject { get; private set; }
 
     [Reactive]
-    public string? ActiveProjectPath { get; private set; }
+    public partial string? ActiveProjectPath { get; private set; }
 
     public string ActiveProjectName => ActiveProject?.Name ?? "(none)";
 
@@ -2344,7 +2344,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets or sets the save behavior for XAML changes.
     /// </summary>
     [Reactive]
-    public SaveBehavior SaveBehavior { get; set; } = SaveBehavior.SaveManually;
+    public partial SaveBehavior SaveBehavior { get; set; } = SaveBehavior.SaveManually;
 
     public bool IsAutoSaveSelected => SaveBehavior == SaveBehavior.AutoSave;
     public bool IsManualSaveSelected => SaveBehavior == SaveBehavior.SaveManually;
@@ -2354,7 +2354,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets or sets the selected theme variant for previews.
     /// </summary>
     [Reactive]
-    public ThemeVariantOption SelectedThemeVariant { get; set; } = ThemeVariantOption.Dark;
+    public partial ThemeVariantOption SelectedThemeVariant { get; set; } = ThemeVariantOption.Dark;
 
     public bool IsThemeDefaultSelected => SelectedThemeVariant == ThemeVariantOption.Default;
     public bool IsThemeLightSelected => SelectedThemeVariant == ThemeVariantOption.Light;
@@ -2389,7 +2389,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets the active dock layout.
     /// </summary>
     [Reactive]
-    public IRootDock DockLayout { get; private set; } = new RootDock
+    public partial IRootDock DockLayout { get; private set; } = new RootDock
     {
         Id = "Root",
         Title = "Root",
@@ -2404,19 +2404,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets or sets the application title.
     /// </summary>
     [Reactive]
-    public string Title { get; set; } = "XAML Visual Editor";
+    public partial string Title { get; set; } = "XAML Visual Editor";
 
     /// <summary>
     /// Gets or sets the status bar text.
     /// </summary>
     [Reactive]
-    public string StatusText { get; set; } = "Ready";
+    public partial string StatusText { get; set; } = "Ready";
 
     /// <summary>
     /// Gets the collaboration status text for the status bar.
     /// </summary>
     [Reactive]
-    public string CollaborationStatusText { get; set; } = string.Empty;
+    public partial string CollaborationStatusText { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets the recent files list.
@@ -2427,19 +2427,19 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     /// Gets whether a workspace is currently loaded.
     /// </summary>
     [Reactive]
-    public bool HasWorkspace { get; private set; }
+    public partial bool HasWorkspace { get; private set; }
 
     /// <summary>
     /// Gets whether a workspace load is in progress; drives the busy overlay.
     /// </summary>
     [Reactive]
-    public bool IsWorkspaceLoading { get; private set; }
+    public partial bool IsWorkspaceLoading { get; private set; }
 
     /// <summary>
     /// Gets whether a workspace restore, build, rebuild, or clean command is running.
     /// </summary>
     [Reactive]
-    public bool IsWorkspaceCommandRunning { get; private set; }
+    public partial bool IsWorkspaceCommandRunning { get; private set; }
 
     /// <summary>
     /// Interaction for opening a file dialog.
@@ -2498,46 +2498,46 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
 
     // Panel visibility
-    [Reactive] public bool IsToolboxVisible { get; set; } = true;
-    [Reactive] public bool IsPropertiesVisible { get; set; } = true;
-    [Reactive] public bool IsVisualTreeVisible { get; set; } = true;
-    [Reactive] public bool IsLogicalTreeVisible { get; set; } = true;
-    [Reactive] public bool IsOutputVisible { get; set; } = true;
-    [Reactive] public bool IsReferencesVisible { get; set; }
-    [Reactive] public bool IsCollaborationVisible { get; set; }
-    [Reactive] public bool IsAnimationEditorVisible { get; set; } = true;
-    [Reactive] public bool IsBreakpointsVisible { get; set; } = true;
-    [Reactive] public bool IsCallStackVisible { get; set; } = true;
-    [Reactive] public bool IsLocalsVisible { get; set; } = true;
-    [Reactive] public bool IsWatchesVisible { get; set; } = true;
-    [Reactive] public bool IsExtensionsManagerVisible { get; set; }
+    [Reactive] public partial bool IsToolboxVisible { get; set; } = true;
+    [Reactive] public partial bool IsPropertiesVisible { get; set; } = true;
+    [Reactive] public partial bool IsVisualTreeVisible { get; set; } = true;
+    [Reactive] public partial bool IsLogicalTreeVisible { get; set; } = true;
+    [Reactive] public partial bool IsOutputVisible { get; set; } = true;
+    [Reactive] public partial bool IsReferencesVisible { get; set; }
+    [Reactive] public partial bool IsCollaborationVisible { get; set; }
+    [Reactive] public partial bool IsAnimationEditorVisible { get; set; } = true;
+    [Reactive] public partial bool IsBreakpointsVisible { get; set; } = true;
+    [Reactive] public partial bool IsCallStackVisible { get; set; } = true;
+    [Reactive] public partial bool IsLocalsVisible { get; set; } = true;
+    [Reactive] public partial bool IsWatchesVisible { get; set; } = true;
+    [Reactive] public partial bool IsExtensionsManagerVisible { get; set; }
 
     /// <summary>
     /// Gets or sets the debugger adapter path.
     /// </summary>
     [Reactive]
-    public string DebuggerAdapterPath { get; set; } = "tools/netcoredbg/netcoredbg/netcoredbg";
+    public partial string DebuggerAdapterPath { get; set; } = "tools/netcoredbg/netcoredbg/netcoredbg";
 
     /// <summary>
     /// Gets or sets whether debug tools can be auto-downloaded.
     /// </summary>
     [Reactive]
-    public bool AutoDownloadTools { get; set; } = true;
+    public partial bool AutoDownloadTools { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the program arguments for run/debug.
     /// </summary>
     [Reactive]
-    public string ProgramArguments { get; set; } = string.Empty;
+    public partial string ProgramArguments { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets whether debugging should stop at entry.
     /// </summary>
     [Reactive]
-    public bool DebugStopAtEntry { get; set; }
+    public partial bool DebugStopAtEntry { get; set; }
 
     [Reactive]
-    public bool IsRunActive { get; private set; }
+    public partial bool IsRunActive { get; private set; }
 
     // File Commands
     public ReactiveCommand<Unit, Unit> NewDocumentCommand { get; }
@@ -5031,7 +5031,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         StatusText = "Layout reset";
     }
 
-    private sealed class NullExtensionManager : IExtensionManager
+    private sealed partial class NullExtensionManager : IExtensionManager
     {
         public Task<IReadOnlyList<ExtensionPackageInfo>> GetInstalledAsync(CancellationToken ct)
         {
@@ -7822,7 +7822,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 /// <summary>
 /// Represents a node in the Solution Explorer tree.
 /// </summary>
-public sealed class SolutionExplorerNodeViewModel : ReactiveObject
+public sealed partial class SolutionExplorerNodeViewModel : ReactiveObject
 {
     private bool _isStartupProject;
     /// <summary>Gets the display name.</summary>
@@ -7845,11 +7845,11 @@ public sealed class SolutionExplorerNodeViewModel : ReactiveObject
 
     /// <summary>Gets or sets whether this node is expanded.</summary>
     [Reactive]
-    public bool IsExpanded { get; set; }
+    public partial bool IsExpanded { get; set; }
 
     /// <summary>Gets or sets whether this node is selected.</summary>
     [Reactive]
-    public bool IsSelected { get; set; }
+    public partial bool IsSelected { get; set; }
 
     /// <summary>Gets or sets whether this project is the startup project.</summary>
     public bool IsStartupProject
@@ -8100,7 +8100,7 @@ public enum SolutionExplorerNodeKind
 /// <summary>
 /// ViewModel for the Solution Explorer tool panel.
 /// </summary>
-public sealed class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel
+public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutionExplorerPanelModel
 {
     private const string FilterPropertyPath = "Item.Name";
     private const string SetStartupProjectCommandId = "workspace.setStartupProject";
@@ -8120,18 +8120,18 @@ public sealed class SolutionExplorerViewModel : ReactiveObject, ISolutionExplore
     public SearchModel SearchModel { get; }
 
     [Reactive]
-    public object? SelectedRow { get; set; }
+    public partial object? SelectedRow { get; set; }
 
     [Reactive]
-    public SolutionExplorerNodeViewModel? SelectedNode { get; private set; }
+    public partial SolutionExplorerNodeViewModel? SelectedNode { get; private set; }
 
     /// <summary>Gets or sets whether the panel is visible.</summary>
     [Reactive]
-    public bool IsVisible { get; set; }
+    public partial bool IsVisible { get; set; }
 
     /// <summary>Gets or sets the filter text.</summary>
     [Reactive]
-    public string? FilterText { get; set; }
+    public partial string? FilterText { get; set; }
 
     /// <summary>Raised when a XAML file is opened from the tree.</summary>
     public event Action<string>? FileOpenRequested;

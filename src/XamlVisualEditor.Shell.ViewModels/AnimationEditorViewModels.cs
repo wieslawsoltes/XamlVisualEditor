@@ -6,7 +6,7 @@ using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Animation;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Extensions;
@@ -15,7 +15,7 @@ using XamlVisualEditor.Sync;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAnimationEditorPanelModel
+public sealed partial class AnimationEditorViewModel : ReactiveObject, IDisposable, IAnimationEditorPanelModel
 {
     private const double DefaultDurationSeconds = 1.0;
     private const double DefaultFrameRate = 60.0;
@@ -34,7 +34,7 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
     private List<KeyframeClipboardEntry> _keyframeClipboard = new();
 
     [Reactive]
-    public DesignerDocumentViewModel? ActiveDocument { get; private set; }
+    public partial DesignerDocumentViewModel? ActiveDocument { get; private set; }
 
     public ObservableCollection<AnimationTimelineViewModel> Timelines { get; } = new();
 
@@ -45,34 +45,34 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
     public ObservableCollection<AnimationResourceEntryViewModel> AvailableResources { get; } = new();
 
     [Reactive]
-    public AnimationResourceEntryViewModel? SelectedResource { get; set; }
+    public partial AnimationResourceEntryViewModel? SelectedResource { get; set; }
 
     [Reactive]
-    public AnimationTimelineViewModel? SelectedTimeline { get; set; }
+    public partial AnimationTimelineViewModel? SelectedTimeline { get; set; }
 
     [Reactive]
-    public AnimationTrackViewModel? SelectedTrack { get; set; }
+    public partial AnimationTrackViewModel? SelectedTrack { get; set; }
 
     [Reactive]
-    public AnimationKeyframeViewModel? SelectedKeyframe { get; set; }
+    public partial AnimationKeyframeViewModel? SelectedKeyframe { get; set; }
 
     [Reactive]
-    public bool IsKeyframeTimeValid { get; private set; } = true;
+    public partial bool IsKeyframeTimeValid { get; private set; } = true;
 
     [Reactive]
-    public bool IsKeyframeValueValid { get; private set; } = true;
+    public partial bool IsKeyframeValueValid { get; private set; } = true;
 
     [Reactive]
-    public bool IsKeyframeEasingValid { get; private set; } = true;
+    public partial bool IsKeyframeEasingValid { get; private set; } = true;
 
     [Reactive]
-    public string KeyframeValidationMessage { get; private set; } = string.Empty;
+    public partial string KeyframeValidationMessage { get; private set; } = string.Empty;
 
     [Reactive]
-    public double CurrentTimeSeconds { get; set; }
+    public partial double CurrentTimeSeconds { get; set; }
 
     [Reactive]
-    public double Zoom { get; set; } = 1.0;
+    public partial double Zoom { get; set; } = 1.0;
 
     public double PixelsPerSecond => Math.Max(12.0, BasePixelsPerSecond * Zoom);
 
@@ -83,16 +83,16 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
         : 1.0 / SelectedTimeline.FrameRate;
 
     [Reactive]
-    public string NewTrackPropertyName { get; set; } = string.Empty;
+    public partial string NewTrackPropertyName { get; set; } = string.Empty;
 
     [Reactive]
-    public string StatusMessage { get; private set; } = "Ready";
+    public partial string StatusMessage { get; private set; } = "Ready";
 
     [Reactive]
-    public Guid? TargetNodeId { get; private set; }
+    public partial Guid? TargetNodeId { get; private set; }
 
     [Reactive]
-    public string TargetDisplayName { get; private set; } = "No selection";
+    public partial string TargetDisplayName { get; private set; } = "No selection";
 
     public ObservableCollection<AnimationResourceScopeEntry> ResourceScopes { get; } = new()
     {
@@ -102,7 +102,7 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
     };
 
     [Reactive]
-    public AnimationResourceScopeEntry SelectedScope { get; set; }
+    public partial AnimationResourceScopeEntry SelectedScope { get; set; }
 
     public ReactiveCommand<Unit, Unit> AddTimelineCommand { get; }
     public ReactiveCommand<Unit, Unit> AddTrackCommand { get; }
@@ -1172,46 +1172,46 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
     }
 }
 
-public sealed class AnimationTimelineViewModel : ReactiveObject
+public sealed partial class AnimationTimelineViewModel : ReactiveObject
 {
     [Reactive]
-    public string Name { get; set; } = string.Empty;
+    public partial string Name { get; set; } = string.Empty;
 
     [Reactive]
-    public string ResourceKey { get; set; } = string.Empty;
+    public partial string ResourceKey { get; set; } = string.Empty;
 
     [Reactive]
-    public double DurationSeconds { get; set; } = 1.0;
+    public partial double DurationSeconds { get; set; } = 1.0;
 
     [Reactive]
-    public double FrameRate { get; set; } = 60.0;
+    public partial double FrameRate { get; set; } = 60.0;
 
     public ObservableCollection<AnimationTrackViewModel> Tracks { get; } = new();
 }
 
-public sealed class AnimationTrackViewModel : ReactiveObject
+public sealed partial class AnimationTrackViewModel : ReactiveObject
 {
     [Reactive]
-    public string PropertyName { get; set; } = string.Empty;
+    public partial string PropertyName { get; set; } = string.Empty;
 
     public ObservableCollection<AnimationKeyframeViewModel> Keyframes { get; } = new();
 }
 
-public sealed class AnimationKeyframeViewModel : ReactiveObject
+public sealed partial class AnimationKeyframeViewModel : ReactiveObject
 {
     public AnimationTrackViewModel? Owner { get; init; }
 
     [Reactive]
-    public double TimeSeconds { get; set; }
+    public partial double TimeSeconds { get; set; }
 
     [Reactive]
-    public string Value { get; set; } = string.Empty;
+    public partial string Value { get; set; } = string.Empty;
 
     [Reactive]
-    public string? Easing { get; set; }
+    public partial string? Easing { get; set; }
 
     [Reactive]
-    public bool IsSelected { get; set; }
+    public partial bool IsSelected { get; set; }
 }
 
 public enum KeyframeSelectionMode
@@ -1221,7 +1221,7 @@ public enum KeyframeSelectionMode
     Range
 }
 
-public sealed class KeyframeSelectionRequest
+public sealed partial class KeyframeSelectionRequest
 {
     public KeyframeSelectionRequest(AnimationKeyframeViewModel keyframe, KeyframeSelectionMode mode, bool additive)
     {
@@ -1269,7 +1269,7 @@ public readonly struct KeyframeRemoval
     public int Index { get; }
 }
 
-public sealed class AnimationResourceScopeEntry
+public sealed partial class AnimationResourceScopeEntry
 {
     public AnimationResourceScopeEntry(AnimationResourceScope scope, string displayName)
     {
@@ -1282,7 +1282,7 @@ public sealed class AnimationResourceScopeEntry
     public string DisplayName { get; }
 }
 
-public sealed class TimelineTickViewModel
+public sealed partial class TimelineTickViewModel
 {
     public TimelineTickViewModel(double timeSeconds, double positionPixels, string label, double height, double opacity, bool isMajor)
     {
@@ -1307,7 +1307,7 @@ public sealed class TimelineTickViewModel
     public bool IsMajor { get; }
 }
 
-public sealed class AnimationResourceEntryViewModel
+public sealed partial class AnimationResourceEntryViewModel
 {
     public AnimationResourceEntryViewModel(AnimationResourceSnapshot snapshot)
     {

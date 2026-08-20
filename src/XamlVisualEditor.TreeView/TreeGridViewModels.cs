@@ -1,14 +1,14 @@
 using System.Collections.ObjectModel;
 using Avalonia.Controls.DataGridHierarchical;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 
 namespace XamlVisualEditor.TreeView;
 
 /// <summary>
 /// ViewModel for the visual tree grid panel.
 /// </summary>
-public sealed class VisualTreeGridViewModel : ReactiveObject
+public sealed partial class VisualTreeGridViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the root items for the hierarchical model.
@@ -24,19 +24,19 @@ public sealed class VisualTreeGridViewModel : ReactiveObject
     /// Gets or sets the selected row in the grid.
     /// </summary>
     [Reactive]
-    public HierarchicalNode? SelectedRow { get; set; }
+    public partial HierarchicalNode? SelectedRow { get; set; }
 
     /// <summary>
     /// Gets the selected node item.
     /// </summary>
     [Reactive]
-    public VisualTreeNodeViewModel? SelectedNode { get; private set; }
+    public partial VisualTreeNodeViewModel? SelectedNode { get; private set; }
 
     /// <summary>
     /// Gets the current root node.
     /// </summary>
     [Reactive]
-    public VisualTreeNodeViewModel? Root { get; private set; }
+    public partial VisualTreeNodeViewModel? Root { get; private set; }
 
     public VisualTreeGridViewModel()
     {
@@ -91,7 +91,7 @@ public sealed class VisualTreeGridViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for the logical tree grid panel.
 /// </summary>
-public sealed class LogicalTreeGridViewModel : ReactiveObject
+public sealed partial class LogicalTreeGridViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the root items for the hierarchical model.
@@ -107,19 +107,19 @@ public sealed class LogicalTreeGridViewModel : ReactiveObject
     /// Gets or sets the selected row in the grid.
     /// </summary>
     [Reactive]
-    public HierarchicalNode? SelectedRow { get; set; }
+    public partial HierarchicalNode? SelectedRow { get; set; }
 
     /// <summary>
     /// Gets the selected node item.
     /// </summary>
     [Reactive]
-    public LogicalTreeNodeViewModel? SelectedNode { get; private set; }
+    public partial LogicalTreeNodeViewModel? SelectedNode { get; private set; }
 
     /// <summary>
     /// Gets the current root node.
     /// </summary>
     [Reactive]
-    public LogicalTreeNodeViewModel? Root { get; private set; }
+    public partial LogicalTreeNodeViewModel? Root { get; private set; }
 
     public LogicalTreeGridViewModel()
     {

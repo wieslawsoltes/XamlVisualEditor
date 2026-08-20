@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.Debugging.DotNetSdkExtension</RootNamespace>
     <Description>.NET SDK debugger integration (vsdbg-based)</Description>
   </PropertyGroup>

@@ -22,7 +22,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="ReactiveUI" />
-    <PackageReference Include="ReactiveUI.Fody" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Extensions.Logging" />
     <PackageReference Include="Serilog.Sinks.Console" />
@@ -32,6 +31,11 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Acp\XamlVisualEditor.Acp.csproj" />
@@ -101,6 +105,26 @@
       <_VscodeCompatHost Include="..\..\tools\VscodeExtensionHost\**\*.*" />
     </ItemGroup>
     <Copy SourceFiles="@(_VscodeCompatHost)" DestinationFolder="$(OutDir)vscode-compat-host\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishPreviewerHost" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+    <PropertyGroup>
+      <_PreviewerHostPublishDirectory>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)previewer-host-publish/'))</_PreviewerHostPublishDirectory>
+    </PropertyGroup>
+    <MSBuild Projects="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(_PreviewerHostPublishDirectory)" />
+    <ItemGroup>
+      <_PublishedPreviewerHost Include="$(_PreviewerHostPublishDirectory)*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PublishedPreviewerHost)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishVscodeCompatHost" AfterTargets="Publish">
+    <ItemGroup>
+      <_PublishedVscodeCompatHost Include="..\..\tools\VscodeExtensionHost\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PublishedVscodeCompatHost)" DestinationFolder="$(PublishDir)vscode-compat-host\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

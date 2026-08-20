@@ -1,0 +1,40 @@
+<Project>
+  <Target Name="SetPackageReleaseNotes" BeforeTargets="GenerateNuspec">
+    <PropertyGroup>
+      <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">https://github.com/wieslawsoltes/XamlVisualEditor/releases/tag/v$(PackageVersion)</PackageReleaseNotes>
+    </PropertyGroup>
+  </Target>
+
+  <PropertyGroup Condition="'$(IsXveExtension)' == 'true'">
+    <XveExtensionName Condition="'$(XveExtensionName)' == ''">$(MSBuildProjectName)</XveExtensionName>
+    <XveExtensionDisplayName Condition="'$(XveExtensionDisplayName)' == ''">$(MSBuildProjectName)</XveExtensionDisplayName>
+    <XveExtensionPublisher Condition="'$(XveExtensionPublisher)' == ''">wieslawsoltes</XveExtensionPublisher>
+    <XveExtensionMain Condition="'$(XveExtensionMain)' == ''">lib/$(TargetFramework)/$(AssemblyName).dll</XveExtensionMain>
+    <_XveExtensionManifestPath>$(IntermediateOutputPath)xve.extension.json</_XveExtensionManifestPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsXveExtension)' == 'true'">
+    <None Include="$(_XveExtensionManifestPath)" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="GenerateXveExtensionManifest"
+          BeforeTargets="GenerateNuspec"
+          Condition="'$(IsXveExtension)' == 'true'">
+    <ItemGroup>
+      <_XveExtensionManifestLine Include="{" />
+      <_XveExtensionManifestLine Include="  &quot;name&quot;: &quot;$(XveExtensionName)&quot;," />
+      <_XveExtensionManifestLine Include="  &quot;displayName&quot;: &quot;$(XveExtensionDisplayName)&quot;," />
+      <_XveExtensionManifestLine Include="  &quot;publisher&quot;: &quot;$(XveExtensionPublisher)&quot;," />
+      <_XveExtensionManifestLine Include="  &quot;version&quot;: &quot;$(PackageVersion)&quot;," />
+      <_XveExtensionManifestLine Include="  &quot;engines&quot;: { &quot;xve&quot;: &quot;^$(PackageVersion)&quot; }," />
+      <_XveExtensionManifestLine Include="  &quot;main&quot;: &quot;$(XveExtensionMain)&quot;," />
+      <_XveExtensionManifestLine Include="  &quot;activationEvents&quot;: [ &quot;onStartupFinished&quot; ]" />
+      <_XveExtensionManifestLine Include="}" />
+    </ItemGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(_XveExtensionManifestPath)"
+                      Lines="@(_XveExtensionManifestLine)"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+  </Target>
+</Project>

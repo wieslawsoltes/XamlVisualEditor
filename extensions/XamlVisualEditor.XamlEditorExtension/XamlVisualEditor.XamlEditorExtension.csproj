@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.XamlEditorExtension</RootNamespace>
     <Description>XAML editor extension contributing property editor metadata</Description>
   </PropertyGroup>

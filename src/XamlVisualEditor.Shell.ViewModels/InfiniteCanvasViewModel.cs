@@ -14,22 +14,22 @@ using Dock.Model.Core.Events;
 using Dock.Model.ReactiveUI.Controls;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Shell;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed record CanvasDropInfo(double X, double Y, IReadOnlyList<string> Paths);
+public sealed partial record CanvasDropInfo(double X, double Y, IReadOnlyList<string> Paths);
 
-public sealed record OpenDocumentEntry(IEditorDocumentViewModel Document)
+public sealed partial record OpenDocumentEntry(IEditorDocumentViewModel Document)
 {
     public string FilePath => Document.FilePath;
 
     public string DisplayName => Document.FileName;
 }
 
-public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
+public sealed partial class InfiniteCanvasViewModel : ReactiveObject, IDisposable
 {
     private const double DefaultDocumentWidth = 520;
     private const double DefaultDocumentHeight = 360;
@@ -106,7 +106,7 @@ public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> AddAllOpenDocumentsCommand { get; }
 
     [Reactive]
-    public OpenDocumentEntry? SelectedOpenDocument { get; set; }
+    public partial OpenDocumentEntry? SelectedOpenDocument { get; set; }
 
     public void Dispose()
     {
@@ -405,9 +405,9 @@ public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
         return SupportedExtensions.Contains(extension);
     }
 
-    private sealed record MdiCanvasLayoutState(IReadOnlyList<MdiCanvasItemState> Items);
+    private sealed partial record MdiCanvasLayoutState(IReadOnlyList<MdiCanvasItemState> Items);
 
-    private sealed record MdiCanvasItemState(
+    private sealed partial record MdiCanvasItemState(
         string FilePath,
         double X,
         double Y,
