@@ -1,10 +1,10 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using XamlVisualEditor.Core;
+using XamlVisualEditor.Workspace;
 using Xunit;
 
 namespace XamlVisualEditor.Tests.Integration;
@@ -18,7 +18,7 @@ public sealed class PreviewerLaunchTests
         string appProjectPath = Path.Combine(repoRoot, "src", "XamlVisualEditor.App", "XamlVisualEditor.App.csproj");
         string xamlFilePath = Path.Combine(repoRoot, "src", "XamlVisualEditor.App", "MainWindow.axaml");
 
-        BuildProject(appProjectPath);
+        await BuildProjectAsync(appProjectPath);
 
         string? outputAssemblyPath = FindOutputAssembly(Path.GetDirectoryName(appProjectPath)!);
         Assert.False(string.IsNullOrWhiteSpace(outputAssemblyPath));
@@ -76,28 +76,23 @@ public sealed class PreviewerLaunchTests
         throw new DirectoryNotFoundException("Failed to locate repository root.");
     }
 
-    private static void BuildProject(string projectPath)
+    private static async Task BuildProjectAsync(string projectPath)
     {
-        ProcessStartInfo startInfo = new()
+        DotNetCliRunner dotNetCli = new();
+        DotNetCliResult result = await dotNetCli.RunAsync(
+            new[]
+            {
+                "build",
+                projectPath,
+                "-c",
+                "Debug"
+            },
+            Path.GetDirectoryName(projectPath));
+
+        if (!result.Success)
         {
-            FileName = "dotnet",
-            Arguments = $"build \"{projectPath}\" -c Debug",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using Process process = new() { StartInfo = startInfo };
-        process.Start();
-
-        string stdOut = process.StandardOutput.ReadToEnd();
-        string stdErr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"dotnet build failed: {stdErr}\n{stdOut}");
+            throw new InvalidOperationException(
+                $"dotnet build failed: {result.StandardError}\n{result.StandardOutput}");
         }
     }
 

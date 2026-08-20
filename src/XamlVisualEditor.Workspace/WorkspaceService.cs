@@ -112,7 +112,12 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
+    public Task<WorkspaceModel> LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
+    {
+        return Task.Run(() => LoadSolutionCoreAsync(solutionPath, ct), ct);
+    }
+
+    private async Task<WorkspaceModel> LoadSolutionCoreAsync(string solutionPath, CancellationToken ct)
     {
         string? previousDirectory = Directory.GetCurrentDirectory();
         string? workspaceDirectory = Path.GetDirectoryName(solutionPath);
@@ -131,7 +136,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             _logger.LogInformation("Loading solution: {Path}", solutionPath);
             Progress<ProjectLoadProgress> progress = new(p =>
                 _logger.LogInformation("Workspace load: {Progress}", FormatProgress(p)));
-            _solution = await _workspace.OpenSolutionAsync(solutionPath, progress, ct);
+            _solution = await _workspace.OpenSolutionAsync(solutionPath, progress, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -210,7 +215,12 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default)
+    public Task<WorkspaceModel> LoadProjectAsync(string projectPath, CancellationToken ct = default)
+    {
+        return Task.Run(() => LoadProjectCoreAsync(projectPath, ct), ct);
+    }
+
+    private async Task<WorkspaceModel> LoadProjectCoreAsync(string projectPath, CancellationToken ct)
     {
         string? previousDirectory = Directory.GetCurrentDirectory();
         string? workspaceDirectory = Path.GetDirectoryName(projectPath);
@@ -230,7 +240,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             _logger.LogInformation("Loading project: {Path}", projectPath);
             Progress<ProjectLoadProgress> progress = new(p =>
                 _logger.LogInformation("Workspace load: {Progress}", FormatProgress(p)));
-            project = await _workspace.OpenProjectAsync(projectPath, progress, ct);
+            project = await _workspace.OpenProjectAsync(projectPath, progress, ct).ConfigureAwait(false);
         }
         finally
         {

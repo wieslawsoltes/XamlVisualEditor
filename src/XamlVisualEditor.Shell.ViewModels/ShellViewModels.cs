@@ -2092,6 +2092,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     private readonly IWorkspaceService? _workspaceService;
     private readonly IWorkspaceInfoUpdater? _workspaceInfoUpdater;
     private readonly ITypeMetadataService? _metadataService;
+    private readonly IDotNetCli _dotNetCli;
     private readonly ILanguageIntellisenseRegistry? _languageRegistry;
     private readonly PreviewerLaunchService _previewerLaunchService = new();
     private readonly IDebuggerServiceRegistry _debuggerRegistry;
@@ -2435,6 +2436,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     public bool IsWorkspaceLoading { get; private set; }
 
     /// <summary>
+    /// Gets whether a workspace restore, build, rebuild, or clean command is running.
+    /// </summary>
+    [Reactive]
+    public bool IsWorkspaceCommandRunning { get; private set; }
+
+    /// <summary>
     /// Interaction for opening a file dialog.
     /// </summary>
     public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
@@ -2622,11 +2629,13 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IExtensionManager? extensionManager = null,
         ILogger<MainWindowViewModel>? logger = null,
         ILoggerFactory? loggerFactory = null,
-        ISystemIconService? systemIconService = null)
+        ISystemIconService? systemIconService = null,
+        IDotNetCli? dotNetCli = null)
     {
         _workspaceService = workspaceService;
         _workspaceInfoUpdater = workspaceInfoUpdater;
         _metadataService = metadataService;
+        _dotNetCli = dotNetCli ?? new DotNetCliRunner();
         _languageRegistry = languageRegistry;
         _debuggerRegistry = debuggerRegistry ?? new DebuggerServiceRegistry();
         InitializeDebuggerServices();
@@ -3060,6 +3069,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 this.WhenAnyValue(x => x.ActiveDesignerDocument).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.ActiveTextDocument).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.HasWorkspace).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.IsWorkspaceLoading).Select(_ => Unit.Default),
+                this.WhenAnyValue(x => x.IsWorkspaceCommandRunning).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.CanNavigateBack).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.CanNavigateForward).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.IsRunActive).Select(_ => Unit.Default),
@@ -4813,6 +4824,15 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             case "hasworkspace":
             case "workspace.loaded":
                 value = HasWorkspace;
+                return true;
+            case "workspace.loading":
+                value = IsWorkspaceLoading;
+                return true;
+            case "workspace.commandrunning":
+                value = IsWorkspaceCommandRunning;
+                return true;
+            case "workspace.busy":
+                value = IsWorkspaceLoading || IsWorkspaceCommandRunning;
                 return true;
             case "cannavigateback":
             case "navigation.cannavigateback":
@@ -6704,13 +6724,23 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }
     }
 
-    private async System.Threading.Tasks.Task LoadWorkspaceAsync(string workspacePath)
+    private async System.Threading.Tasks.Task LoadWorkspaceAsync(
+        string workspacePath,
+        CancellationToken cancellationToken = default)
     {
         if (_workspaceService is null || _metadataService is null)
         {
             StatusText = "Workspace services are unavailable";
             return;
         }
+
+        if (IsWorkspaceLoading || IsWorkspaceCommandRunning)
+        {
+            StatusText = "A workspace operation is already running";
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         string extension = System.IO.Path.GetExtension(workspacePath);
         string workspaceName = System.IO.Path.GetFileName(workspacePath);
@@ -6725,8 +6755,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             {
                 workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
                             extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
-                    ? await _workspaceService.LoadSolutionAsync(workspacePath)
-                    : await _workspaceService.LoadProjectAsync(workspacePath);
+                    ? await _workspaceService.LoadSolutionAsync(workspacePath, cancellationToken)
+                    : await _workspaceService.LoadProjectAsync(workspacePath, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -6756,8 +6786,8 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 out hasMissingProjectOutputs);
             if (!hasAnyProjectOutputs || hasMissingProjectOutputs)
             {
-                await RunDotNetCommandAsync(workspacePath, "restore");
-                await RunDotNetCommandAsync(workspacePath, "build");
+                await RunDotNetCommandAsync(workspacePath, "restore", cancellationToken: cancellationToken);
+                await RunDotNetCommandAsync(workspacePath, "build", cancellationToken: cancellationToken);
                 assemblySet = CollectWorkspaceAssemblies(
                     workspace,
                     out hasAnyProjectOutputs,
@@ -6918,58 +6948,54 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         return null;
     }
 
-    private async System.Threading.Tasks.Task RunDotNetCommandAsync(string workspacePath, string command)
+    private async System.Threading.Tasks.Task<bool> RunDotNetCommandAsync(
+        string workspacePath,
+        string command,
+        string? option = null,
+        CancellationToken cancellationToken = default)
     {
         string? workingDirectory = System.IO.Path.GetDirectoryName(workspacePath);
         if (string.IsNullOrEmpty(workingDirectory))
         {
-            return;
+            return false;
         }
 
-        LogOutput("Info", $"dotnet {command} {workspacePath}");
-
-        System.Diagnostics.ProcessStartInfo startInfo = new()
+        List<string> arguments = new(3)
         {
-            FileName = "dotnet",
-            Arguments = $"{command} \"{workspacePath}\"",
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
+            command,
+            workspacePath
         };
-
-        using System.Diagnostics.Process process = new() { StartInfo = startInfo };
-        try
+        if (!string.IsNullOrWhiteSpace(option))
         {
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Failed to run dotnet {Command}: {Message}", command, ex.Message);
-            StatusText = $"dotnet {command} failed";
-            LogOutput("Error", $"dotnet {command} failed: {ex.Message}");
-            return;
+            arguments.Add(option);
         }
 
-        string stdOut = await process.StandardOutput.ReadToEndAsync();
-        string stdErr = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        string displayCommand = string.IsNullOrWhiteSpace(option) ? command : $"{command} {option}";
+        LogOutput("Info", $"dotnet {displayCommand} {workspacePath}");
+        DotNetCliResult result = await _dotNetCli.RunAsync(arguments, workingDirectory, cancellationToken);
 
-        if (process.ExitCode != 0)
+        if (!result.Success)
         {
-            _logger.LogWarning("dotnet {Command} failed: {Error}", command, stdErr);
-            StatusText = $"dotnet {command} failed";
-            if (!string.IsNullOrWhiteSpace(stdErr))
+            string error = !string.IsNullOrWhiteSpace(result.StandardError)
+                ? result.StandardError
+                : result.StandardOutput;
+            _logger.LogWarning("dotnet {Command} failed: {Error}", displayCommand, error);
+            StatusText = $"dotnet {displayCommand} failed";
+            if (!string.IsNullOrWhiteSpace(error))
             {
-                LogOutput("Error", stdErr.Trim());
+                LogOutput("Error", error.Trim());
             }
+
+            return false;
         }
-        else if (!string.IsNullOrWhiteSpace(stdOut))
+
+        if (!string.IsNullOrWhiteSpace(result.StandardOutput))
         {
-            _logger.LogInformation("{Output}", stdOut);
-            LogOutput("Info", stdOut.Trim());
+            _logger.LogInformation("{Output}", result.StandardOutput);
+            LogOutput("Info", result.StandardOutput.Trim());
         }
+
+        return true;
     }
 
     private void LogOutput(string level, string message)
@@ -7023,7 +7049,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             xamlText,
             _workspace,
             _workspacePath,
-            RunWorkspaceCommandAsync,
+            command => RunWorkspaceCommandAsync(command),
             (level, message) => LogOutput(level, message));
 
         if (result.Success)
@@ -7198,7 +7224,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return Task.CompletedTask;
         }
 
-        return LoadWorkspaceAsync(_workspacePath);
+        return LoadWorkspaceAsync(_workspacePath, cancellationToken);
     }
 
     Task IWorkspaceCommands.RestoreWorkspaceAsync(CancellationToken cancellationToken)
@@ -7208,7 +7234,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
         }
 
-        return RunWorkspaceCommandAsync("restore");
+        return RunWorkspaceCommandAsync("restore", cancellationToken: cancellationToken);
     }
 
     Task IWorkspaceCommands.BuildWorkspaceAsync(CancellationToken cancellationToken)
@@ -7218,7 +7244,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
         }
 
-        return RunWorkspaceCommandAsync("build");
+        return RunWorkspaceCommandAsync("build", cancellationToken: cancellationToken);
     }
 
     Task IWorkspaceCommands.RebuildWorkspaceAsync(CancellationToken cancellationToken)
@@ -7228,7 +7254,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
         }
 
-        return RunWorkspaceCommandAsync("build -t:Rebuild");
+        return RunWorkspaceCommandAsync("build", "-t:Rebuild", cancellationToken);
     }
 
     Task IWorkspaceCommands.CleanWorkspaceAsync(CancellationToken cancellationToken)
@@ -7238,7 +7264,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             return System.Threading.Tasks.Task.FromCanceled(cancellationToken);
         }
 
-        return RunWorkspaceCommandAsync("clean");
+        return RunWorkspaceCommandAsync("clean", cancellationToken: cancellationToken);
     }
 
     Task IWorkspaceCommands.SetStartupProjectAsync(string projectPath, string? targetFramework, CancellationToken cancellationToken)
@@ -7346,36 +7372,60 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     Task IWorkspaceCommands.NewTerminalAsync(CancellationToken cancellationToken) =>
         ExecuteReactiveCommandAsync(NewTerminalCommand, cancellationToken);
 
-    private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(string command)
+    private async System.Threading.Tasks.Task RunWorkspaceCommandAsync(
+        string command,
+        string? option = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_workspacePath) || _workspace is null)
         {
             return;
         }
 
-        StatusText = $"Running dotnet {command}...";
-        await RunDotNetCommandAsync(_workspacePath, command);
-
-        if (_metadataService is null)
+        if (IsWorkspaceLoading || IsWorkspaceCommandRunning)
         {
+            StatusText = "A workspace operation is already running";
             return;
         }
 
-        bool hasAnyProjectOutputs;
-        bool hasMissingProjectOutputs;
-        WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
-            _workspace,
-            out hasAnyProjectOutputs,
-            out hasMissingProjectOutputs);
+        cancellationToken.ThrowIfCancellationRequested();
+        string displayCommand = string.IsNullOrWhiteSpace(option) ? command : $"{command} {option}";
+        StatusText = $"Running dotnet {displayCommand}...";
+        IsWorkspaceCommandRunning = true;
 
-        if (assemblySet.All.Count > 0)
+        try
         {
-            ApplyAssemblyResolver(assemblySet);
-            _metadataService.LoadAssemblies(assemblySet.All);
-            UpdateWorkspaceDesignThemes(_workspace);
-            RefreshOpenDocumentsAfterMetadataLoad();
+            bool success = await RunDotNetCommandAsync(
+                _workspacePath,
+                command,
+                option,
+                cancellationToken);
+            if (!success || _metadataService is null)
+            {
+                return;
+            }
+
+            bool hasAnyProjectOutputs;
+            bool hasMissingProjectOutputs;
+            WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
+                _workspace,
+                out hasAnyProjectOutputs,
+                out hasMissingProjectOutputs);
+
+            if (assemblySet.All.Count > 0)
+            {
+                ApplyAssemblyResolver(assemblySet);
+                _metadataService.LoadAssemblies(assemblySet.All);
+                UpdateWorkspaceDesignThemes(_workspace);
+                RefreshOpenDocumentsAfterMetadataLoad();
+            }
+            LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+            StatusText = $"dotnet {displayCommand} completed";
         }
-        LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+        finally
+        {
+            IsWorkspaceCommandRunning = false;
+        }
     }
 
     // Feeds the design-surface theme registry from the workspace application's

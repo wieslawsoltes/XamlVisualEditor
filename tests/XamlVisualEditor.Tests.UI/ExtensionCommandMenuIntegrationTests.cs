@@ -126,6 +126,44 @@ public sealed class ExtensionCommandMenuIntegrationTests
         Assert.True(await host.CanExecuteAsync(startDebugCommand));
     }
 
+    [AvaloniaFact]
+    public async Task Workspace_Menu_Commands_Track_Loaded_And_Busy_State()
+    {
+        using ExtensionMenuTestHost host = new();
+        await host.ActivateAsync();
+
+        string[] commandIds =
+        {
+            "workspace.load",
+            "workspace.restore",
+            "workspace.build",
+            "workspace.rebuild",
+            "workspace.clean"
+        };
+
+        foreach (string commandId in commandIds)
+        {
+            ExtensionMenuItemViewModel item = await host.GetMenuItemAsync(host.ViewModel.WorkspaceMenuItems, commandId);
+            Assert.False(item.IsEnabled);
+        }
+
+        await host.SetWorkspaceLoadedAsync("/tmp/Test.sln");
+
+        foreach (string commandId in commandIds)
+        {
+            ExtensionMenuItemViewModel item = await host.GetMenuItemAsync(host.ViewModel.WorkspaceMenuItems, commandId);
+            Assert.True(item.IsEnabled);
+        }
+
+        await host.SetWorkspaceCommandRunningAsync(true);
+
+        foreach (string commandId in commandIds)
+        {
+            ExtensionMenuItemViewModel item = await host.GetMenuItemAsync(host.ViewModel.WorkspaceMenuItems, commandId);
+            Assert.False(item.IsEnabled);
+        }
+    }
+
     private sealed class ExtensionMenuTestHost : IDisposable
     {
         private readonly IWorkspaceService _workspaceService = new StubWorkspaceService();
@@ -310,6 +348,19 @@ public sealed class ExtensionCommandMenuIntegrationTests
                     .GetProperty(nameof(MainWindowViewModel.HasWorkspace))!
                     .GetSetMethod(nonPublic: true)!
                     .Invoke(ViewModel, new object[] { true });
+            }, DispatcherPriority.Background);
+
+            await FlushAsync();
+        }
+
+        public async Task SetWorkspaceCommandRunningAsync(bool value)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                typeof(MainWindowViewModel)
+                    .GetProperty(nameof(MainWindowViewModel.IsWorkspaceCommandRunning))!
+                    .GetSetMethod(nonPublic: true)!
+                    .Invoke(ViewModel, new object[] { value });
             }, DispatcherPriority.Background);
 
             await FlushAsync();
