@@ -6,6 +6,7 @@
     <Description>Extension SDK contracts, hosting services, manifests, permissions, and built-in extension infrastructure</Description>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.Reactive" />
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />
   </ItemGroup>
 </Project>

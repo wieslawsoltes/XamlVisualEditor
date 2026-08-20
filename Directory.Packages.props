@@ -20,14 +20,14 @@
     <!-- Dock 12.1 and ReactiveUI.Avalonia 12.1 require the breaking ReactiveUI 24/System.Reactive 7 cohort. -->
     <!-- Keep these versions aligned until the routing and command API migration is completed together. -->
     <!-- Dock -->
-    <PackageVersion Include="Dock.Avalonia" Version="12.0.0.2" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.0.0.2" />
-    <PackageVersion Include="Dock.Model.ReactiveUI" Version="12.0.0.2" />
-    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="12.0.0.2" />
+    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.4" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.4" />
+    <PackageVersion Include="Dock.Model.ReactiveUI" Version="12.1.0.4" />
+    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="12.1.0.4" />
     <!-- ReactiveUI -->
-    <PackageVersion Include="ReactiveUI" Version="23.2.28" />
+    <PackageVersion Include="ReactiveUI" Version="24.1.0" />
     <PackageVersion Include="ReactiveUI.SourceGenerators" Version="3.2.0" />
-    <PackageVersion Include="ReactiveUI.Avalonia" Version="12.0.3" />
+    <PackageVersion Include="ReactiveUI.Avalonia" Version="12.1.1" />
     <!-- MSBuild / Roslyn -->
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <!-- Match the Microsoft.Build runtime shipped by the selected .NET 10 SDK. -->
@@ -54,7 +54,7 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <!-- System.Reactive -->
-    <PackageVersion Include="System.Reactive" Version="6.1.0" />
+    <PackageVersion Include="System.Reactive" Version="7.0.0" />
     <!-- Xaml.Behaviors -->
     <PackageVersion Include="Xaml.Behaviors.Avalonia" Version="12.0.6" />
   </ItemGroup>
