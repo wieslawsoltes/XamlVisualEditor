@@ -9,12 +9,20 @@ namespace XamlVisualEditor.Tests.Integration;
 
 public sealed class ExtensionHostSpikeTests
 {
+#if DEBUG
+    private const string BuildConfiguration = "Debug";
+#else
+    private const string BuildConfiguration = "Release";
+#endif
+
     [Fact]
     public async Task HostAndExtensionCommunicate()
     {
         string repoRoot = FindRepoRoot();
-        string hostPath = ResolveExecutablePath(repoRoot, "tools/ExtensionHostSpike/ExtensionHostSpike.Host/bin/Debug/net10.0/ExtensionHostSpike.Host");
-        string extensionPath = ResolveExecutablePath(repoRoot, "tools/ExtensionHostSpike/ExtensionHostSpike.Extension/bin/Debug/net10.0/ExtensionHostSpike.Extension");
+        string hostPath = ResolveExecutablePath(repoRoot, Path.Combine(
+            "tools", "ExtensionHostSpike", "ExtensionHostSpike.Host", "bin", BuildConfiguration, "net10.0", "ExtensionHostSpike.Host"));
+        string extensionPath = ResolveExecutablePath(repoRoot, Path.Combine(
+            "tools", "ExtensionHostSpike", "ExtensionHostSpike.Extension", "bin", BuildConfiguration, "net10.0", "ExtensionHostSpike.Extension"));
 
         Assert.True(File.Exists(hostPath), "Host executable not found: " + hostPath);
         Assert.True(File.Exists(extensionPath), "Extension executable not found: " + extensionPath);
