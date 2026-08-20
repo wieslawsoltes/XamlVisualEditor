@@ -130,6 +130,22 @@ public sealed class WorkspaceExtension : IXveExtension
     private void RegisterCommandMetadata(ExtensionContext context)
     {
         context.Subscriptions.Add(context.CommandMetadata.Register(
+            LoadCommandId,
+            new CommandMetadata("Workspace: Reload", "Workspace", When: "hasWorkspace && !workspace.busy", Priority: 0)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            RestoreCommandId,
+            new CommandMetadata("Workspace: Restore", "Workspace", When: "hasWorkspace && !workspace.busy", Priority: 10)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            BuildCommandId,
+            new CommandMetadata("Workspace: Build", "Workspace", When: "hasWorkspace && !workspace.busy", Priority: 20)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            RebuildCommandId,
+            new CommandMetadata("Workspace: Rebuild", "Workspace", When: "hasWorkspace && !workspace.busy", Priority: 30)));
+        context.Subscriptions.Add(context.CommandMetadata.Register(
+            CleanCommandId,
+            new CommandMetadata("Workspace: Clean", "Workspace", When: "hasWorkspace && !workspace.busy", Priority: 40)));
+
+        context.Subscriptions.Add(context.CommandMetadata.Register(
             UndoCommandId,
             new CommandMetadata("Edit: Undo", "Edit", When: "hasActiveDocument", Keybinding: "Ctrl+Z", Priority: 0)));
         context.Subscriptions.Add(context.CommandMetadata.Register(

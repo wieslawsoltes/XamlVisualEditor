@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -31,6 +33,8 @@ public interface IDotNetCli
 
 public sealed class DotNetCliRunner : IDotNetCli
 {
+    private static readonly TimeSpan OutputDrainTimeout = TimeSpan.FromSeconds(1);
+
     public async Task<DotNetCliResult> RunAsync(IReadOnlyList<string> args, string? workingDirectory, CancellationToken ct = default)
     {
         ProcessStartInfo startInfo = new()
@@ -57,8 +61,9 @@ public sealed class DotNetCliRunner : IDotNetCli
             using Process process = new() { StartInfo = startInfo };
             process.Start();
 
-            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+            using CancellationTokenSource outputCancellation = new();
+            Task<string> outputTask = ReadOutputAsync(process.StandardOutput, outputCancellation.Token);
+            Task<string> errorTask = ReadOutputAsync(process.StandardError, outputCancellation.Token);
 
             using CancellationTokenRegistration registration = ct.Register(() =>
             {
@@ -74,15 +79,77 @@ public sealed class DotNetCliRunner : IDotNetCli
                 }
             });
 
-            await process.WaitForExitAsync(ct);
+            try
+            {
+                await process.WaitForExitAsync(ct).ConfigureAwait(false);
+                await WaitForOutputAsync(outputTask, errorTask, outputCancellation).ConfigureAwait(false);
 
-            string standardOutput = await outputTask;
-            string standardError = await errorTask;
-            return new DotNetCliResult(process.ExitCode, standardOutput, standardError);
+                string standardOutput = await outputTask.ConfigureAwait(false);
+                string standardError = await errorTask.ConfigureAwait(false);
+                return new DotNetCliResult(process.ExitCode, standardOutput, standardError);
+            }
+            finally
+            {
+                outputCancellation.Cancel();
+                await ObserveOutputTasksAsync(outputTask, errorTask).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             return new DotNetCliResult(-1, string.Empty, ex.Message);
+        }
+    }
+
+    private static async Task<string> ReadOutputAsync(StreamReader reader, CancellationToken ct)
+    {
+        char[] buffer = new char[4096];
+        StringBuilder output = new();
+
+        try
+        {
+            while (true)
+            {
+                int read = await reader.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                output.Append(buffer, 0, read);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+
+        return output.ToString();
+    }
+
+    private static async Task WaitForOutputAsync(
+        Task<string> outputTask,
+        Task<string> errorTask,
+        CancellationTokenSource outputCancellation)
+    {
+        Task outputTasks = Task.WhenAll(outputTask, errorTask);
+        try
+        {
+            await outputTasks.WaitAsync(OutputDrainTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            outputCancellation.Cancel();
+            await outputTasks.ConfigureAwait(false);
+        }
+    }
+
+    private static async Task ObserveOutputTasksAsync(Task<string> outputTask, Task<string> errorTask)
+    {
+        try
+        {
+            await Task.WhenAll(outputTask, errorTask).ConfigureAwait(false);
+        }
+        catch
+        {
         }
     }
 }
