@@ -241,7 +241,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
             .Throttle(TimeSpan.FromMilliseconds(300))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => OnTextChanged());
         _disposables.Add(textChangedSubscription);
 
@@ -250,7 +250,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
                 h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
         _disposables.Add(semanticTokensSubscription);
 
@@ -265,14 +265,14 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
         // Subscribe to sync events to receive AST→text updates
         IDisposable syncSubscription = _syncEngine.SyncEvents
             .Where(e => e.Source == SyncSource.DesignSurface || e.Source == SyncSource.Collaboration)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(OnSyncEvent);
         _disposables.Add(syncSubscription);
 
         // Map caret offset to line/column and AST node
         IDisposable caretSubscription = this.WhenAnyValue(x => x.CaretOffset)
             .Throttle(TimeSpan.FromMilliseconds(100))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(offset => UpdateCaretPosition(offset));
         _disposables.Add(caretSubscription);
 
@@ -478,7 +478,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             await _languageService.GetDiagnosticsAsync(context, ct).ConfigureAwait(false);
         IReadOnlyList<XamlDiagnostic> mapped = MapDiagnostics(diagnostics);
 
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             Diagnostics.Clear();
             foreach (XamlDiagnostic diagnostic in mapped)
@@ -503,7 +503,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             ? await _languageService.GetSemanticTokensAsync(context, ct).ConfigureAwait(false)
             : await _semanticLanguageService.GetSemanticTokensAsync(context, ct).ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             SemanticTokenColorizer.UpdateTokens(tokens);
             SemanticTokenVersion++;

@@ -108,7 +108,7 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
     {
         IReadOnlyList<LspServerSettings> servers = await _host.LoadServersAsync(CancellationToken.None).ConfigureAwait(false);
 
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             Servers.Clear();
             foreach (LspServerSettings server in servers)
@@ -130,7 +130,7 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
 
         await _host.SaveServersAsync(servers, CancellationToken.None).ConfigureAwait(false);
 
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             StatusText = "LSP settings saved. Restart required.";
             RequiresRestart = true;
@@ -140,7 +140,7 @@ public sealed class LspSettingsPanelViewModel : ReactiveObject, IDisposable
 
     private void OnHostChanged(object? sender, LspSettingsChangedEventArgs e)
     {
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             Servers.Clear();
             foreach (LspServerSettings server in e.Servers)

@@ -20,14 +20,12 @@
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
+    <Panel>
     <DockPanel>
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
-                <MenuItem Header="_New">
-                    <MenuItem.ItemsSource>
-                        <CompiledBinding Path="FileNewMenuEntries" />
-                    </MenuItem.ItemsSource>
+                <MenuItem Header="_New" ItemsSource="{CompiledBinding FileNewMenuEntries}">
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
@@ -38,10 +36,7 @@
                     </MenuItem.ItemTemplate>
                 </MenuItem>
                 <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
-                <MenuItem Header="Open _Recent">
-                    <MenuItem.ItemsSource>
-                        <CompiledBinding Path="RecentFiles" />
-                    </MenuItem.ItemsSource>
+                <MenuItem Header="Open _Recent" ItemsSource="{CompiledBinding RecentFiles}">
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:RecentFileEntry">
                             <MenuItem ToolTip.Tip="{CompiledBinding FilePath}"
@@ -310,8 +305,8 @@
                     <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="Ln {0}, Col {1}">
-                                <CompiledBinding Path="ActiveLine" FallbackValue="1" />
-                                <CompiledBinding Path="ActiveColumn" FallbackValue="1" />
+                                <Binding Path="ActiveLine" FallbackValue="1" />
+                                <Binding Path="ActiveColumn" FallbackValue="1" />
                             </MultiBinding>
                         </TextBlock.Text>
                     </TextBlock>
@@ -328,4 +323,29 @@
             Layout="{CompiledBinding DockLayout}"
             Factory="{CompiledBinding DockFactory}" />
     </DockPanel>
+
+    <!-- Busy overlay while a workspace is loading -->
+    <Border IsVisible="{CompiledBinding IsWorkspaceLoading}"
+            Background="#A0000000"
+            ZIndex="100">
+        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                CornerRadius="8"
+                Padding="24,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                MinWidth="320">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Loading workspace..."
+                           FontSize="14"
+                           FontWeight="SemiBold" />
+                <ProgressBar IsIndeterminate="True" />
+                <TextBlock Text="{CompiledBinding StatusText}"
+                           FontSize="12"
+                           Opacity="0.8"
+                           TextWrapping="Wrap"
+                           MaxWidth="420" />
+            </StackPanel>
+        </Border>
+    </Border>
+    </Panel>
 </Window>

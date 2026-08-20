@@ -110,6 +110,41 @@ internal static class ProjectSelection
             selected = selected is null ? project : ChoosePreferredProject(selected, project);
         }
 
+        // SDK-style projects glob their XAML implicitly, so the explicit item lists
+        // may not contain the file. Fall back to the project whose directory is the
+        // closest ancestor of the file path.
+        if (selected is null)
+        {
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(filePath);
+            }
+            catch
+            {
+                return null;
+            }
+
+            int bestMatchLength = -1;
+            foreach (ProjectModel project in workspace.Projects)
+            {
+                string? projectDir = Path.GetDirectoryName(project.ProjectPath);
+                if (string.IsNullOrEmpty(projectDir))
+                {
+                    continue;
+                }
+
+                string normalizedDir = Path.GetFullPath(projectDir)
+                    .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (fullPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase)
+                    && normalizedDir.Length > bestMatchLength)
+                {
+                    bestMatchLength = normalizedDir.Length;
+                    selected = project;
+                }
+            }
+        }
+
         return selected;
     }
 

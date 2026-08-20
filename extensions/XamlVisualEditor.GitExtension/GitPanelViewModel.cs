@@ -310,13 +310,13 @@ public sealed class GitPanelViewModel : ReactiveObject, IDisposable
 
         IDisposable searchSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyFilter());
         _disposables.Add(searchSubscription);
 
         IDisposable refreshSubscription = _refreshRequests
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => RefreshCommand.Execute().Subscribe());
         _disposables.Add(refreshSubscription);
 

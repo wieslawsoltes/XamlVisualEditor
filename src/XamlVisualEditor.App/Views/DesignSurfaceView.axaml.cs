@@ -3,8 +3,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Serilog;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Collections;
@@ -48,6 +50,9 @@ public sealed partial class DesignSurfaceView : UserControl
     private DesignAdornerLayer? _adornerLayer;
     private ScrollViewer? _scrollViewer;
     private Border? _surfaceBorder;
+    private int _appliedWorkspaceThemeVersion = -1;
+    private readonly List<IStyle> _workspaceThemeStyles = new();
+    private readonly List<IResourceProvider> _workspaceThemeResources = new();
     private RulerControl? _horizontalRuler;
     private RulerControl? _verticalRuler;
     private IDesignItem? _hoveredItem;
@@ -909,7 +914,8 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        Design.ApplyDesignModeProperties(tree, tree);
+        ApplyDesignModeProperties(tree);
+        ApplyWorkspaceThemes(canvas);
 
         canvas.Children.Add(tree);
         _rootControl = tree;
@@ -2773,6 +2779,89 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         return item;
+    }
+
+    // Applies the workspace application's themes and resource includes to the design
+    // canvas so instantiated third-party controls (workspace assemblies) find their
+    // control themes and DynamicResource brushes.
+    private void ApplyWorkspaceThemes(Panel canvas)
+    {
+        if (_appliedWorkspaceThemeVersion == WorkspaceDesignThemeRegistry.Version)
+        {
+            return;
+        }
+
+        foreach (IStyle style in _workspaceThemeStyles)
+        {
+            canvas.Styles.Remove(style);
+        }
+
+        foreach (IResourceProvider provider in _workspaceThemeResources)
+        {
+            canvas.Resources.MergedDictionaries.Remove(provider);
+        }
+
+        _workspaceThemeStyles.Clear();
+        _workspaceThemeResources.Clear();
+
+        foreach (Func<IResourceProvider?> factory in WorkspaceDesignThemeRegistry.ResourceFactories)
+        {
+            try
+            {
+                if (factory() is { } provider)
+                {
+                    canvas.Resources.MergedDictionaries.Add(provider);
+                    _workspaceThemeResources.Add(provider);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Workspace design resource include failed");
+            }
+        }
+
+        foreach (Func<IStyle?> factory in WorkspaceDesignThemeRegistry.StyleFactories)
+        {
+            try
+            {
+                if (factory() is { } style)
+                {
+                    canvas.Styles.Add(style);
+                    _workspaceThemeStyles.Add(style);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Workspace design style failed");
+            }
+        }
+
+        _appliedWorkspaceThemeVersion = WorkspaceDesignThemeRegistry.Version;
+    }
+
+    // Replacement for Design.ApplyDesignModeProperties, removed in Avalonia 12:
+    // applies Design.Width/Height/DataContext/DesignStyle to the instantiated tree.
+    private static void ApplyDesignModeProperties(Control control)
+    {
+        if (control.IsSet(Design.WidthProperty))
+        {
+            control.Width = control.GetValue(Design.WidthProperty);
+        }
+
+        if (control.IsSet(Design.HeightProperty))
+        {
+            control.Height = control.GetValue(Design.HeightProperty);
+        }
+
+        if (control.IsSet(Design.DataContextProperty))
+        {
+            control.DataContext = control.GetValue(Design.DataContextProperty);
+        }
+
+        if (control.GetValue(Design.DesignStyleProperty) is { } designStyle)
+        {
+            control.Styles.Add(designStyle);
+        }
     }
 
     private DesignerDocumentViewModel? FindDocumentViewModel()

@@ -341,7 +341,7 @@ public sealed class CommandPaletteDialogViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilter);
     }
 
@@ -473,7 +473,7 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
         RefreshCommand = ReactiveCommand.CreateFromTask(ct => ReloadAsync(ct));
@@ -608,7 +608,7 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
 
     private void OnProviderChanged(object? sender, EventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(() => _ = ReloadAsync(CancellationToken.None));
+        RxSchedulers.MainThreadScheduler.Schedule(() => _ = ReloadAsync(CancellationToken.None));
     }
 
     private void SetExpanded(object item, bool value)
@@ -637,7 +637,7 @@ public sealed class ExtensionTreeViewModel : ExtensionViewModel, IDisposable
     private static Task ScheduleOnMainThreadAsync(Action action)
     {
         TaskCompletionSource<Unit> tcs = new();
-        RxApp.MainThreadScheduler.Schedule(() =>
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
             try
             {

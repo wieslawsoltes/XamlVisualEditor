@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
@@ -36,7 +37,23 @@ public sealed class ExtensionManagerViewModel : ReactiveObject, IDisposable
             .Subscribe(_ => this.RaisePropertyChanged(nameof(HasSelection)));
         _subscriptions.Add(selectionSubscription);
 
-        _ = RefreshAsync();
+        // The constructor may run inside ExtensionManager's lazy built-in package
+        // discovery (extensions are resolved from DI there). Scheduling the first
+        // refresh keeps GetInstalledAsync from re-entering that lazy initialization,
+        // and observing the task keeps failures out of the finalizer thread.
+        RxSchedulers.MainThreadScheduler.Schedule(() => _ = InitialRefreshAsync());
+    }
+
+    private async Task InitialRefreshAsync()
+    {
+        try
+        {
+            await RefreshAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Extension refresh failed: {ex.Message}";
+        }
     }
 
     public ObservableCollection<ExtensionPackageItemViewModel> InstalledPackages { get; } = new();

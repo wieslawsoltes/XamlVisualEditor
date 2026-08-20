@@ -9,7 +9,7 @@
         <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="4">
             <TextBlock Text="Collaboration" FontWeight="SemiBold" FontSize="14" />
 
-            <TextBox Watermark="Your name"
+            <TextBox PlaceholderText="Your name"
                      Text="{CompiledBinding LocalUserName, Mode=TwoWay}" />
 
             <StackPanel Orientation="Horizontal" Spacing="4">
@@ -26,7 +26,7 @@
             <TextBlock Text="{CompiledBinding StatusMessage}"
                        Opacity="0.7" FontSize="12" Margin="0,4" />
 
-            <TextBox Watermark="Session ID to join..."
+            <TextBox PlaceholderText="Session ID to join..."
                      Text="{CompiledBinding SessionId, Mode=TwoWay}"
                      IsVisible="{CompiledBinding !IsSessionActive}" />
             <Button Content="Join Session"

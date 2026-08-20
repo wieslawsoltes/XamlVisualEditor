@@ -11,7 +11,7 @@
       <vm:PropertyEditorValueTemplateSelector.TextEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="{CompiledBinding DefaultValue}"
+                   PlaceholderText="{CompiledBinding DefaultValue}"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.TextEditor>
@@ -39,63 +39,63 @@
       <vm:PropertyEditorValueTemplateSelector.BrushEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="{CompiledBinding DefaultValue}"
+                   PlaceholderText="{CompiledBinding DefaultValue}"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.BrushEditor>
       <vm:PropertyEditorValueTemplateSelector.ColorEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="#AARRGGBB"
+                   PlaceholderText="#AARRGGBB"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.ColorEditor>
       <vm:PropertyEditorValueTemplateSelector.ThicknessEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="Left,Top,Right,Bottom"
+                   PlaceholderText="Left,Top,Right,Bottom"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.ThicknessEditor>
       <vm:PropertyEditorValueTemplateSelector.CornerRadiusEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="TopLeft,TopRight,BottomRight,BottomLeft"
+                   PlaceholderText="TopLeft,TopRight,BottomRight,BottomLeft"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.CornerRadiusEditor>
       <vm:PropertyEditorValueTemplateSelector.PointEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="X,Y"
+                   PlaceholderText="X,Y"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.PointEditor>
       <vm:PropertyEditorValueTemplateSelector.SizeEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="Width,Height"
+                   PlaceholderText="Width,Height"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.SizeEditor>
       <vm:PropertyEditorValueTemplateSelector.RectEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="X,Y,Width,Height"
+                   PlaceholderText="X,Y,Width,Height"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.RectEditor>
       <vm:PropertyEditorValueTemplateSelector.GridLengthEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="Auto | * | 2* | 120"
+                   PlaceholderText="Auto | * | 2* | 120"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.GridLengthEditor>
       <vm:PropertyEditorValueTemplateSelector.FontFamilyEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="Font family"
+                   PlaceholderText="Font family"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.FontFamilyEditor>
@@ -132,35 +132,35 @@
       <vm:PropertyEditorValueTemplateSelector.TimeSpanEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="hh:mm:ss"
+                   PlaceholderText="hh:mm:ss"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.TimeSpanEditor>
       <vm:PropertyEditorValueTemplateSelector.UriEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="https://..."
+                   PlaceholderText="https://..."
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.UriEditor>
       <vm:PropertyEditorValueTemplateSelector.CollectionEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="{x:Static sys:String.Empty}"
+                   PlaceholderText="{x:Static sys:String.Empty}"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.CollectionEditor>
       <vm:PropertyEditorValueTemplateSelector.TemplateEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="{x:Static sys:String.Empty}"
+                   PlaceholderText="{x:Static sys:String.Empty}"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.TemplateEditor>
       <vm:PropertyEditorValueTemplateSelector.MarkupExtensionEditor>
         <DataTemplate x:DataType="vm:PropertyEntryViewModel">
           <TextBox Text="{CompiledBinding Value, Mode=TwoWay}"
-                   Watermark="Markup extension expression"
+                   PlaceholderText="Markup extension expression"
                    IsReadOnly="{CompiledBinding IsReadOnly}" />
         </DataTemplate>
       </vm:PropertyEditorValueTemplateSelector.MarkupExtensionEditor>
@@ -170,7 +170,7 @@
     <StackPanel DockPanel.Dock="Top" Spacing="6">
       <TextBlock Text="Properties" FontWeight="SemiBold" />
       <TextBlock Text="{CompiledBinding SelectedTypeName, StringFormat='Selected: {0}'}" />
-      <TextBox Watermark="Search properties..."
+      <TextBox PlaceholderText="Search properties..."
                Text="{CompiledBinding SearchText, Mode=TwoWay}" />
       <StackPanel Orientation="Horizontal" Spacing="6">
         <ToggleButton Content="Properties"

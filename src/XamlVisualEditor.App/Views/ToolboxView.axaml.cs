@@ -17,6 +17,7 @@ public sealed partial class ToolboxView : UserControl
 {
     private ToolboxItemViewModel? _dragCandidate;
     private Point _dragStartPoint;
+    private PointerPressedEventArgs? _dragTriggerEvent;
     private bool _isDragging;
     private ListBox? _listBox;
 
@@ -67,12 +68,13 @@ public sealed partial class ToolboxView : UserControl
 
         _dragCandidate = item;
         _dragStartPoint = e.GetPosition(_listBox);
+        _dragTriggerEvent = e;
         e.Pointer.Capture(_listBox);
     }
 
     private async void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_listBox is null || _dragCandidate is null)
+        if (_listBox is null || _dragCandidate is null || _dragTriggerEvent is null)
         {
             return;
         }
@@ -98,12 +100,13 @@ public sealed partial class ToolboxView : UserControl
 
         DataTransfer data = new();
         data.Add(DataTransferItem.Create(DesignerDataFormats.ToolboxItem, _dragCandidate.TypeName));
-        await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Copy);
+        await DragDrop.DoDragDropAsync(_dragTriggerEvent, data, DragDropEffects.Copy);
 
         e.Pointer.Capture(null);
 
         _isDragging = false;
         _dragCandidate = null;
+        _dragTriggerEvent = null;
     }
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)

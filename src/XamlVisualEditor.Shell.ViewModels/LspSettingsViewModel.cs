@@ -93,7 +93,7 @@ public sealed class LspSettingsViewModel : ReactiveObject
 
         IReadOnlyList<LspServerConfiguration> servers = await _store.LoadAsync().ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             Servers.Clear();
             foreach (LspServerConfiguration server in servers)
@@ -120,7 +120,7 @@ public sealed class LspSettingsViewModel : ReactiveObject
 
         await _store.SaveAsync(servers).ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             StatusText = "LSP settings saved. Restart required.";
             RequiresRestart = true;

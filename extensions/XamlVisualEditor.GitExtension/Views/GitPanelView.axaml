@@ -32,7 +32,7 @@
         <DockPanel Grid.Row="1" Margin="8,0,8,6" LastChildFill="True">
             <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
                 <TextBox Width="200"
-                         Watermark="Search changes..."
+                         PlaceholderText="Search changes..."
                          Text="{CompiledBinding SearchText, Mode=TwoWay}" />
                 <Button Content="Stage" Command="{CompiledBinding StageCommand}" Padding="8,2" />
                 <Button Content="Unstage" Command="{CompiledBinding UnstageCommand}" Padding="8,2" />
@@ -92,7 +92,7 @@
             <DockPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,0">
                 <StackPanel DockPanel.Dock="Top" Spacing="4">
                     <TextBlock Text="Commit" FontWeight="SemiBold" />
-                    <TextBox Watermark="Commit message"
+                    <TextBox PlaceholderText="Commit message"
                              Text="{CompiledBinding CommitMessage, Mode=TwoWay}" />
                     <Button Content="Commit" Command="{CompiledBinding CommitCommand}" Padding="8,2" />
                     <TextBlock Text="{CompiledBinding DiffLineCount, StringFormat='Diff ({0})'}"

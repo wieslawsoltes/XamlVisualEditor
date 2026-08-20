@@ -322,7 +322,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 
         // Listen for sync events to update trees
         IDisposable syncEventsSubscription = SyncEngine.SyncEvents
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 // After any sync, commit pending changes as an undo batch
@@ -359,12 +359,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 
         IDisposable previewerToggleSubscription = this.WhenAnyValue(x => x.UseExternalPreviewer)
             .Where(usePreviewer => usePreviewer)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => StartPreviewerCommand?.Execute(null));
         _disposables.Add(previewerToggleSubscription);
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleBreakpointsChanged);
         _disposables.Add(breakpointSourceSubscription);
     }
@@ -628,7 +628,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged && _languageService is not null)
             .Throttle(TimeSpan.FromMilliseconds(400))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshDiagnosticsAsync(); });
         _disposables.Add(diagnosticsSubscription);
 
@@ -637,7 +637,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged && _languageService is not null)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
         _disposables.Add(semanticTokensSubscription);
 
@@ -658,7 +658,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         }
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleBreakpointsChanged);
         _disposables.Add(breakpointSourceSubscription);
     }
@@ -1019,7 +1019,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         IReadOnlyList<LanguageDiagnostic> diagnostics =
             await _languageService.GetDiagnosticsAsync(context).ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(() =>
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
             Diagnostics.Clear();
             foreach (LanguageDiagnostic diagnostic in diagnostics)
@@ -1047,7 +1047,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         IReadOnlyList<LanguageSemanticToken> tokens =
             await _languageService.GetSemanticTokensAsync(context).ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(() =>
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
             SemanticTokenColorizer.UpdateTokens(tokens);
             SemanticTokenVersion++;
@@ -1194,7 +1194,7 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
         // Filter items on search
         IDisposable filterSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(filter =>
             {
                 foreach (ToolboxItemViewModel item in Items)
@@ -1666,7 +1666,7 @@ public sealed class ReferencesViewModel : ReactiveObject
 
         _lifetimeDisposables.Add(this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch));
     }
 
@@ -2429,6 +2429,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     public bool HasWorkspace { get; private set; }
 
     /// <summary>
+    /// Gets whether a workspace load is in progress; drives the busy overlay.
+    /// </summary>
+    [Reactive]
+    public bool IsWorkspaceLoading { get; private set; }
+
+    /// <summary>
     /// Interaction for opening a file dialog.
     /// </summary>
     public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
@@ -3059,7 +3065,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 this.WhenAnyValue(x => x.IsRunActive).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.HasDebuggerService).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.State).Select(_ => Unit.Default))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => RefreshExtensionCommandEnablement());
         _disposables.Add(extensionCommandEnablementSubscription);
 
@@ -3085,7 +3091,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .Where(d => d is not null && !d.IsDisposed)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
 
@@ -3094,7 +3100,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
             .Throttle(TimeSpan.FromMilliseconds(250))
-            .ObserveOn(RxApp.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.TaskpoolScheduler)
             .Subscribe(d =>
             {
                 if (_workspace is null)
@@ -3145,7 +3151,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }));
 
         IDisposable executionFrameSubscription = Debugger.CallStack.WhenAnyValue(x => x.SelectedFrame)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(UpdateExecutionLocationFromFrame);
         _disposables.Add(executionFrameSubscription);
 
@@ -3157,7 +3163,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     (Doc: (DesignerDocumentViewModel?)doc,
                         Diags: (IReadOnlyList<XamlDiagnostic>)(e.Diagnostics ?? Array.Empty<XamlDiagnostic>()))))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(result =>
             {
                 string? filePath = result.Doc?.FilePath;
@@ -3176,7 +3182,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     .Select(_ => (IReadOnlyList<LanguageDiagnostic>)doc.Diagnostics.ToList())
                     .StartWith((IReadOnlyList<LanguageDiagnostic>)doc.Diagnostics.ToList()))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(diags => Output.ReplaceLanguageDiagnostics(diags));
         _disposables.Add(activeTextDiagnosticsSubscription);
 
@@ -3205,7 +3211,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         IDisposable themeVariantInteractionSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
             .Skip(1)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(option => _ = ThemeVariantInteraction.Handle(option));
         _disposables.Add(themeVariantInteractionSubscription);
 
@@ -3215,7 +3221,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 ? Observable.Return<Guid?>(null)
                 : doc.WhenAnyValue(d => d.SelectedNodeId))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(id => ApplySelectionToTrees(id));
         _disposables.Add(selectionSyncSubscription);
 
@@ -3223,7 +3229,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IDisposable visualTreeSelectionSubscription = this.WhenAnyValue(x => x.VisualTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null && !t.doc.IsDisposed)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(visualTreeSelectionSubscription);
@@ -3231,7 +3237,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IDisposable logicalTreeSelectionSubscription = this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null && !t.doc.IsDisposed)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
@@ -4003,7 +4009,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         IDisposable subscription = doc.SyncEngine.SyncEvents
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
                 _ = AutoSaveAsync(doc);
@@ -4023,7 +4029,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             h => doc.Document.TextChanged += h,
             h => doc.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
                 _ = AutoSaveAsync(doc);
@@ -4133,17 +4139,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void OnExtensionContributionsChanged(object? sender, EventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
+        RxSchedulers.MainThreadScheduler.Schedule(RefreshExtensionContributions);
     }
 
     private void OnCommandMetadataChanged(object? sender, EventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
+        RxSchedulers.MainThreadScheduler.Schedule(RefreshExtensionContributions);
     }
 
     private void OnExtensionViewsChanged(object? sender, ExtensionViewRegistryChangedEventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(RefreshExtensionViews);
+        RxSchedulers.MainThreadScheduler.Schedule(RefreshExtensionViews);
     }
 
     private void RefreshExtensionContributions()
@@ -6042,7 +6048,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 h => notifying.PropertyChanged -= h)
             .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) ||
                         e.EventArgs.PropertyName == nameof(IEditorDocumentViewModel.IsModified))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateDockTitle(document, dockDoc));
 
         _dockTitleSubscriptions[document] = subscription;
@@ -6710,70 +6716,80 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         string workspaceName = System.IO.Path.GetFileName(workspacePath);
         StatusText = $"Loading workspace {workspaceName}";
         LogOutput("Info", $"Loading workspace: {workspacePath}");
+        IsWorkspaceLoading = true;
 
-        WorkspaceModel workspace;
         try
         {
-            workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
-                        extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
-                ? await _workspaceService.LoadSolutionAsync(workspacePath)
-                : await _workspaceService.LoadProjectAsync(workspacePath);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Workspace load failed: {Message}", ex.Message);
-            LogOutput("Error", $"Workspace load failed: {ex.Message}");
-            LogWorkspaceEnvironment(workspacePath);
-            StatusText = $"Workspace load failed: {ex.Message}";
-            HasWorkspace = false;
-            return;
-        }
+            WorkspaceModel workspace;
+            try
+            {
+                workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+                            extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+                    ? await _workspaceService.LoadSolutionAsync(workspacePath)
+                    : await _workspaceService.LoadProjectAsync(workspacePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Workspace load failed: {Message}", ex.Message);
+                LogOutput("Error", $"Workspace load failed: {ex.Message}");
+                LogWorkspaceEnvironment(workspacePath);
+                StatusText = $"Workspace load failed: {ex.Message}";
+                HasWorkspace = false;
+                return;
+            }
 
-        _workspace = workspace;
-        _workspacePath = workspacePath;
-        _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
-        HasWorkspace = true;
-        RefreshWorkspaceProjects(workspace);
+            _workspace = workspace;
+            _workspacePath = workspacePath;
+            _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
+            HasWorkspace = true;
+            RefreshWorkspaceProjects(workspace);
 
-        string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
-        SolutionExplorer.LoadWorkspace(workspace, name);
-        SolutionExplorer.IsVisible = true;
+            string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
+            SolutionExplorer.LoadWorkspace(workspace, name);
+            SolutionExplorer.IsVisible = true;
 
-        bool hasAnyProjectOutputs;
-        bool hasMissingProjectOutputs;
-        WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
-            workspace,
-            out hasAnyProjectOutputs,
-            out hasMissingProjectOutputs);
-        if (!hasAnyProjectOutputs || hasMissingProjectOutputs)
-        {
-            await RunDotNetCommandAsync(workspacePath, "restore");
-            await RunDotNetCommandAsync(workspacePath, "build");
-            assemblySet = CollectWorkspaceAssemblies(
+            bool hasAnyProjectOutputs;
+            bool hasMissingProjectOutputs;
+            WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
                 workspace,
                 out hasAnyProjectOutputs,
                 out hasMissingProjectOutputs);
-        }
-
-        LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
-
-        if (assemblySet.All.Count > 0)
-        {
-            ApplyAssemblyResolver(assemblySet);
-            _metadataService.LoadAssemblies(assemblySet.All);
-            RefreshOpenDocumentsAfterMetadataLoad();
-        }
-
-        if (_languageRegistry is not null)
-        {
-            foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+            if (!hasAnyProjectOutputs || hasMissingProjectOutputs)
             {
-                await service.InitializeWorkspaceAsync(workspacePath);
+                await RunDotNetCommandAsync(workspacePath, "restore");
+                await RunDotNetCommandAsync(workspacePath, "build");
+                assemblySet = CollectWorkspaceAssemblies(
+                    workspace,
+                    out hasAnyProjectOutputs,
+                    out hasMissingProjectOutputs);
             }
-        }
 
-        StatusText = $"Loaded workspace {name}";
-        LogOutput("Info", $"Loaded workspace: {name}");
+            LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+
+            if (assemblySet.All.Count > 0)
+            {
+                StatusText = $"Loading workspace {workspaceName}: reading assemblies...";
+                ApplyAssemblyResolver(assemblySet);
+                _metadataService.LoadAssemblies(assemblySet.All);
+                UpdateWorkspaceDesignThemes(workspace);
+                RefreshOpenDocumentsAfterMetadataLoad();
+            }
+
+            if (_languageRegistry is not null)
+            {
+                foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+                {
+                    await service.InitializeWorkspaceAsync(workspacePath);
+                }
+            }
+
+            StatusText = $"Loaded workspace {name}";
+            LogOutput("Info", $"Loaded workspace: {name}");
+        }
+        finally
+        {
+            IsWorkspaceLoading = false;
+        }
     }
 
     private void RefreshWorkspaceProjects(WorkspaceModel workspace)
@@ -7356,9 +7372,70 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             ApplyAssemblyResolver(assemblySet);
             _metadataService.LoadAssemblies(assemblySet.All);
+            UpdateWorkspaceDesignThemes(_workspace);
             RefreshOpenDocumentsAfterMetadataLoad();
         }
         LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+    }
+
+    // Feeds the design-surface theme registry from the workspace application's
+    // App.axaml so instantiated controls get the target app's themes and resources.
+    private void UpdateWorkspaceDesignThemes(WorkspaceModel workspace)
+    {
+        string? appXamlPath = FindApplicationXamlPath(workspace);
+        if (appXamlPath is null)
+        {
+            WorkspaceDesignThemeRegistry.Clear();
+            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace");
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(appXamlPath);
+            LogOutput("Info", $"Design themes from {appXamlPath}: {string.Join("; ", details)}");
+        }
+        catch (Exception ex)
+        {
+            WorkspaceDesignThemeRegistry.Clear();
+            LogOutput("Warning", $"Design themes failed for {appXamlPath}: {ex.Message}");
+        }
+    }
+
+    private static string? FindApplicationXamlPath(WorkspaceModel workspace)
+    {
+        foreach (ProjectModel project in workspace.Projects.OrderByDescending(p => p.IsExecutable))
+        {
+            foreach (XamlFileModel file in project.XamlFiles)
+            {
+                string fileName = System.IO.Path.GetFileName(file.FilePath);
+                if (fileName.Equals("App.axaml", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.Equals("App.xaml", StringComparison.OrdinalIgnoreCase))
+                {
+                    return file.FilePath;
+                }
+            }
+        }
+
+        foreach (ProjectModel project in workspace.Projects.OrderByDescending(p => p.IsExecutable))
+        {
+            string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
+            if (string.IsNullOrEmpty(projectDir))
+            {
+                continue;
+            }
+
+            foreach (string candidate in new[] { "App.axaml", "App.xaml" })
+            {
+                string path = System.IO.Path.Combine(projectDir, candidate);
+                if (System.IO.File.Exists(path))
+                {
+                    return path;
+                }
+            }
+        }
+
+        return null;
     }
 
     private void RefreshOpenDocumentsAfterMetadataLoad()
@@ -8050,7 +8127,7 @@ public sealed class SolutionExplorerViewModel : ReactiveObject, ISolutionExplore
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
         IObservable<bool> canOpen = this.WhenAnyValue(x => x.SelectedNode)

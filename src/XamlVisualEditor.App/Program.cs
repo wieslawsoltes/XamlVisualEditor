@@ -5,6 +5,8 @@ using System.Reflection;
 using System.Runtime.Loader;
 using Avalonia;
 using ReactiveUI.Avalonia;
+using Serilog;
+using XamlVisualEditor.App.Services;
 using XamlVisualEditor.Terminal;
 
 namespace XamlVisualEditor.App;
@@ -25,9 +27,25 @@ public static class Program
             Environment.SetEnvironmentVariable("XVE_TERMINAL_LOG", capturePath);
         }
 
+        Log.Logger = FileLoggingSetup.CreateLogger(panelSink: null);
+        FileLoggingSetup.HookUnhandledExceptionLogging();
+        Log.Information("XamlVisualEditor starting; log directory: {LogDirectory}", FileLoggingSetup.LogDirectory);
+
         Trace.AutoFlush = true;
         Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Application crashed");
+            throw;
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
     }
 
     private static void WireDependencyInjectionResolver()
@@ -62,6 +80,6 @@ public static class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace()
-            .UseReactiveUI();
+            .UseReactiveUI(_ => { });
     }
 }

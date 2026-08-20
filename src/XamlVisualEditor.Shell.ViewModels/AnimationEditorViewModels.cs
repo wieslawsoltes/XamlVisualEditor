@@ -151,7 +151,7 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
         CommitMoveCommand = ReactiveCommand.Create<KeyframeMoveCommit>(CommitMove);
 
         IDisposable activeDocSubscription = _mainVm.WhenAnyValue(x => x.ActiveDesignerDocument)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(UpdateActiveDocument);
         _disposables.Add(activeDocSubscription);
         _disposables.Add(_keyframeSubscription);
@@ -227,7 +227,7 @@ public sealed class AnimationEditorViewModel : ReactiveObject, IDisposable, IAni
         }
 
         IDisposable selectionSubscription = document.WhenAnyValue(x => x.SelectedNodeId)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(id => UpdateTargetFromSelection(document, id));
         _selectionSubscription.Disposable = selectionSubscription;
 

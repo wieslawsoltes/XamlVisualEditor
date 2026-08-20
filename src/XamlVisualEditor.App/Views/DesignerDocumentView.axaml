@@ -85,8 +85,13 @@
                     <Border IsVisible="{CompiledBinding UseExternalPreviewer, Converter={x:Static BoolConverters.Not}}">
                         <v:DesignSurfaceView DataContext="{CompiledBinding DesignSurface}" />
                     </Border>
-                    <v:PreviewerSurfaceControl Session="{CompiledBinding PreviewerSession}"
-                                               IsVisible="{CompiledBinding UseExternalPreviewer}" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{CompiledBinding UseExternalPreviewer}">
+                        <v:PreviewerSurfaceControl Session="{CompiledBinding PreviewerSession}"
+                                                   HorizontalAlignment="Left"
+                                                   VerticalAlignment="Top" />
+                    </ScrollViewer>
                 </Grid>
             </Border>
 

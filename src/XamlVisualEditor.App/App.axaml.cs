@@ -110,12 +110,8 @@ public sealed class App : Application
     private static void ConfigureServices(ServiceCollection services)
     {
         OutputLogSinkAccessor outputLogSinkAccessor = new();
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Verbose()
-            .Enrich.FromLogContext()
-            .WriteTo.Console()
-            .WriteTo.Sink(new OutputPanelLogSink(outputLogSinkAccessor))
-            .CreateLogger();
+        FileLoggingSetup.ReplaceGlobalLogger(
+            FileLoggingSetup.CreateLogger(new OutputPanelLogSink(outputLogSinkAccessor)));
 
         services.AddSingleton<IOutputLogSinkAccessor>(outputLogSinkAccessor);
         services.AddLogging(builder =>

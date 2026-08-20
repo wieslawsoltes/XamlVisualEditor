@@ -909,11 +909,11 @@ public sealed class PropertyEditorPanelViewModel : ReactiveObject, IDisposable
                 }
             }));
 
-        _disposables.Add(Observable.Interval(SelectionPollInterval, RxApp.TaskpoolScheduler)
+        _disposables.Add(Observable.Interval(SelectionPollInterval, RxSchedulers.TaskpoolScheduler)
             .Where(_ => !string.IsNullOrWhiteSpace(_designer.ActiveDocumentPath))
             .Where(_ => DateTime.UtcNow - _lastSelectionUpdateUtc >= SelectionPollInterval)
             .SelectMany(_ => Observable.FromAsync(PollSelectedNodesAsync))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(nodes =>
             {
                 string activeDocumentPath = _designer.ActiveDocumentPath ?? _lastActiveDocumentPath;

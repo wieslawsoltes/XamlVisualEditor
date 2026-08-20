@@ -45,7 +45,7 @@
           <Grid ColumnDefinitions="*,200,Auto" RowDefinitions="Auto,Auto">
             <TextBox Grid.Row="0"
                      Grid.Column="0"
-                     Watermark="Search templates..."
+                     PlaceholderText="Search templates..."
                      Text="{CompiledBinding SearchText, Mode=TwoWay}" />
             <ComboBox Grid.Row="0"
                       Grid.Column="1"
@@ -60,7 +60,7 @@
             <TextBox Grid.Row="1"
                      Grid.Column="0"
                      Grid.ColumnSpan="2"
-                     Watermark="Install template package or path"
+                     PlaceholderText="Install template package or path"
                      Text="{CompiledBinding InstallTemplateInput, Mode=TwoWay}" />
             <Button Grid.Row="1"
                     Grid.Column="2"

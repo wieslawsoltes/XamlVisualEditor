@@ -28,7 +28,7 @@
                     <TextBlock Text="Key" VerticalAlignment="Center" />
                     <TextBox Width="160"
                              Text="{CompiledBinding SelectedTimeline.ResourceKey, Mode=TwoWay}"
-                             Watermark="AnimationKey" />
+                             PlaceholderText="AnimationKey" />
                     <TextBlock Text="Duration" VerticalAlignment="Center" />
                     <TextBox Width="80"
                              Text="{CompiledBinding SelectedTimeline.DurationSeconds, Mode=TwoWay}" />
@@ -61,7 +61,7 @@
                     <TextBlock Text="Track" VerticalAlignment="Center" />
                     <TextBox Width="160"
                              Text="{CompiledBinding NewTrackPropertyName, Mode=TwoWay}"
-                             Watermark="Opacity" />
+                             PlaceholderText="Opacity" />
                     <Button Content="Add Track" Command="{CompiledBinding AddTrackCommand}" />
                     <Separator />
                     <Button Content="Add Keyframe" Command="{CompiledBinding AddKeyframeCommand}" />
@@ -108,15 +108,15 @@
                                     <TextBlock Text="Time" VerticalAlignment="Center" />
                                     <TextBox Width="80"
                                              Text="{CompiledBinding TimeSeconds, Mode=TwoWay}"
-                                             BorderBrush="{Binding DataContext.IsKeyframeTimeValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                             BorderBrush="{ReflectionBinding DataContext.IsKeyframeTimeValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
                                     <TextBlock Text="Value" VerticalAlignment="Center" />
                                     <TextBox Width="160"
                                              Text="{CompiledBinding Value, Mode=TwoWay}"
-                                             BorderBrush="{Binding DataContext.IsKeyframeValueValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                             BorderBrush="{ReflectionBinding DataContext.IsKeyframeValueValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
                                     <TextBlock Text="Easing" VerticalAlignment="Center" />
                                     <TextBox Width="160"
                                              Text="{CompiledBinding Easing, Mode=TwoWay}"
-                                             BorderBrush="{Binding DataContext.IsKeyframeEasingValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
+                                             BorderBrush="{ReflectionBinding DataContext.IsKeyframeEasingValid, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static v:TimelineConverters.ValidityToBrush}}" />
                                 </StackPanel>
                             </DataTemplate>
                         </ContentControl.ContentTemplate>
@@ -141,7 +141,7 @@
                             BorderBrush="#2A2A2A"
                             BorderThickness="0,0,0,1">
                         <Canvas Height="28"
-                            Width="{Binding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            Width="{ReflectionBinding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}">
                             <ItemsControl ItemsSource="{CompiledBinding RulerTicks}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -175,16 +175,16 @@
                             <Border Width="2" Height="28" Background="#E24A4A">
                                 <Canvas.Left>
                                     <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
-                                        <Binding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                        <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                        <ReflectionBinding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                        <ReflectionBinding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
                                     </MultiBinding>
                                 </Canvas.Left>
                             </Border>
                             <Border Background="#E24A4A" CornerRadius="3" Padding="4,1">
                                 <Canvas.Left>
                                     <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
-                                        <Binding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                        <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                        <ReflectionBinding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                        <ReflectionBinding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
                                     </MultiBinding>
                                 </Canvas.Left>
                                 <Canvas.Top>-2</Canvas.Top>
@@ -206,7 +206,7 @@
                                         Padding="6,4">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <Button Content="Select"
-                                                Command="{Binding DataContext.SelectTrackCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Command="{ReflectionBinding DataContext.SelectTrackCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}" />
                                         <TextBox Text="{CompiledBinding PropertyName, Mode=TwoWay}"
                                                  Width="120" />
@@ -219,8 +219,8 @@
                                         BorderThickness="0,0,0,1">
                                     <Grid>
                                         <Canvas Height="36"
-                                                Width="{Binding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                            <ItemsControl ItemsSource="{Binding DataContext.RulerTicks, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                Width="{ReflectionBinding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <ItemsControl ItemsSource="{ReflectionBinding DataContext.RulerTicks, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
                                                         <Canvas />
@@ -242,9 +242,9 @@
                                         </Canvas>
 
                                         <Canvas Height="36"
-                                                Width="{Binding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                v:TimelineScrubBehavior.ScrubCommand="{Binding DataContext.SetCurrentTimeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                v:TimelineScrubBehavior.PixelsPerSecond="{Binding DataContext.PixelsPerSecond, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                Width="{ReflectionBinding DataContext.TimelineWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                v:TimelineScrubBehavior.ScrubCommand="{ReflectionBinding DataContext.SetCurrentTimeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                v:TimelineScrubBehavior.PixelsPerSecond="{ReflectionBinding DataContext.PixelsPerSecond, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <ItemsControl ItemsSource="{CompiledBinding Keyframes}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
@@ -260,15 +260,15 @@
                                                                 BorderThickness="1"
                                                                 Canvas.Top="13"
                                                                 v:TimelineKeyframeDragBehavior.IsEnabled="True"
-                                                                v:TimelineKeyframeDragBehavior.PixelsPerSecond="{Binding DataContext.PixelsPerSecond, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                v:TimelineKeyframeDragBehavior.DurationSeconds="{Binding DataContext.SelectedTimeline.DurationSeconds, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                v:TimelineKeyframeDragBehavior.SnapIntervalSeconds="{Binding DataContext.SnapIntervalSeconds, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                v:TimelineKeyframeDragBehavior.SelectCommand="{Binding DataContext.SelectKeyframeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                v:TimelineKeyframeDragBehavior.CommitMoveCommand="{Binding DataContext.CommitMoveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                                                v:TimelineKeyframeDragBehavior.PixelsPerSecond="{ReflectionBinding DataContext.PixelsPerSecond, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.DurationSeconds="{ReflectionBinding DataContext.SelectedTimeline.DurationSeconds, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.SnapIntervalSeconds="{ReflectionBinding DataContext.SnapIntervalSeconds, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.SelectCommand="{ReflectionBinding DataContext.SelectKeyframeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                v:TimelineKeyframeDragBehavior.CommitMoveCommand="{ReflectionBinding DataContext.CommitMoveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                                             <Canvas.Left>
                                                                 <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
                                                                     <Binding Path="TimeSeconds" />
-                                                                    <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                                    <ReflectionBinding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
                                                                 </MultiBinding>
                                                             </Canvas.Left>
                                                             <ToolTip.Tip>
@@ -280,11 +280,11 @@
                                                             <Border.ContextMenu>
                                                                 <ContextMenu>
                                                                     <MenuItem Header="Copy"
-                                                                              Command="{Binding DataContext.CopyKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                              Command="{ReflectionBinding DataContext.CopyKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                                                     <MenuItem Header="Paste"
-                                                                              Command="{Binding DataContext.PasteKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                              Command="{ReflectionBinding DataContext.PasteKeyframesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                                                     <MenuItem Header="Delete"
-                                                                              Command="{Binding DataContext.DeleteSelectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                              Command="{ReflectionBinding DataContext.DeleteSelectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                                                 </ContextMenu>
                                                             </Border.ContextMenu>
                                                         </Border>
@@ -295,8 +295,8 @@
                                             <Border Width="2" Height="36" Background="#E24A4A">
                                                 <Canvas.Left>
                                                     <MultiBinding Converter="{x:Static v:TimelineConverters.TimeToPixels}">
-                                                        <Binding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                        <Binding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                        <ReflectionBinding Path="DataContext.CurrentTimeSeconds" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                        <ReflectionBinding Path="DataContext.PixelsPerSecond" RelativeSource="{RelativeSource AncestorType=UserControl}" />
                                                     </MultiBinding>
                                                 </Canvas.Left>
                                             </Border>

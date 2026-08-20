@@ -16,11 +16,11 @@
     </StackPanel>
 
     <TextBox Grid.Row="2"
-             Watermark="Search channels..."
+             PlaceholderText="Search channels..."
              Text="{CompiledBinding ChannelSearchText, Mode=TwoWay}" />
     <TextBox Grid.Row="2"
              Grid.Column="1"
-             Watermark="Search messages..."
+             PlaceholderText="Search messages..."
              Text="{CompiledBinding MessageSearchText, Mode=TwoWay}" />
 
     <dg:DataGrid Grid.Row="3"

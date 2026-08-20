@@ -141,7 +141,7 @@ public sealed class DebugSettingsPanelViewModel : ReactiveObject, IDisposable
 
     private void OnHostChanged(object? sender, DebugSettingsChangedEventArgs e)
     {
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             ApplyHostState(e.State);
             return Disposable.Empty;
@@ -150,7 +150,7 @@ public sealed class DebugSettingsPanelViewModel : ReactiveObject, IDisposable
 
     private void OnRegistryChanged(object? sender, EventArgs e)
     {
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             RefreshServices();
             return Disposable.Empty;

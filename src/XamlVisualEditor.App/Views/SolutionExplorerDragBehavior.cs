@@ -76,7 +76,8 @@ public sealed class SolutionExplorerDragBehavior
         DragState state = new()
         {
             Start = e.GetPosition(control),
-            FilePath = node.FullPath!
+            FilePath = node.FullPath!,
+            TriggerEvent = e
         };
 
         control.SetValue(DragStateProperty, state);
@@ -90,7 +91,7 @@ public sealed class SolutionExplorerDragBehavior
         }
 
         DragState? state = control.GetValue(DragStateProperty);
-        if (state is null || string.IsNullOrWhiteSpace(state.FilePath))
+        if (state is null || string.IsNullOrWhiteSpace(state.FilePath) || state.TriggerEvent is null)
         {
             return;
         }
@@ -111,7 +112,7 @@ public sealed class SolutionExplorerDragBehavior
 
         DataTransfer data = new();
         data.Add(DataTransferItem.CreateText(state.FilePath));
-        await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Copy);
+        await DragDrop.DoDragDropAsync(state.TriggerEvent, data, DragDropEffects.Copy);
 
         if (e.Pointer.Captured == control)
         {
@@ -157,5 +158,6 @@ public sealed class SolutionExplorerDragBehavior
     {
         public Point Start { get; init; }
         public string FilePath { get; init; } = string.Empty;
+        public PointerPressedEventArgs? TriggerEvent { get; init; }
     }
 }

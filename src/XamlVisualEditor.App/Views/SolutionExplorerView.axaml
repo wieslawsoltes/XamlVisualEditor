@@ -9,7 +9,7 @@
              x:Class="XamlVisualEditor.App.Views.SolutionExplorerView">
   <DockPanel>
     <TextBox DockPanel.Dock="Top"
-             Watermark="🔍 Search files..."
+             PlaceholderText="🔍 Search files..."
              Text="{CompiledBinding FilterText, Mode=TwoWay}"
              Margin="4" />
 
