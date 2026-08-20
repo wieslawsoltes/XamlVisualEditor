@@ -454,7 +454,7 @@ public sealed class TerminalInputBehavior
 
     private static async Task SetClipboardAsync(Control control, string text)
     {
-        if (control.GetVisualRoot() is TopLevel topLevel && topLevel.Clipboard is not null)
+        if (TopLevel.GetTopLevel(control) is TopLevel topLevel && topLevel.Clipboard is not null)
         {
             await topLevel.Clipboard.SetTextAsync(text);
         }
@@ -477,7 +477,7 @@ public sealed class TerminalInputBehavior
 
     private static async Task<string?> GetClipboardAsync(Control control)
     {
-        if (control.GetVisualRoot() is TopLevel topLevel && topLevel.Clipboard is not null)
+        if (TopLevel.GetTopLevel(control) is TopLevel topLevel && topLevel.Clipboard is not null)
         {
             return await topLevel.Clipboard.TryGetTextAsync();
         }

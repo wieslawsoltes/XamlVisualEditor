@@ -322,7 +322,7 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 
         // Listen for sync events to update trees
         IDisposable syncEventsSubscription = SyncEngine.SyncEvents
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 // After any sync, commit pending changes as an undo batch
@@ -359,12 +359,12 @@ public sealed class DesignerDocumentViewModel : ReactiveObject, IEditorDocumentV
 
         IDisposable previewerToggleSubscription = this.WhenAnyValue(x => x.UseExternalPreviewer)
             .Where(usePreviewer => usePreviewer)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => StartPreviewerCommand?.Execute(null));
         _disposables.Add(previewerToggleSubscription);
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleBreakpointsChanged);
         _disposables.Add(breakpointSourceSubscription);
     }
@@ -628,7 +628,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged && _languageService is not null)
             .Throttle(TimeSpan.FromMilliseconds(400))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshDiagnosticsAsync(); });
         _disposables.Add(diagnosticsSubscription);
 
@@ -637,7 +637,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
             h => Document.TextChanged -= h)
             .Where(_ => !_suppressTextChanged && _languageService is not null)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt => { _ = RefreshSemanticTokensAsync(); });
         _disposables.Add(semanticTokensSubscription);
 
@@ -658,7 +658,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         }
 
         IDisposable breakpointSourceSubscription = this.WhenAnyValue(x => x.Breakpoints)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleBreakpointsChanged);
         _disposables.Add(breakpointSourceSubscription);
     }
@@ -1019,7 +1019,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         IReadOnlyList<LanguageDiagnostic> diagnostics =
             await _languageService.GetDiagnosticsAsync(context).ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(() =>
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
             Diagnostics.Clear();
             foreach (LanguageDiagnostic diagnostic in diagnostics)
@@ -1047,7 +1047,7 @@ public sealed class TextDocumentViewModel : ReactiveObject, IEditorDocumentViewM
         IReadOnlyList<LanguageSemanticToken> tokens =
             await _languageService.GetSemanticTokensAsync(context).ConfigureAwait(false);
 
-        RxApp.MainThreadScheduler.Schedule(() =>
+        RxSchedulers.MainThreadScheduler.Schedule(() =>
         {
             SemanticTokenColorizer.UpdateTokens(tokens);
             SemanticTokenVersion++;
@@ -1194,7 +1194,7 @@ public sealed class ToolboxViewModel : ReactiveObject, IDisposable
         // Filter items on search
         IDisposable filterSubscription = this.WhenAnyValue(x => x.SearchText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(filter =>
             {
                 foreach (ToolboxItemViewModel item in Items)
@@ -1666,7 +1666,7 @@ public sealed class ReferencesViewModel : ReactiveObject
 
         _lifetimeDisposables.Add(this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch));
     }
 
@@ -3059,7 +3059,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 this.WhenAnyValue(x => x.IsRunActive).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.HasDebuggerService).Select(_ => Unit.Default),
                 this.WhenAnyValue(x => x.Debugger.State).Select(_ => Unit.Default))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => RefreshExtensionCommandEnablement());
         _disposables.Add(extensionCommandEnablementSubscription);
 
@@ -3085,7 +3085,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .Where(d => d is not null && !d.IsDisposed)
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(d => UpdateTrees(d));
         _disposables.Add(activeDocumentSyncSubscription);
 
@@ -3094,7 +3094,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             .Select(d => d!.SyncEngine.SyncEvents.Select(_ => d))
             .Switch()
             .Throttle(TimeSpan.FromMilliseconds(250))
-            .ObserveOn(RxApp.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.TaskpoolScheduler)
             .Subscribe(d =>
             {
                 if (_workspace is null)
@@ -3145,7 +3145,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         }));
 
         IDisposable executionFrameSubscription = Debugger.CallStack.WhenAnyValue(x => x.SelectedFrame)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(UpdateExecutionLocationFromFrame);
         _disposables.Add(executionFrameSubscription);
 
@@ -3157,7 +3157,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     (Doc: (DesignerDocumentViewModel?)doc,
                         Diags: (IReadOnlyList<XamlDiagnostic>)(e.Diagnostics ?? Array.Empty<XamlDiagnostic>()))))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(result =>
             {
                 string? filePath = result.Doc?.FilePath;
@@ -3176,7 +3176,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                     .Select(_ => (IReadOnlyList<LanguageDiagnostic>)doc.Diagnostics.ToList())
                     .StartWith((IReadOnlyList<LanguageDiagnostic>)doc.Diagnostics.ToList()))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(diags => Output.ReplaceLanguageDiagnostics(diags));
         _disposables.Add(activeTextDiagnosticsSubscription);
 
@@ -3205,7 +3205,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         IDisposable themeVariantInteractionSubscription = this.WhenAnyValue(x => x.SelectedThemeVariant)
             .Skip(1)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(option => _ = ThemeVariantInteraction.Handle(option));
         _disposables.Add(themeVariantInteractionSubscription);
 
@@ -3215,7 +3215,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 ? Observable.Return<Guid?>(null)
                 : doc.WhenAnyValue(d => d.SelectedNodeId))
             .Switch()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(id => ApplySelectionToTrees(id));
         _disposables.Add(selectionSyncSubscription);
 
@@ -3223,7 +3223,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IDisposable visualTreeSelectionSubscription = this.WhenAnyValue(x => x.VisualTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null && !t.doc.IsDisposed)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(visualTreeSelectionSubscription);
@@ -3231,7 +3231,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         IDisposable logicalTreeSelectionSubscription = this.WhenAnyValue(x => x.LogicalTree.SelectedNode)
             .CombineLatest(this.WhenAnyValue(x => x.ActiveDesignerDocument), (node, doc) => (node, doc))
             .Where(t => t.doc is not null && !t.doc.IsDisposed)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Where(_ => !_suppressTreeSelectionSync && !AreExtensionTreePanelsVisible())
             .Subscribe(t => t.doc!.SetSelectedNode(t.node?.AstNodeId, SyncSource.TreeView));
         _disposables.Add(logicalTreeSelectionSubscription);
@@ -4003,7 +4003,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
         IDisposable subscription = doc.SyncEngine.SyncEvents
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
                 _ = AutoSaveAsync(doc);
@@ -4023,7 +4023,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
             h => doc.Document.TextChanged += h,
             h => doc.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(evt =>
             {
                 _ = AutoSaveAsync(doc);
@@ -4133,17 +4133,17 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
 
     private void OnExtensionContributionsChanged(object? sender, EventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
+        RxSchedulers.MainThreadScheduler.Schedule(RefreshExtensionContributions);
     }
 
     private void OnCommandMetadataChanged(object? sender, EventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(RefreshExtensionContributions);
+        RxSchedulers.MainThreadScheduler.Schedule(RefreshExtensionContributions);
     }
 
     private void OnExtensionViewsChanged(object? sender, ExtensionViewRegistryChangedEventArgs e)
     {
-        RxApp.MainThreadScheduler.Schedule(RefreshExtensionViews);
+        RxSchedulers.MainThreadScheduler.Schedule(RefreshExtensionViews);
     }
 
     private void RefreshExtensionContributions()
@@ -6042,7 +6042,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
                 h => notifying.PropertyChanged -= h)
             .Where(e => string.IsNullOrEmpty(e.EventArgs.PropertyName) ||
                         e.EventArgs.PropertyName == nameof(IEditorDocumentViewModel.IsModified))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateDockTitle(document, dockDoc));
 
         _dockTitleSubscriptions[document] = subscription;
@@ -8050,7 +8050,7 @@ public sealed class SolutionExplorerViewModel : ReactiveObject, ISolutionExplore
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
 
         IObservable<bool> canOpen = this.WhenAnyValue(x => x.SelectedNode)

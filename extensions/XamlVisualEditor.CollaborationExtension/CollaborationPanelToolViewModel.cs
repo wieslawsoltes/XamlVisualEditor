@@ -185,7 +185,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
 
     private void OnSessionChanged(object? sender, CollaborationSessionChangedEventArgs e)
     {
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             ApplySessionState(e.IsSessionActive, e.SessionId, e.StatusMessage);
             return Disposable.Empty;
@@ -195,7 +195,7 @@ public sealed class CollaborationPanelToolViewModel : ReactiveObject, IDisposabl
     private void OnParticipantsChanged(object? sender, CollaborationParticipantsChangedEventArgs e)
     {
         IReadOnlyList<CollaborationParticipantInfo> snapshot = e.Participants;
-        _ = RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
+        _ = RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, _) =>
         {
             ApplyParticipants(snapshot);
             return Disposable.Empty;

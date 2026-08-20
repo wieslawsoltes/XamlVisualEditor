@@ -84,7 +84,7 @@ public sealed class InfiniteCanvasViewModel : ReactiveObject, IDisposable
 
         IDisposable saveSubscription = _saveRequests
             .Throttle(TimeSpan.FromMilliseconds(SaveThrottleMs))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => SaveLayout());
         _disposables.Add(saveSubscription);
 

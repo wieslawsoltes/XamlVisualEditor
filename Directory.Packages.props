@@ -4,29 +4,29 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Avalonia -->
-    <PackageVersion Include="Avalonia" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.Desktop" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.DesignerSupport" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.Remote.Protocol" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <PackageVersion Include="Avalonia.Skia" Version="11.3.12" />
-    <PackageVersion Include="ProDiagnostics" Version="11.3.11-preview.8" />
-    <PackageVersion Include="ProDataGrid" Version="11.3.11-preview.14" />
-    <PackageVersion Include="Avalonia.Headless.XUnit" Version="11.3.12" />
+    <PackageVersion Include="Avalonia" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.DesignerSupport" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Remote.Protocol" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.1" />
+    <PackageVersion Include="ProDiagnostics" Version="12.1.0.4" />
+    <PackageVersion Include="ProDataGrid" Version="12.1.0.4" />
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.1" />
     <!-- AvaloniaEdit -->
-    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
-    <PackageVersion Include="AvaloniaEdit.TextMate" Version="11.4.1" />
+    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
+    <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
     <!-- Dock -->
-    <PackageVersion Include="Dock.Avalonia" Version="11.3.11.16" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="11.3.11.16" />
-    <PackageVersion Include="Dock.Model.ReactiveUI" Version="11.3.11.16" />
-    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="11.3.11.16" />
+    <PackageVersion Include="Dock.Avalonia" Version="12.0.0.2" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.0.0.2" />
+    <PackageVersion Include="Dock.Model.ReactiveUI" Version="12.0.0.2" />
+    <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="12.0.0.2" />
     <!-- ReactiveUI -->
-    <PackageVersion Include="ReactiveUI" Version="22.3.1" />
+    <PackageVersion Include="ReactiveUI" Version="23.2.28" />
     <PackageVersion Include="ReactiveUI.Fody" Version="19.5.41" />
-    <PackageVersion Include="ReactiveUI.Avalonia" Version="11.3.8" />
+    <PackageVersion Include="ReactiveUI.Avalonia" Version="12.0.3" />
     <!-- MSBuild / Roslyn -->
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="18.3.3" />
@@ -47,13 +47,13 @@
     <!-- TextMate -->
     <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
     <!-- Testing -->
-    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <!-- System.Reactive -->
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <!-- Xaml.Behaviors -->
-    <PackageVersion Include="Xaml.Behaviors" Version="11.3.9.5" />
-    <PackageVersion Include="Xaml.Behaviors.Avalonia" Version="11.3.9.5" />
+    <PackageVersion Include="Xaml.Behaviors" Version="12.0.5" />
+    <PackageVersion Include="Xaml.Behaviors.Avalonia" Version="12.0.5" />
   </ItemGroup>
 </Project>

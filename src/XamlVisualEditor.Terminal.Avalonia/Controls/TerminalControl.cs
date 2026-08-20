@@ -117,7 +117,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
     Size IScrollable.Viewport => _viewport;
 
-    bool ILogicalScrollable.CanHorizontallyScroll
+    public bool CanHorizontallyScroll
     {
         get => _canHorizontallyScroll;
         set
@@ -132,7 +132,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         }
     }
 
-    bool ILogicalScrollable.CanVerticallyScroll
+    public bool CanVerticallyScroll
     {
         get => _canVerticallyScroll;
         set
@@ -220,14 +220,14 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         InvalidateScrollable();
     }
 
-    protected override void OnGotFocus(GotFocusEventArgs e)
+    protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
         _isFocused = true;
         RequestRender();
     }
 
-    protected override void OnLostFocus(RoutedEventArgs e)
+    protected override void OnLostFocus(FocusChangedEventArgs e)
     {
         base.OnLostFocus(e);
         _isFocused = false;
@@ -460,9 +460,9 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
     private double GetRenderScaling()
     {
-        if (VisualRoot is IRenderRoot renderRoot && renderRoot.RenderScaling > 0)
+        if (VisualRoot is IPresentationSource presentationSource && presentationSource.RenderScaling > 0)
         {
-            return renderRoot.RenderScaling;
+            return presentationSource.RenderScaling;
         }
 
         return 1;
@@ -778,6 +778,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
         {
             SKTypeface skTypeface = ResolveSkiaTypeface(typeface);
             SKFont font = new(skTypeface, (float)fontSize);
+#pragma warning disable CS0618
             SKPaint textPaint = new()
             {
                 Typeface = skTypeface,
@@ -786,6 +787,7 @@ public sealed class TerminalControl : Control, ILogicalScrollable
             };
 
             SKFontMetrics metrics = textPaint.FontMetrics;
+#pragma warning restore CS0618
             float rawCellHeight = metrics.Descent - metrics.Ascent + metrics.Leading;
             float rawCellWidth = GetMonospaceWidth(font, textPaint, (float)fontSize);
             float cellHeight = MathF.Max(1f, MathF.Round(rawCellHeight));
@@ -831,7 +833,9 @@ public sealed class TerminalControl : Control, ILogicalScrollable
                 }
             }
 
+#pragma warning disable CS0618
             float measured = paint.MeasureText("M");
+#pragma warning restore CS0618
             if (measured > 0)
             {
                 return measured;
@@ -1087,7 +1091,9 @@ public sealed class TerminalControl : Control, ILogicalScrollable
                             ? theme.SelectionForeground
                             : fg;
                         textPaint.Color = new SKColor(textColor.R, textColor.G, textColor.B);
+#pragma warning disable CS0618
                         textPaint.FakeBoldText = attrs.Bold;
+#pragma warning restore CS0618
 
                         GlyphInfo glyph = glyphs.Get(cell.Rune);
                         float x = MathF.Round(col * cellWidth);
@@ -1141,7 +1147,9 @@ public sealed class TerminalControl : Control, ILogicalScrollable
 
             TerminalRgb textColor = isSelected ? theme.SelectionForeground : fg;
             textPaint.Color = new SKColor(textColor.R, textColor.G, textColor.B);
+#pragma warning disable CS0618
             textPaint.FakeBoldText = attrs.Bold;
+#pragma warning restore CS0618
 
             GlyphInfo glyph = glyphs.Get(cell.Rune);
             int targetCol = Math.Max(0, col - 1);

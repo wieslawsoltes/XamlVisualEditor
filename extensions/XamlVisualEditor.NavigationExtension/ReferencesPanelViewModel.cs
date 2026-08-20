@@ -155,7 +155,7 @@ public sealed class ReferencesPanelViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.FilterText)
             .Throttle(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(ApplyFilterAndSearch);
     }
 

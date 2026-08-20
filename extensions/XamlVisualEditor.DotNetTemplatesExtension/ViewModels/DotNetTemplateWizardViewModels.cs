@@ -235,7 +235,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.SearchText, x => x.SelectedLanguage)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ApplyFilter());
 
         this.WhenAnyValue(x => x.Step)
@@ -292,7 +292,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
 
         this.WhenAnyValue(x => x.Location)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.TaskpoolScheduler)
             .Subscribe(path =>
             {
                 if (_settings is null || string.IsNullOrWhiteSpace(path))

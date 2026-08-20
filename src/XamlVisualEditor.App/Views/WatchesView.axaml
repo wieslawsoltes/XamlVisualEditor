@@ -11,7 +11,7 @@
         <Button Content="Remove" Command="{CompiledBinding RemoveWatchCommand}" CommandParameter="{CompiledBinding SelectedWatch}" Padding="6,2" />
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBox Width="280" Watermark="Expression" Text="{CompiledBinding NewExpression, Mode=TwoWay}" />
+        <TextBox Width="280" PlaceholderText="Expression" Text="{CompiledBinding NewExpression, Mode=TwoWay}" />
         <Button Content="Add" Command="{CompiledBinding AddWatchCommand}" Padding="6,2" />
       </StackPanel>
     </StackPanel>

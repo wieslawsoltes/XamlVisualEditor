@@ -909,7 +909,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        Design.ApplyDesignModeProperties(tree, tree);
+        ApplyDesignModeProperties(tree);
 
         canvas.Children.Add(tree);
         _rootControl = tree;
@@ -2773,6 +2773,31 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         return item;
+    }
+
+    // Replacement for Design.ApplyDesignModeProperties, removed in Avalonia 12:
+    // applies Design.Width/Height/DataContext/DesignStyle to the instantiated tree.
+    private static void ApplyDesignModeProperties(Control control)
+    {
+        if (control.IsSet(Design.WidthProperty))
+        {
+            control.Width = control.GetValue(Design.WidthProperty);
+        }
+
+        if (control.IsSet(Design.HeightProperty))
+        {
+            control.Height = control.GetValue(Design.HeightProperty);
+        }
+
+        if (control.IsSet(Design.DataContextProperty))
+        {
+            control.DataContext = control.GetValue(Design.DataContextProperty);
+        }
+
+        if (control.GetValue(Design.DesignStyleProperty) is { } designStyle)
+        {
+            control.Styles.Add(designStyle);
+        }
     }
 
     private DesignerDocumentViewModel? FindDocumentViewModel()

@@ -525,7 +525,10 @@ public sealed class ControlFactory
                     gridCol.ColumnDefinitions = ColumnDefinitions.Parse(value);
                     break;
                 case "Watermark" when control is TextBox watermarkBox:
-                    watermarkBox.Watermark = value;
+                    watermarkBox.PlaceholderText = value;
+                    break;
+                case "PlaceholderText" when control is TextBox placeholderBox:
+                    placeholderBox.PlaceholderText = value;
                     break;
                 case "FontStyle" when control is TemplatedControl tc9 && Enum.TryParse<FontStyle>(value, out var fstyle):
                     tc9.FontStyle = fstyle;

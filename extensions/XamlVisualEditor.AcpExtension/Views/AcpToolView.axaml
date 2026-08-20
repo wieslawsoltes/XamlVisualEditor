@@ -80,15 +80,15 @@
                     </ComboBox.ItemTemplate>
                   </ComboBox>
 
-                  <TextBox Text="{CompiledBinding SelectedProfile.Command, Mode=TwoWay}" Watermark="Command" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.ArgumentsText, Mode=TwoWay}" Watermark="Args" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.Model, Mode=TwoWay}" Watermark="Model" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.ModelEnvVar, Mode=TwoWay}" Watermark="Model Env Var" />
-                  <TextBox Text="{CompiledBinding SelectedProfile.ApiKeyEnvVar, Mode=TwoWay}" Watermark="API Key Env Var" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.Command, Mode=TwoWay}" PlaceholderText="Command" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.ArgumentsText, Mode=TwoWay}" PlaceholderText="Args" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.Model, Mode=TwoWay}" PlaceholderText="Model" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.ModelEnvVar, Mode=TwoWay}" PlaceholderText="Model Env Var" />
+                  <TextBox Text="{CompiledBinding SelectedProfile.ApiKeyEnvVar, Mode=TwoWay}" PlaceholderText="API Key Env Var" />
 
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="{CompiledBinding ApiKeyStatus}" VerticalAlignment="Center" />
-                    <TextBox Width="160" Text="{CompiledBinding ApiKeyInput, Mode=TwoWay}" PasswordChar="*" Watermark="API Key" />
+                    <TextBox Width="160" Text="{CompiledBinding ApiKeyInput, Mode=TwoWay}" PasswordChar="*" PlaceholderText="API Key" />
                     <Button Content="Save" Command="{CompiledBinding SaveApiKeyCommand}" Padding="6,2" />
                     <Button Content="Clear" Command="{CompiledBinding ClearApiKeyCommand}" Padding="6,2" />
                   </StackPanel>
@@ -96,8 +96,8 @@
                   <Border Background="#13161B" CornerRadius="6" Padding="8">
                     <StackPanel Spacing="6">
                       <TextBlock Text="OpenAI Web Auth" FontWeight="SemiBold" />
-                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthClientId, Mode=TwoWay}" Watermark="Client Id" />
-                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthScopes, Mode=TwoWay}" Watermark="Scopes" />
+                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthClientId, Mode=TwoWay}" PlaceholderText="Client Id" />
+                      <TextBox Text="{CompiledBinding SelectedProfile.OAuthScopes, Mode=TwoWay}" PlaceholderText="Scopes" />
                       <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="{CompiledBinding WebAuthStatus}" VerticalAlignment="Center" />
                         <Button Content="Sign In" Command="{CompiledBinding StartWebAuthCommand}" Padding="6,2" />

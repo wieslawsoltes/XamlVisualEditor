@@ -432,7 +432,7 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
                 handler => (_, _) => handler(EventArgs.Empty),
                 h => _debuggerRegistry.Changed += h,
                 h => _debuggerRegistry.Changed -= h)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(HasDebuggerService)));
     }
 
@@ -513,7 +513,7 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
                 handler => state => handler(state),
                 h => session.StateChanged += h,
                 h => session.StateChanged -= h)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(state => State = state);
         _sessionDisposables.Add(stateSubscription);
 
@@ -521,7 +521,7 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
                 handler => ev => handler(ev),
                 h => session.EventReceived += h,
                 h => session.EventReceived -= h)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(HandleDebugEvent);
         _sessionDisposables.Add(eventSubscription);
     }

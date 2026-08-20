@@ -69,7 +69,7 @@ public sealed partial class AcpToolView : UserControl
                 DataContext = dialogVm
             };
 
-            Window? owner = this.GetVisualRoot() as Window;
+            Window? owner = VisualRoot as Window;
             if (owner is null)
             {
                 interaction.SetOutput(AcpPermissionOutcome.Cancelled());

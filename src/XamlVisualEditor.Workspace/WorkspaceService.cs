@@ -921,6 +921,14 @@ public sealed class TypeMetadataService : ITypeMetadataService
     public TypeMetadataService(ILogger<TypeMetadataService>? logger = null)
     {
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<TypeMetadataService>.Instance;
+
+        // The AppDomain scan below only sees assemblies that happen to be loaded
+        // already; seed the core Avalonia assemblies so the default xmlns mappings
+        // do not depend on load order.
+        AddAssembly(typeof(AvaloniaObject).Assembly);
+        AddAssembly(typeof(Control).Assembly);
+        AddAssembly(typeof(AvaloniaXamlLoader).Assembly);
+
         foreach (System.Reflection.Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             string? name = asm.GetName().Name;

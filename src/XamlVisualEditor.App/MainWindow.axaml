@@ -24,10 +24,7 @@
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
-                <MenuItem Header="_New">
-                    <MenuItem.ItemsSource>
-                        <CompiledBinding Path="FileNewMenuEntries" />
-                    </MenuItem.ItemsSource>
+                <MenuItem Header="_New" ItemsSource="{CompiledBinding FileNewMenuEntries}">
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:ExtensionMenuItemViewModel">
                             <MenuItem Header="{CompiledBinding Title}"
@@ -38,10 +35,7 @@
                     </MenuItem.ItemTemplate>
                 </MenuItem>
                 <MenuItem Header="_Open..." Command="{CompiledBinding OpenDocumentCommand}" InputGesture="Ctrl+O" />
-                <MenuItem Header="Open _Recent">
-                    <MenuItem.ItemsSource>
-                        <CompiledBinding Path="RecentFiles" />
-                    </MenuItem.ItemsSource>
+                <MenuItem Header="Open _Recent" ItemsSource="{CompiledBinding RecentFiles}">
                     <MenuItem.ItemTemplate>
                         <DataTemplate x:DataType="vm:RecentFileEntry">
                             <MenuItem ToolTip.Tip="{CompiledBinding FilePath}"
@@ -310,8 +304,8 @@
                     <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="White">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="Ln {0}, Col {1}">
-                                <CompiledBinding Path="ActiveLine" FallbackValue="1" />
-                                <CompiledBinding Path="ActiveColumn" FallbackValue="1" />
+                                <Binding Path="ActiveLine" FallbackValue="1" />
+                                <Binding Path="ActiveColumn" FallbackValue="1" />
                             </MultiBinding>
                         </TextBlock.Text>
                     </TextBlock>

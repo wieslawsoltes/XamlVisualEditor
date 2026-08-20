@@ -261,7 +261,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
             .Select(text => string.IsNullOrWhiteSpace(text) ? null : text.Trim())
             .DistinctUntilChanged()
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(filter => FilterProperties(filter));
         _disposables.Add(searchSubscription);
     }
@@ -420,7 +420,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
                 IDisposable valueSubscription = prop.WhenAnyValue(p => p.Value)
                     .Skip(1) // skip initial value
                     .Throttle(TimeSpan.FromMilliseconds(300))
-                    .ObserveOn(RxApp.MainThreadScheduler)
+                    .ObserveOn(RxSchedulers.MainThreadScheduler)
                     .Subscribe(_ => ApplyPropertyChange(prop));
                 _propertySubscriptions.Add(valueSubscription);
             }

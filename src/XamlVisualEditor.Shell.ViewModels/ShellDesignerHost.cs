@@ -463,12 +463,12 @@ public sealed class ShellDesignerHost : IDesignerHost, IDisposable
         if (document is not null && !document.IsDisposed)
         {
             IDisposable selectedNodeSubscription = document.WhenAnyValue(x => x.SelectedNodeId)
-                .ObserveOn(RxApp.MainThreadScheduler)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(selectedNodeSubscription);
 
             IDisposable syncSubscription = document.SyncEngine.SyncEvents
-                .ObserveOn(RxApp.MainThreadScheduler)
+                .ObserveOn(RxSchedulers.MainThreadScheduler)
                 .Subscribe(_ => RaiseSelectionChanged());
             subscription.Add(syncSubscription);
 

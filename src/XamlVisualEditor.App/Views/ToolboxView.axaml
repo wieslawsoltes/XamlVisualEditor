@@ -6,7 +6,7 @@
 
     <DockPanel>
         <TextBox DockPanel.Dock="Top"
-                 Watermark="Search controls..."
+                 PlaceholderText="Search controls..."
                  Text="{CompiledBinding SearchText, Mode=TwoWay}"
                  Margin="4" />
 

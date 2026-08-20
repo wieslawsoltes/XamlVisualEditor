@@ -65,7 +65,7 @@ public sealed class DebugSettingsViewModel : ReactiveObject
 
         adapterPathChanges
             .DistinctUntilChanged()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(path =>
             {
                 if (!string.Equals(AdapterPath, path, StringComparison.Ordinal))
@@ -92,7 +92,7 @@ public sealed class DebugSettingsViewModel : ReactiveObject
                 handler => (_, _) => handler(EventArgs.Empty),
                 h => _debuggerRegistry.Changed += h,
                 h => _debuggerRegistry.Changed -= h)
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => RefreshServices());
 
         this.WhenAnyValue(x => x.SelectedDebuggerService)

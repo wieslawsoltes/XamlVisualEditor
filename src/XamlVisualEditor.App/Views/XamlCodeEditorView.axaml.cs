@@ -229,7 +229,7 @@ public sealed partial class XamlCodeEditorView : UserControl
                 h => vm.Document.TextChanged += h,
                 h => vm.Document.TextChanged -= h)
             .Throttle(TimeSpan.FromMilliseconds(200))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => UpdateFoldings());
         _vmSubscriptions.Add(_foldingSubscription);
         UpdateFoldings();

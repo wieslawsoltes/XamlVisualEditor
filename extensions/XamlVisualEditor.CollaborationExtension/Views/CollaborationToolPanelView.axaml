@@ -29,7 +29,7 @@
       <TextBlock Text="Session"
                  VerticalAlignment="Center" />
       <TextBox Grid.Column="1"
-               Watermark="Session id"
+               PlaceholderText="Session id"
                Text="{CompiledBinding JoinSessionId, Mode=TwoWay}"
                IsVisible="{CompiledBinding !IsSessionActive}" />
       <TextBlock Grid.Column="1"
@@ -40,7 +40,7 @@
     </Grid>
 
     <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="6">
-      <TextBox Watermark="Invite participant"
+      <TextBox PlaceholderText="Invite participant"
                Text="{CompiledBinding Invitee, Mode=TwoWay}"
                IsVisible="{CompiledBinding IsSessionActive}" />
       <Button Grid.Column="1"

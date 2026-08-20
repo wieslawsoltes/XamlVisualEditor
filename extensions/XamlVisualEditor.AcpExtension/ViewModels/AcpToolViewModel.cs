@@ -183,7 +183,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
 
         _disposables.Add(_saveRequests
             .Throttle(TimeSpan.FromMilliseconds(400))
-            .ObserveOn(RxApp.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.TaskpoolScheduler)
             .SelectMany(_ => Observable.FromAsync(SaveProfilesAsync))
             .Subscribe());
 
@@ -515,7 +515,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
 
         IReadOnlyList<AcpProfile> profiles = await _profileStore.LoadAsync(CancellationToken.None)
             .ConfigureAwait(false);
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
         {
             Profiles.Clear();
             foreach (AcpProfile profile in profiles)
@@ -956,7 +956,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
         }
 
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
         {
             if (Transcript.Count > 0 && Transcript[^1] is AcpTranscriptMessageEntry last
                 && string.Equals(last.Role, role, StringComparison.Ordinal))
@@ -984,7 +984,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
         ToolContentSnapshot contentSnapshot = ExtractToolContent(payload);
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
 
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
         {
             if (_toolCallIndexes.TryGetValue(toolCallId, out int index)
                 && index >= 0
@@ -1074,7 +1074,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
                 signal = TryGetString(exitStatus, "signal");
             }
 
-            RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+            RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
             {
                 if (!_toolCallIndexes.TryGetValue(toolCallId, out int index)
                     || index < 0
@@ -1162,7 +1162,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
     private void AppendStatusEntry(string title, string detail)
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
         {
             Transcript.Add(new AcpTranscriptStatusEntry(title, detail, timestamp));
             return Disposable.Empty;
@@ -1290,7 +1290,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
     private void AddActivity(string message, string kind)
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
         {
             Activity.Insert(0, new AcpActivityEntry(timestamp, message, kind));
             return Disposable.Empty;
@@ -1299,7 +1299,7 @@ public sealed class AcpToolViewModel : ReactiveObject, IDisposable
 
     private void AddOrUpdateSession(AcpSessionEntry entry)
     {
-        RxApp.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
+        RxSchedulers.MainThreadScheduler.Schedule(Unit.Default, (_, __) =>
         {
             for (int i = 0; i < Sessions.Count; i++)
             {

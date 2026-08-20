@@ -162,8 +162,8 @@ public sealed class TreeInspectorPanelViewModel : ReactiveObject, IDisposable
                 RunBackground(SelectNodeAsync(node.NodeId));
             }));
 
-        _disposables.Add(Observable.Interval(PollInterval, RxApp.TaskpoolScheduler)
-            .ObserveOn(RxApp.MainThreadScheduler)
+        _disposables.Add(Observable.Interval(PollInterval, RxSchedulers.TaskpoolScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => { RunBackground(PollDesignerAsync()); }));
     }
 

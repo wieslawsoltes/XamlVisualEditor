@@ -82,7 +82,9 @@ public sealed class TerminalGoldenRenderTests
         RenderTargetBitmap rtb = new(new PixelSize((int)control.Bounds.Width, (int)control.Bounds.Height));
         await Dispatcher.UIThread.InvokeAsync(() => rtb.Render(control));
         using Stream stream = new MemoryStream();
+#pragma warning disable CS0618
         rtb.Save(stream);
+#pragma warning restore CS0618
         stream.Position = 0;
         using SHA256 sha = SHA256.Create();
         byte[] hash = sha.ComputeHash(stream);

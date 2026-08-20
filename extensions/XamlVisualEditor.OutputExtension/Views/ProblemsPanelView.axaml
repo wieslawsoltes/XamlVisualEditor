@@ -28,7 +28,7 @@
     </StackPanel>
     <TextBox Grid.Row="2"
              Grid.Column="1"
-             Watermark="Search diagnostics..."
+             PlaceholderText="Search diagnostics..."
              Text="{CompiledBinding SearchText, Mode=TwoWay}" />
 
     <dg:DataGrid Grid.Row="3"

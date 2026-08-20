@@ -8,7 +8,7 @@
   <DockPanel Margin="8">
     <StackPanel DockPanel.Dock="Top" Spacing="6">
       <TextBlock Text="{CompiledBinding PanelTitle}" FontWeight="SemiBold" />
-      <TextBox Watermark="Search nodes..."
+      <TextBox PlaceholderText="Search nodes..."
                Text="{CompiledBinding SearchText, Mode=TwoWay}" />
     </StackPanel>
 

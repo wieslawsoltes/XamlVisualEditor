@@ -12,7 +12,7 @@
         <TextBlock Text="{CompiledBinding TotalCount, StringFormat='Count: {0}'}"
                    VerticalAlignment="Center" Opacity="0.7" />
       </StackPanel>
-      <TextBox Watermark="Search references..."
+      <TextBox PlaceholderText="Search references..."
                Text="{CompiledBinding FilterText, Mode=TwoWay}" />
     </StackPanel>
 
