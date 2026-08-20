@@ -6761,6 +6761,7 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             ApplyAssemblyResolver(assemblySet);
             _metadataService.LoadAssemblies(assemblySet.All);
+            UpdateWorkspaceDesignThemes(workspace);
             RefreshOpenDocumentsAfterMetadataLoad();
         }
 
@@ -7356,9 +7357,70 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         {
             ApplyAssemblyResolver(assemblySet);
             _metadataService.LoadAssemblies(assemblySet.All);
+            UpdateWorkspaceDesignThemes(_workspace);
             RefreshOpenDocumentsAfterMetadataLoad();
         }
         LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+    }
+
+    // Feeds the design-surface theme registry from the workspace application's
+    // App.axaml so instantiated controls get the target app's themes and resources.
+    private void UpdateWorkspaceDesignThemes(WorkspaceModel workspace)
+    {
+        string? appXamlPath = FindApplicationXamlPath(workspace);
+        if (appXamlPath is null)
+        {
+            WorkspaceDesignThemeRegistry.Clear();
+            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace");
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(appXamlPath);
+            LogOutput("Info", $"Design themes from {appXamlPath}: {string.Join("; ", details)}");
+        }
+        catch (Exception ex)
+        {
+            WorkspaceDesignThemeRegistry.Clear();
+            LogOutput("Warning", $"Design themes failed for {appXamlPath}: {ex.Message}");
+        }
+    }
+
+    private static string? FindApplicationXamlPath(WorkspaceModel workspace)
+    {
+        foreach (ProjectModel project in workspace.Projects.OrderByDescending(p => p.IsExecutable))
+        {
+            foreach (XamlFileModel file in project.XamlFiles)
+            {
+                string fileName = System.IO.Path.GetFileName(file.FilePath);
+                if (fileName.Equals("App.axaml", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.Equals("App.xaml", StringComparison.OrdinalIgnoreCase))
+                {
+                    return file.FilePath;
+                }
+            }
+        }
+
+        foreach (ProjectModel project in workspace.Projects.OrderByDescending(p => p.IsExecutable))
+        {
+            string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
+            if (string.IsNullOrEmpty(projectDir))
+            {
+                continue;
+            }
+
+            foreach (string candidate in new[] { "App.axaml", "App.xaml" })
+            {
+                string path = System.IO.Path.Combine(projectDir, candidate);
+                if (System.IO.File.Exists(path))
+                {
+                    return path;
+                }
+            }
+        }
+
+        return null;
     }
 
     private void RefreshOpenDocumentsAfterMetadataLoad()
