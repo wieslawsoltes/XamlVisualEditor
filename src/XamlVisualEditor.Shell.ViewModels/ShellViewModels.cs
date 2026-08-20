@@ -2429,6 +2429,12 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
     public bool HasWorkspace { get; private set; }
 
     /// <summary>
+    /// Gets whether a workspace load is in progress; drives the busy overlay.
+    /// </summary>
+    [Reactive]
+    public bool IsWorkspaceLoading { get; private set; }
+
+    /// <summary>
     /// Interaction for opening a file dialog.
     /// </summary>
     public Interaction<Unit, string?> OpenFileInteraction { get; } = new();
@@ -6710,71 +6716,80 @@ public sealed class MainWindowViewModel : ReactiveObject, IDisposable, IWorkspac
         string workspaceName = System.IO.Path.GetFileName(workspacePath);
         StatusText = $"Loading workspace {workspaceName}";
         LogOutput("Info", $"Loading workspace: {workspacePath}");
+        IsWorkspaceLoading = true;
 
-        WorkspaceModel workspace;
         try
         {
-            workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
-                        extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
-                ? await _workspaceService.LoadSolutionAsync(workspacePath)
-                : await _workspaceService.LoadProjectAsync(workspacePath);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Workspace load failed: {Message}", ex.Message);
-            LogOutput("Error", $"Workspace load failed: {ex.Message}");
-            LogWorkspaceEnvironment(workspacePath);
-            StatusText = $"Workspace load failed: {ex.Message}";
-            HasWorkspace = false;
-            return;
-        }
+            WorkspaceModel workspace;
+            try
+            {
+                workspace = extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+                            extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+                    ? await _workspaceService.LoadSolutionAsync(workspacePath)
+                    : await _workspaceService.LoadProjectAsync(workspacePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Workspace load failed: {Message}", ex.Message);
+                LogOutput("Error", $"Workspace load failed: {ex.Message}");
+                LogWorkspaceEnvironment(workspacePath);
+                StatusText = $"Workspace load failed: {ex.Message}";
+                HasWorkspace = false;
+                return;
+            }
 
-        _workspace = workspace;
-        _workspacePath = workspacePath;
-        _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
-        HasWorkspace = true;
-        RefreshWorkspaceProjects(workspace);
+            _workspace = workspace;
+            _workspacePath = workspacePath;
+            _workspaceInfoUpdater?.UpdateWorkspacePath(_workspacePath);
+            HasWorkspace = true;
+            RefreshWorkspaceProjects(workspace);
 
-        string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
-        SolutionExplorer.LoadWorkspace(workspace, name);
-        SolutionExplorer.IsVisible = true;
+            string? name = System.IO.Path.GetFileNameWithoutExtension(workspacePath);
+            SolutionExplorer.LoadWorkspace(workspace, name);
+            SolutionExplorer.IsVisible = true;
 
-        bool hasAnyProjectOutputs;
-        bool hasMissingProjectOutputs;
-        WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
-            workspace,
-            out hasAnyProjectOutputs,
-            out hasMissingProjectOutputs);
-        if (!hasAnyProjectOutputs || hasMissingProjectOutputs)
-        {
-            await RunDotNetCommandAsync(workspacePath, "restore");
-            await RunDotNetCommandAsync(workspacePath, "build");
-            assemblySet = CollectWorkspaceAssemblies(
+            bool hasAnyProjectOutputs;
+            bool hasMissingProjectOutputs;
+            WorkspaceAssemblySet assemblySet = CollectWorkspaceAssemblies(
                 workspace,
                 out hasAnyProjectOutputs,
                 out hasMissingProjectOutputs);
-        }
-
-        LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
-
-        if (assemblySet.All.Count > 0)
-        {
-            ApplyAssemblyResolver(assemblySet);
-            _metadataService.LoadAssemblies(assemblySet.All);
-            UpdateWorkspaceDesignThemes(workspace);
-            RefreshOpenDocumentsAfterMetadataLoad();
-        }
-
-        if (_languageRegistry is not null)
-        {
-            foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+            if (!hasAnyProjectOutputs || hasMissingProjectOutputs)
             {
-                await service.InitializeWorkspaceAsync(workspacePath);
+                await RunDotNetCommandAsync(workspacePath, "restore");
+                await RunDotNetCommandAsync(workspacePath, "build");
+                assemblySet = CollectWorkspaceAssemblies(
+                    workspace,
+                    out hasAnyProjectOutputs,
+                    out hasMissingProjectOutputs);
             }
-        }
 
-        StatusText = $"Loaded workspace {name}";
-        LogOutput("Info", $"Loaded workspace: {name}");
+            LogAssemblySet(assemblySet, hasAnyProjectOutputs, hasMissingProjectOutputs);
+
+            if (assemblySet.All.Count > 0)
+            {
+                StatusText = $"Loading workspace {workspaceName}: reading assemblies...";
+                ApplyAssemblyResolver(assemblySet);
+                _metadataService.LoadAssemblies(assemblySet.All);
+                UpdateWorkspaceDesignThemes(workspace);
+                RefreshOpenDocumentsAfterMetadataLoad();
+            }
+
+            if (_languageRegistry is not null)
+            {
+                foreach (ILanguageIntellisenseService service in _languageRegistry.Services)
+                {
+                    await service.InitializeWorkspaceAsync(workspacePath);
+                }
+            }
+
+            StatusText = $"Loaded workspace {name}";
+            LogOutput("Info", $"Loaded workspace: {name}");
+        }
+        finally
+        {
+            IsWorkspaceLoading = false;
+        }
     }
 
     private void RefreshWorkspaceProjects(WorkspaceModel workspace)

@@ -20,6 +20,7 @@
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
+    <Panel>
     <DockPanel>
         <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
@@ -322,4 +323,29 @@
             Layout="{CompiledBinding DockLayout}"
             Factory="{CompiledBinding DockFactory}" />
     </DockPanel>
+
+    <!-- Busy overlay while a workspace is loading -->
+    <Border IsVisible="{CompiledBinding IsWorkspaceLoading}"
+            Background="#A0000000"
+            ZIndex="100">
+        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                CornerRadius="8"
+                Padding="24,20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                MinWidth="320">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Loading workspace..."
+                           FontSize="14"
+                           FontWeight="SemiBold" />
+                <ProgressBar IsIndeterminate="True" />
+                <TextBlock Text="{CompiledBinding StatusText}"
+                           FontSize="12"
+                           Opacity="0.8"
+                           TextWrapping="Wrap"
+                           MaxWidth="420" />
+            </StackPanel>
+        </Border>
+    </Border>
+    </Panel>
 </Window>
