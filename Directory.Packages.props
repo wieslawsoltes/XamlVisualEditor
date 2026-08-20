@@ -50,8 +50,8 @@
     <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.4" />
     <!-- xUnit 4 is a breaking test-platform migration; retain the coherent xUnit 3 toolchain for v0.1.0. -->
     <!-- Testing -->
-    <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <!-- System.Reactive -->
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
