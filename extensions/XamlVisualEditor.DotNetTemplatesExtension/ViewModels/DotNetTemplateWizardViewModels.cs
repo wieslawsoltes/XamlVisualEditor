@@ -10,7 +10,7 @@ using System.Reactive.Threading.Tasks;
 using System.Threading;
 using Avalonia.Threading;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Extensions;
 
@@ -29,7 +29,7 @@ public enum DotNetTemplateWizardStep
     Configure
 }
 
-public sealed class DotNetTemplateWizardResult
+public sealed partial class DotNetTemplateWizardResult
 {
     public DotNetTemplateWizardResult(string? solutionPath, string projectPath)
     {
@@ -42,7 +42,7 @@ public sealed class DotNetTemplateWizardResult
     public string ProjectPath { get; }
 }
 
-public sealed class WorkspaceOpenRequest
+public sealed partial class WorkspaceOpenRequest
 {
     public WorkspaceOpenRequest(string workspacePath)
     {
@@ -62,7 +62,7 @@ public enum WorkspaceOpenChoice
     Cancel
 }
 
-public sealed class DotNetTemplateListItemViewModel : ReactiveObject
+public sealed partial class DotNetTemplateListItemViewModel : ReactiveObject
 {
     public DotNetTemplateListItemViewModel(DotNetTemplateInfo template)
     {
@@ -104,7 +104,7 @@ public sealed class DotNetTemplateListItemViewModel : ReactiveObject
     }
 }
 
-public sealed class DotNetProjectRowViewModel : ReactiveObject
+public sealed partial class DotNetProjectRowViewModel : ReactiveObject
 {
     public DotNetProjectRowViewModel(string projectName, bool createDirectory)
     {
@@ -113,13 +113,13 @@ public sealed class DotNetProjectRowViewModel : ReactiveObject
     }
 
     [Reactive]
-    public string ProjectName { get; set; }
+    public partial string ProjectName { get; set; }
 
     [Reactive]
-    public bool CreateProjectDirectory { get; set; }
+    public partial bool CreateProjectDirectory { get; set; }
 }
 
-public sealed class DotNetTemplateWizardViewModel : ReactiveObject
+public sealed partial class DotNetTemplateWizardViewModel : ReactiveObject
 {
     private const string LastLocationKey = "dotnetTemplates.lastLocation";
     private readonly IDotNetTemplateService _templateService;
@@ -325,54 +325,54 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
     }
 
     [Reactive]
-    public string Title { get; private set; } = string.Empty;
+    public partial string Title { get; private set; } = string.Empty;
 
     public DotNetTemplateWizardMode Mode { get; }
 
     [Reactive]
-    public DotNetTemplateWizardStep Step { get; set; } = DotNetTemplateWizardStep.Template;
+    public partial DotNetTemplateWizardStep Step { get; set; } = DotNetTemplateWizardStep.Template;
 
     [Reactive]
-    public string SearchText { get; set; }
+    public partial string SearchText { get; set; }
 
     [Reactive]
-    public string? SelectedLanguage { get; set; }
+    public partial string? SelectedLanguage { get; set; }
 
     [Reactive]
-    public DotNetTemplateListItemViewModel? SelectedTemplate { get; set; }
+    public partial DotNetTemplateListItemViewModel? SelectedTemplate { get; set; }
 
     [Reactive]
-    public string ProjectName { get; set; }
+    public partial string ProjectName { get; set; }
 
     [Reactive]
-    public string SolutionName { get; set; }
+    public partial string SolutionName { get; set; }
 
     [Reactive]
-    public string Location { get; set; }
+    public partial string Location { get; set; }
 
     [Reactive]
-    public bool CreateProjectDirectory { get; set; }
+    public partial bool CreateProjectDirectory { get; set; }
 
     [Reactive]
-    public bool CreateSolutionDirectory { get; set; }
+    public partial bool CreateSolutionDirectory { get; set; }
 
     [Reactive]
-    public bool CreateSolution { get; set; }
+    public partial bool CreateSolution { get; set; }
 
     [Reactive]
-    public bool AddProjectToSolution { get; set; }
+    public partial bool AddProjectToSolution { get; set; }
 
     [Reactive]
-    public string? InstallTemplateInput { get; set; }
+    public partial string? InstallTemplateInput { get; set; }
 
     [Reactive]
-    public bool IsBusy { get; private set; }
+    public partial bool IsBusy { get; private set; }
 
     [Reactive]
-    public string? StatusMessage { get; private set; }
+    public partial string? StatusMessage { get; private set; }
 
     [Reactive]
-    public string? ErrorMessage { get; private set; }
+    public partial string? ErrorMessage { get; private set; }
 
     public ObservableCollection<string> Languages { get; } = new();
 
@@ -381,7 +381,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
     public ObservableCollection<DotNetProjectRowViewModel> ProjectRows { get; }
 
     [Reactive]
-    public DotNetProjectRowViewModel? SelectedProjectRow { get; set; }
+    public partial DotNetProjectRowViewModel? SelectedProjectRow { get; set; }
 
     public bool IsTemplateStep => Step == DotNetTemplateWizardStep.Template;
 
@@ -1005,7 +1005,7 @@ public sealed class DotNetTemplateWizardViewModel : ReactiveObject
     }
 }
 
-public sealed class WorkspaceOpenPromptDialogViewModel : ReactiveObject
+public sealed partial class WorkspaceOpenPromptDialogViewModel : ReactiveObject
 {
     public WorkspaceOpenPromptDialogViewModel(WorkspaceOpenRequest request)
     {

@@ -6,7 +6,6 @@
     <!-- Avalonia -->
     <PackageVersion Include="Avalonia" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
-    <PackageVersion Include="Avalonia.DesignerSupport" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Markup.Xaml.Loader" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Remote.Protocol" Version="12.1.1" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.1" />
@@ -18,6 +17,8 @@
     <!-- AvaloniaEdit -->
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
+    <!-- Dock 12.1 and ReactiveUI.Avalonia 12.1 require the breaking ReactiveUI 24/System.Reactive 7 cohort. -->
+    <!-- Keep these versions aligned until the routing and command API migration is completed together. -->
     <!-- Dock -->
     <PackageVersion Include="Dock.Avalonia" Version="12.0.0.2" />
     <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.0.0.2" />
@@ -25,36 +26,36 @@
     <PackageVersion Include="Dock.Serializer.SystemTextJson" Version="12.0.0.2" />
     <!-- ReactiveUI -->
     <PackageVersion Include="ReactiveUI" Version="23.2.28" />
-    <PackageVersion Include="ReactiveUI.Fody" Version="19.5.41" />
+    <PackageVersion Include="ReactiveUI.SourceGenerators" Version="3.2.0" />
     <PackageVersion Include="ReactiveUI.Avalonia" Version="12.0.3" />
     <!-- MSBuild / Roslyn -->
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
+    <!-- Match the Microsoft.Build runtime shipped by the selected .NET 10 SDK. -->
     <PackageVersion Include="Microsoft.Build.Framework" Version="18.3.3" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.400" />
     <!-- DI -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
     <!-- Logging -->
-    <PackageVersion Include="Serilog" Version="4.3.1" />
+    <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <!-- TextMate -->
-    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.4" />
+    <!-- xUnit 4 is a breaking test-platform migration; retain the coherent xUnit 3 toolchain for v0.1.0. -->
     <!-- Testing -->
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <!-- System.Reactive -->
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <!-- Xaml.Behaviors -->
-    <PackageVersion Include="Xaml.Behaviors" Version="12.0.5" />
-    <PackageVersion Include="Xaml.Behaviors.Avalonia" Version="12.0.5" />
+    <PackageVersion Include="Xaml.Behaviors.Avalonia" Version="12.0.6" />
   </ItemGroup>
 </Project>

@@ -7,7 +7,7 @@ using System.Reactive.Linq;
 using AvaloniaEdit.Document;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Sync;
@@ -22,7 +22,7 @@ namespace XamlVisualEditor.CodeEditor;
 /// ViewModel for the XAML code editor panel.
 /// Wraps an AvaloniaEdit TextDocument and integrates with the sync engine.
 /// </summary>
-public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
+public sealed partial class CodeEditorViewModel : ReactiveObject, IDisposable
 {
     private readonly CompositeDisposable _disposables = new();
     private readonly SyncEngine _syncEngine;
@@ -55,43 +55,43 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// Gets or sets the caret offset.
     /// </summary>
     [Reactive]
-    public int CaretOffset { get; set; }
+    public partial int CaretOffset { get; set; }
 
     /// <summary>
     /// Gets the current line number (1-based).
     /// </summary>
     [Reactive]
-    public int CurrentLine { get; set; } = 1;
+    public partial int CurrentLine { get; set; } = 1;
 
     /// <summary>
     /// Gets the current column number (1-based).
     /// </summary>
     [Reactive]
-    public int CurrentColumn { get; set; } = 1;
+    public partial int CurrentColumn { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets whether the document has been modified.
     /// </summary>
     [Reactive]
-    public bool IsModified { get; set; }
+    public partial bool IsModified { get; set; }
 
     /// <summary>
     /// Gets or sets whether word wrap is enabled.
     /// </summary>
     [Reactive]
-    public bool WordWrap { get; set; }
+    public partial bool WordWrap { get; set; }
 
     /// <summary>
     /// Gets or sets whether line numbers are shown.
     /// </summary>
     [Reactive]
-    public bool ShowLineNumbers { get; set; } = true;
+    public partial bool ShowLineNumbers { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the font size.
     /// </summary>
     [Reactive]
-    public double FontSize { get; set; } = 14.0;
+    public partial double FontSize { get; set; } = 14.0;
 
     /// <summary>
     /// Gets the language identifier for the document.
@@ -102,31 +102,31 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// Gets the AST node ID at the current caret position, if any.
     /// </summary>
     [Reactive]
-    public Guid? CaretNodeId { get; set; }
+    public partial Guid? CaretNodeId { get; set; }
 
     /// <summary>
     /// Gets or sets the selection start offset.
     /// </summary>
     [Reactive]
-    public int SelectionStart { get; set; }
+    public partial int SelectionStart { get; set; }
 
     /// <summary>
     /// Gets or sets the selection length.
     /// </summary>
     [Reactive]
-    public int SelectionLength { get; set; }
+    public partial int SelectionLength { get; set; }
 
     /// <summary>
     /// Gets or sets the current execution line number (1-based).
     /// </summary>
     [Reactive]
-    public int? ExecutionLine { get; set; }
+    public partial int? ExecutionLine { get; set; }
 
     /// <summary>
     /// Gets the version used to refresh breakpoint line highlights.
     /// </summary>
     [Reactive]
-    public int BreakpointHighlightVersion { get; private set; }
+    public partial int BreakpointHighlightVersion { get; private set; }
 
     /// <summary>
     /// Gets the diagnostics for the current document.
@@ -157,7 +157,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// Gets the version used to refresh semantic token highlights.
     /// </summary>
     [Reactive]
-    public int SemanticTokenVersion { get; private set; }
+    public partial int SemanticTokenVersion { get; private set; }
 
     /// <summary>
     /// Gets the completion items for the popup.
@@ -168,7 +168,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
     /// Gets or sets whether the completion popup is visible.
     /// </summary>
     [Reactive]
-    public bool IsCompletionOpen { get; set; }
+    public partial bool IsCompletionOpen { get; set; }
 
     /// <summary>
     /// Fires when the caret moves to a new AST node.
@@ -790,7 +790,7 @@ public sealed class CodeEditorViewModel : ReactiveObject, IDisposable
             : "xml";
     }
 
-    private sealed class NullTypeMetadataService : ITypeMetadataService
+    private sealed partial class NullTypeMetadataService : ITypeMetadataService
     {
         public TypeMetadata? GetType(string xmlNamespace, string typeName) => null;
 

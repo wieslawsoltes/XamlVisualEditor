@@ -12,7 +12,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Microsoft.Extensions.Logging;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Designer.Core;
@@ -23,7 +23,7 @@ namespace XamlVisualEditor.PropertyEditor;
 /// <summary>
 /// Describes one editable property of a design item.
 /// </summary>
-public sealed class PropertyItemViewModel : ReactiveObject
+public sealed partial class PropertyItemViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the property name.
@@ -59,13 +59,13 @@ public sealed class PropertyItemViewModel : ReactiveObject
     /// Gets or sets the current value as a string.
     /// </summary>
     [Reactive]
-    public string? Value { get; set; }
+    public partial string? Value { get; set; }
 
     /// <summary>
     /// Gets whether this property is currently set (vs. using default).
     /// </summary>
     [Reactive]
-    public bool IsSet { get; set; }
+    public partial bool IsSet { get; set; }
 
     /// <summary>
     /// Gets the default value hint.
@@ -81,7 +81,7 @@ public sealed class PropertyItemViewModel : ReactiveObject
     /// Gets or sets whether this property is visible after filtering.
     /// </summary>
     [Reactive]
-    public bool IsVisible { get; set; } = true;
+    public partial bool IsVisible { get; set; } = true;
 
     /// <summary>
     /// Gets the AST node id this property belongs to.
@@ -110,7 +110,7 @@ public sealed class PropertyItemViewModel : ReactiveObject
 /// <summary>
 /// A group of properties in the same category.
 /// </summary>
-public sealed class PropertyCategoryViewModel : ReactiveObject
+public sealed partial class PropertyCategoryViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the category name.
@@ -121,13 +121,13 @@ public sealed class PropertyCategoryViewModel : ReactiveObject
     /// Gets or sets whether the category is expanded.
     /// </summary>
     [Reactive]
-    public bool IsExpanded { get; set; } = true;
+    public partial bool IsExpanded { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether the category is visible after filtering.
     /// </summary>
     [Reactive]
-    public bool IsVisible { get; set; } = true;
+    public partial bool IsVisible { get; set; } = true;
 
     /// <summary>
     /// Gets the properties in this category.
@@ -143,7 +143,7 @@ public sealed class PropertyCategoryViewModel : ReactiveObject
 /// <summary>
 /// Provides row data for grouped property views.
 /// </summary>
-public sealed class PropertyRowViewModel
+public sealed partial class PropertyRowViewModel
 {
     public PropertyItemViewModel Property { get; }
 
@@ -159,7 +159,7 @@ public sealed class PropertyRowViewModel
 /// <summary>
 /// Groups property rows without reflection-based property paths.
 /// </summary>
-public sealed class PropertyRowGroupDescription : DataGridGroupDescription
+public sealed partial class PropertyRowGroupDescription : DataGridGroupDescription
 {
     public override string PropertyName => nameof(PropertyRowViewModel.GroupName);
 
@@ -177,19 +177,19 @@ public sealed class PropertyRowGroupDescription : DataGridGroupDescription
 /// <summary>
 /// ViewModel for the property editor panel.
 /// </summary>
-public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
+public sealed partial class PropertyEditorViewModel : ReactiveObject, IDisposable
 {
     /// <summary>
     /// Gets the name of the selected control type.
     /// </summary>
     [Reactive]
-    public string? SelectedTypeName { get; set; }
+    public partial string? SelectedTypeName { get; set; }
 
     /// <summary>
     /// Gets or sets the search/filter text.
     /// </summary>
     [Reactive]
-    public string? SearchText { get; set; }
+    public partial string? SearchText { get; set; }
 
     /// <summary>
     /// Gets the categorized properties.
@@ -215,13 +215,13 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
     /// Gets or sets whether Properties tab is shown (vs Events tab).
     /// </summary>
     [Reactive]
-    public bool ShowProperties { get; set; } = true;
+    public partial bool ShowProperties { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether grouped view is shown (vs flat grid).
     /// </summary>
     [Reactive]
-    public bool ShowGroupedView { get; set; }
+    public partial bool ShowGroupedView { get; set; }
 
     /// <summary>
     /// Fires when a property value changes (for upstream sync).
@@ -849,7 +849,7 @@ public sealed class PropertyEditorViewModel : ReactiveObject, IDisposable
 /// <summary>
 /// ViewModel for an event in the property editor.
 /// </summary>
-public sealed class EventItemViewModel : ReactiveObject
+public sealed partial class EventItemViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the event name.
@@ -860,7 +860,7 @@ public sealed class EventItemViewModel : ReactiveObject
     /// Gets or sets the handler name.
     /// </summary>
     [Reactive]
-    public string? HandlerName { get; set; }
+    public partial string? HandlerName { get; set; }
 
     public EventItemViewModel(string name)
     {

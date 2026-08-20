@@ -5,12 +5,12 @@ using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class DebugSettingsViewModel : ReactiveObject
+public sealed partial class DebugSettingsViewModel : ReactiveObject
 {
     private const string NetcoredbgServiceId = "debugger.netcoredbg";
     private readonly IDebuggerServiceRegistry _debuggerRegistry;
@@ -22,21 +22,21 @@ public sealed class DebugSettingsViewModel : ReactiveObject
     private readonly Func<DebugToolConsentRequest, Task<bool>> _confirmAsync;
 
     [Reactive]
-    public string AdapterPath { get; set; }
+    public partial string AdapterPath { get; set; }
 
     [Reactive]
-    public bool AutoDownloadTools { get; set; }
+    public partial bool AutoDownloadTools { get; set; }
 
     [Reactive]
-    public bool IsBusy { get; private set; }
+    public partial bool IsBusy { get; private set; }
 
     [Reactive]
-    public string StatusText { get; private set; } = "";
+    public partial string StatusText { get; private set; } = "";
 
     public ObservableCollection<DebuggerServiceOption> DebuggerServices { get; } = new();
 
     [Reactive]
-    public DebuggerServiceOption? SelectedDebuggerService { get; set; }
+    public partial DebuggerServiceOption? SelectedDebuggerService { get; set; }
 
     public bool IsNetcoredbgSelected => string.Equals(SelectedDebuggerService?.Id, NetcoredbgServiceId, StringComparison.Ordinal);
 
@@ -162,4 +162,4 @@ public sealed class DebugSettingsViewModel : ReactiveObject
 }
 
 /// <summary>Represents a selectable debugger service in settings UI.</summary>
-public sealed record DebuggerServiceOption(string Id, string DisplayName);
+public sealed partial record DebuggerServiceOption(string Id, string DisplayName);

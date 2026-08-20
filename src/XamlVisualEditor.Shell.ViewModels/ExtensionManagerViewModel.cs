@@ -5,13 +5,13 @@ using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class ExtensionManagerViewModel : ReactiveObject, IDisposable
+public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposable
 {
     private readonly IExtensionManager _manager;
     private readonly Func<Task<string?>> _selectPackagePathAsync;
@@ -59,10 +59,10 @@ public sealed class ExtensionManagerViewModel : ReactiveObject, IDisposable
     public ObservableCollection<ExtensionPackageItemViewModel> InstalledPackages { get; } = new();
 
     [Reactive]
-    public ExtensionPackageItemViewModel? SelectedPackage { get; set; }
+    public partial ExtensionPackageItemViewModel? SelectedPackage { get; set; }
 
     [Reactive]
-    public string StatusMessage { get; set; } = string.Empty;
+    public partial string StatusMessage { get; set; } = string.Empty;
 
     public bool HasSelection => SelectedPackage is not null;
 
@@ -201,7 +201,7 @@ public sealed class ExtensionManagerViewModel : ReactiveObject, IDisposable
     }
 }
 
-public sealed class ExtensionPackageItemViewModel : ReactiveObject
+public sealed partial class ExtensionPackageItemViewModel : ReactiveObject
 {
     private bool _isEnabled;
     private string? _latestVersion;

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 
 namespace XamlVisualEditor.Shell.ViewModels;
@@ -13,13 +13,13 @@ namespace XamlVisualEditor.Shell.ViewModels;
 /// <summary>
 /// ViewModel for a simple input dialog.
 /// </summary>
-public sealed class InputBoxDialogViewModel : ReactiveObject
+public sealed partial class InputBoxDialogViewModel : ReactiveObject
 {
     public string Title { get; }
     public string Prompt { get; }
 
     [Reactive]
-    public string Value { get; set; }
+    public partial string Value { get; set; }
 
     public Interaction<string?, Unit> CloseInteraction { get; } = new();
 
@@ -42,14 +42,14 @@ public sealed class InputBoxDialogViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for a quick pick dialog.
 /// </summary>
-public sealed class QuickPickDialogViewModel : ReactiveObject
+public sealed partial class QuickPickDialogViewModel : ReactiveObject
 {
     public string Title { get; }
 
     public ObservableCollection<QuickPickItemViewModel> Items { get; } = new();
 
     [Reactive]
-    public QuickPickItemViewModel? SelectedItem { get; set; }
+    public partial QuickPickItemViewModel? SelectedItem { get; set; }
 
     public Interaction<QuickPickItem?, Unit> CloseInteraction { get; } = new();
 
@@ -80,7 +80,7 @@ public sealed class QuickPickDialogViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for a single quick pick item.
 /// </summary>
-public sealed class QuickPickItemViewModel
+public sealed partial class QuickPickItemViewModel
 {
     public QuickPickItemViewModel(QuickPickItem item)
     {
@@ -103,7 +103,7 @@ public sealed class QuickPickItemViewModel
 /// <summary>
 /// ViewModel for a simple message dialog.
 /// </summary>
-public sealed class MessageDialogViewModel : ReactiveObject
+public sealed partial class MessageDialogViewModel : ReactiveObject
 {
     public string Title { get; }
     public string Message { get; }

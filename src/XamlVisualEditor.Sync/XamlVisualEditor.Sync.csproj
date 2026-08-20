@@ -5,7 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="ReactiveUI" />
-    <PackageReference Include="ReactiveUI.Fody" />
     <PackageReference Include="System.Reactive" />
   </ItemGroup>
   <ItemGroup>

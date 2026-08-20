@@ -9,13 +9,13 @@ using System.Reactive.Threading.Tasks;
 using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions;
 using XamlVisualEditor.Extensions.Hosting.IdeBridge;
 
 namespace XamlVisualEditor.IdeBridgeExtension;
 
-public sealed class IdeBridgePermissionEntryViewModel
+public sealed partial class IdeBridgePermissionEntryViewModel
 {
     public IdeBridgePermissionEntryViewModel(IdeBridgeWorkspacePermissionEntry entry)
     {
@@ -85,7 +85,7 @@ public sealed class IdeBridgePermissionEntryViewModel
     }
 }
 
-public sealed class IdeBridgePanelViewModel : ReactiveObject, IDisposable
+public sealed partial class IdeBridgePanelViewModel : ReactiveObject, IDisposable
 {
     private readonly IdeBridgeRuntimeController _controller;
     private readonly IdeBridgePermissionService _permissions;
@@ -97,37 +97,37 @@ public sealed class IdeBridgePanelViewModel : ReactiveObject, IDisposable
     public Interaction<string, Unit> CopyToClipboardInteraction { get; } = new();
 
     [Reactive]
-    public bool IsEnabled { get; set; }
+    public partial bool IsEnabled { get; set; }
 
     [Reactive]
-    public string SelectedTransport { get; set; } = "stdio";
+    public partial string SelectedTransport { get; set; } = "stdio";
 
     [Reactive]
-    public double TcpPort { get; set; } = 4711;
+    public partial double TcpPort { get; set; } = 4711;
 
     [Reactive]
-    public string? UnixSocketPath { get; set; }
+    public partial string? UnixSocketPath { get; set; }
 
     [Reactive]
-    public string StatusText { get; private set; } = "Stopped";
+    public partial string StatusText { get; private set; } = "Stopped";
 
     [Reactive]
-    public string EndpointText { get; private set; } = "stdio";
+    public partial string EndpointText { get; private set; } = "stdio";
 
     [Reactive]
-    public int ConnectionCount { get; private set; }
+    public partial int ConnectionCount { get; private set; }
 
     [Reactive]
-    public string? LastConnectionAt { get; private set; }
+    public partial string? LastConnectionAt { get; private set; }
 
     [Reactive]
-    public string? WorkspaceId { get; private set; }
+    public partial string? WorkspaceId { get; private set; }
 
     [Reactive]
-    public string? SessionToken { get; private set; }
+    public partial string? SessionToken { get; private set; }
 
     [Reactive]
-    public IdeBridgePermissionEntryViewModel? SelectedPermission { get; set; }
+    public partial IdeBridgePermissionEntryViewModel? SelectedPermission { get; set; }
 
     public IReadOnlyList<string> TransportOptions { get; } = new[] { "stdio", "tcp", "unix" };
 

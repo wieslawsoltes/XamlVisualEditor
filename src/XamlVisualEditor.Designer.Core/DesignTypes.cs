@@ -7,7 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Styling;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Core;
 using XamlVisualEditor.Core.Interfaces;
 using XamlVisualEditor.Xaml.Ast;
@@ -18,7 +18,7 @@ namespace XamlVisualEditor.Designer.Core;
 /// Concrete implementation of <see cref="IDesignItem"/> that bridges
 /// an AST node to its instantiated Avalonia control.
 /// </summary>
-public sealed class DesignItem : ReactiveObject, IDesignItem
+public sealed partial class DesignItem : ReactiveObject, IDesignItem
 {
     private readonly MutableAstObjectNode _astNode;
     private readonly List<DesignItem> _children = new();
@@ -48,7 +48,7 @@ public sealed class DesignItem : ReactiveObject, IDesignItem
     /// Gets or sets the instantiated Avalonia control.
     /// </summary>
     [Reactive]
-    public Control? VisualElement { get; set; }
+    public partial Control? VisualElement { get; set; }
 
     /// <inheritdoc />
     public IDesignItem? Parent { get; internal set; }
@@ -90,7 +90,7 @@ public sealed class DesignItem : ReactiveObject, IDesignItem
     /// Gets whether this item is currently selected.
     /// </summary>
     [Reactive]
-    public bool IsSelected { get; set; }
+    public partial bool IsSelected { get; set; }
 
     /// <inheritdoc />
     public void SetProperty(string name, string? value)
@@ -135,7 +135,7 @@ public sealed class DesignItem : ReactiveObject, IDesignItem
 /// <summary>
 /// Manages the selection state on the design surface.
 /// </summary>
-public sealed class SelectionManager : ReactiveObject
+public sealed partial class SelectionManager : ReactiveObject
 {
     private readonly List<IDesignItem> _selectedItems = new();
     private int _suppressSelectionChanged;
@@ -149,7 +149,7 @@ public sealed class SelectionManager : ReactiveObject
     /// Gets the primary (first) selected item.
     /// </summary>
     [Reactive]
-    public IDesignItem? PrimarySelection { get; private set; }
+    public partial IDesignItem? PrimarySelection { get; private set; }
 
     /// <summary>
     /// Fires when the selection changes.
@@ -244,7 +244,7 @@ public sealed class SelectionManager : ReactiveObject
         _selectedItems.Clear();
     }
 
-    private sealed class SelectionChangedScope : IDisposable
+    private sealed partial class SelectionChangedScope : IDisposable
     {
         private SelectionManager? _owner;
 
@@ -269,7 +269,7 @@ public sealed class SelectionManager : ReactiveObject
 /// <summary>
 /// ViewModel for the design surface.
 /// </summary>
-public sealed class DesignSurfaceViewModel : ReactiveObject
+public sealed partial class DesignSurfaceViewModel : ReactiveObject
 {
     private int _selectionSyncDepth;
     /// <summary>
@@ -281,7 +281,7 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// Gets or sets the root design item.
     /// </summary>
     [Reactive]
-    public DesignItem? RootItem { get; set; }
+    public partial DesignItem? RootItem { get; set; }
 
     private IReadOnlyDictionary<Guid, DesignItem> _itemMap = new Dictionary<Guid, DesignItem>();
     private IReadOnlyDictionary<Control, DesignItem> _controlMap = new Dictionary<Control, DesignItem>();
@@ -305,43 +305,43 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// Gets or sets the zoom level (1.0 = 100%).
     /// </summary>
     [Reactive]
-    public double Zoom { get; set; } = 1.0;
+    public partial double Zoom { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets whether snap lines are enabled.
     /// </summary>
     [Reactive]
-    public bool SnapLinesEnabled { get; set; } = true;
+    public partial bool SnapLinesEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether alignment guides are visible.
     /// </summary>
     [Reactive]
-    public bool ShowAlignmentGuides { get; set; } = true;
+    public partial bool ShowAlignmentGuides { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether the surface is in edit mode (non-interactive preview).
     /// </summary>
     [Reactive]
-    public bool IsEditMode { get; set; } = true;
+    public partial bool IsEditMode { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether the grid is visible.
     /// </summary>
     [Reactive]
-    public bool ShowGrid { get; set; }
+    public partial bool ShowGrid { get; set; }
 
     /// <summary>
     /// Gets or sets whether spacing guides are visible.
     /// </summary>
     [Reactive]
-    public bool ShowSpacingGuides { get; set; } = true;
+    public partial bool ShowSpacingGuides { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether rulers are visible.
     /// </summary>
     [Reactive]
-    public bool ShowRulers { get; set; } = true;
+    public partial bool ShowRulers { get; set; } = true;
 
     /// <summary>
     /// Gets the available theme variants for preview.
@@ -357,37 +357,37 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// Gets or sets the selected theme variant for preview.
     /// </summary>
     [Reactive]
-    public ThemeVariant PreviewThemeVariant { get; set; } = ThemeVariant.Default;
+    public partial ThemeVariant PreviewThemeVariant { get; set; } = ThemeVariant.Default;
 
     /// <summary>
     /// Gets or sets whether guide lines are visible.
     /// </summary>
     [Reactive]
-    public bool ShowGuides { get; set; } = true;
+    public partial bool ShowGuides { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether snapping to guides is enabled.
     /// </summary>
     [Reactive]
-    public bool SnapToGuides { get; set; } = true;
+    public partial bool SnapToGuides { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether margin/padding hints are visible.
     /// </summary>
     [Reactive]
-    public bool ShowMarginPadding { get; set; }
+    public partial bool ShowMarginPadding { get; set; }
 
     /// <summary>
     /// Gets or sets whether snap to grid is enabled.
     /// </summary>
     [Reactive]
-    public bool SnapToGrid { get; set; } = true;
+    public partial bool SnapToGrid { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the grid snap size.
     /// </summary>
     [Reactive]
-    public double GridSnapSize { get; set; } = 8.0;
+    public partial double GridSnapSize { get; set; } = 8.0;
 
     /// <summary>
     /// Gets the horizontal guide positions (in surface coordinates).
@@ -403,19 +403,19 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
     /// Gets or sets the canvas width.
     /// </summary>
     [Reactive]
-    public double CanvasWidth { get; set; } = 800;
+    public partial double CanvasWidth { get; set; } = 800;
 
     /// <summary>
     /// Gets or sets the canvas height.
     /// </summary>
     [Reactive]
-    public double CanvasHeight { get; set; } = 600;
+    public partial double CanvasHeight { get; set; } = 600;
 
     /// <summary>
     /// Gets or sets the design-time background color.
     /// </summary>
     [Reactive]
-    public string DesignBackground { get; set; } = "White";
+    public partial string DesignBackground { get; set; } = "White";
 
     /// <summary>
     /// Command to zoom in.
@@ -529,7 +529,7 @@ public sealed class DesignSurfaceViewModel : ReactiveObject
         RequestRebuild();
     }
 
-    private sealed class SelectionSyncScope : IDisposable
+    private sealed partial class SelectionSyncScope : IDisposable
     {
         private DesignSurfaceViewModel? _owner;
 

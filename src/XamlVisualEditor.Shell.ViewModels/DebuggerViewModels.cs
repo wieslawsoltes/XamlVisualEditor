@@ -9,12 +9,12 @@ using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Extensions.Debugging;
 
 namespace XamlVisualEditor.Shell.ViewModels;
 
-public sealed class BreakpointEntryViewModel : ReactiveObject
+public sealed partial class BreakpointEntryViewModel : ReactiveObject
 {
     public BreakpointEntryViewModel(string filePath, int line, int? column)
     {
@@ -26,38 +26,38 @@ public sealed class BreakpointEntryViewModel : ReactiveObject
     public string FilePath { get; }
 
     [Reactive]
-    public int Line { get; set; }
+    public partial int Line { get; set; }
 
     [Reactive]
-    public int? Column { get; set; }
+    public partial int? Column { get; set; }
 
     [Reactive]
-    public string? Condition { get; set; }
+    public partial string? Condition { get; set; }
 
     [Reactive]
-    public string? HitCondition { get; set; }
+    public partial string? HitCondition { get; set; }
 
     [Reactive]
-    public string? LogMessage { get; set; }
+    public partial string? LogMessage { get; set; }
 
     [Reactive]
-    public bool IsEnabled { get; set; } = true;
+    public partial bool IsEnabled { get; set; } = true;
 
     [Reactive]
-    public bool IsVerified { get; set; }
+    public partial bool IsVerified { get; set; }
 
     [Reactive]
-    public string? Message { get; set; }
+    public partial string? Message { get; set; }
 }
 
-public sealed class BreakpointsViewModel : ReactiveObject
+public sealed partial class BreakpointsViewModel : ReactiveObject
 {
     private readonly Dictionary<BreakpointEntryViewModel, IDisposable> _subscriptions = new();
 
     public ObservableCollection<BreakpointEntryViewModel> Items { get; } = new();
 
     [Reactive]
-    public BreakpointEntryViewModel? SelectedBreakpoint { get; set; }
+    public partial BreakpointEntryViewModel? SelectedBreakpoint { get; set; }
 
     public event Action? BreakpointsChanged;
 
@@ -250,7 +250,7 @@ public sealed class BreakpointsViewModel : ReactiveObject
     }
 }
 
-public sealed class StackFrameViewModel : ReactiveObject
+public sealed partial class StackFrameViewModel : ReactiveObject
 {
     public StackFrameViewModel(StackFrameInfo frame)
     {
@@ -273,12 +273,12 @@ public sealed class StackFrameViewModel : ReactiveObject
         : $"{Name} ({System.IO.Path.GetFileName(FilePath)}:{Line})";
 }
 
-public sealed class CallStackViewModel : ReactiveObject
+public sealed partial class CallStackViewModel : ReactiveObject
 {
     public ObservableCollection<StackFrameViewModel> Frames { get; } = new();
 
     [Reactive]
-    public StackFrameViewModel? SelectedFrame { get; set; }
+    public partial StackFrameViewModel? SelectedFrame { get; set; }
 
     public void ReplaceFrames(IReadOnlyList<StackFrameInfo> frames)
     {
@@ -298,7 +298,7 @@ public sealed class CallStackViewModel : ReactiveObject
     }
 }
 
-public sealed class VariableViewModel : ReactiveObject
+public sealed partial class VariableViewModel : ReactiveObject
 {
     public VariableViewModel(string scopeName, VariableInfo variable)
     {
@@ -316,7 +316,7 @@ public sealed class VariableViewModel : ReactiveObject
     public int VariablesReference { get; }
 }
 
-public sealed class LocalsViewModel : ReactiveObject
+public sealed partial class LocalsViewModel : ReactiveObject
 {
     public ObservableCollection<VariableViewModel> Items { get; } = new();
 
@@ -338,7 +338,7 @@ public sealed class LocalsViewModel : ReactiveObject
     }
 }
 
-public sealed class WatchExpressionViewModel : ReactiveObject
+public sealed partial class WatchExpressionViewModel : ReactiveObject
 {
     public WatchExpressionViewModel(string expression)
     {
@@ -348,21 +348,21 @@ public sealed class WatchExpressionViewModel : ReactiveObject
     public string Expression { get; }
 
     [Reactive]
-    public string? Result { get; set; }
+    public partial string? Result { get; set; }
 
     [Reactive]
-    public string? TypeName { get; set; }
+    public partial string? TypeName { get; set; }
 }
 
-public sealed class WatchesViewModel : ReactiveObject
+public sealed partial class WatchesViewModel : ReactiveObject
 {
     public ObservableCollection<WatchExpressionViewModel> Items { get; } = new();
 
     [Reactive]
-    public string NewExpression { get; set; } = string.Empty;
+    public partial string NewExpression { get; set; } = string.Empty;
 
     [Reactive]
-    public WatchExpressionViewModel? SelectedWatch { get; set; }
+    public partial WatchExpressionViewModel? SelectedWatch { get; set; }
 
     public ReactiveCommand<Unit, Unit> AddWatchCommand { get; }
     public ReactiveCommand<WatchExpressionViewModel, Unit> RemoveWatchCommand { get; }
@@ -410,7 +410,7 @@ public sealed class WatchesViewModel : ReactiveObject
     }
 }
 
-public sealed class DebuggerViewModel : ReactiveObject, IDisposable
+public sealed partial class DebuggerViewModel : ReactiveObject, IDisposable
 {
     private readonly IDebuggerServiceRegistry _debuggerRegistry;
     private CompositeDisposable _sessionDisposables = new();
@@ -442,7 +442,7 @@ public sealed class DebuggerViewModel : ReactiveObject, IDisposable
     public WatchesViewModel Watches { get; }
 
     [Reactive]
-    public DebugSessionState State { get; private set; } = DebugSessionState.Created;
+    public partial DebugSessionState State { get; private set; } = DebugSessionState.Created;
 
     public bool HasDebuggerService => _debuggerRegistry.GetActiveService() is not null;
 

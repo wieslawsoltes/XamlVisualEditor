@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.TreeInspectorExtension</RootNamespace>
     <Description>Visual/logical tree inspector extension.</Description>
   </PropertyGroup>

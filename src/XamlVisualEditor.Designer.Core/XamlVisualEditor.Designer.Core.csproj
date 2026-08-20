@@ -6,7 +6,7 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="ReactiveUI" />
-    <PackageReference Include="ReactiveUI.Fody" />
+    <PackageReference Include="ReactiveUI.SourceGenerators" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XamlVisualEditor.Core\XamlVisualEditor.Core.csproj" />

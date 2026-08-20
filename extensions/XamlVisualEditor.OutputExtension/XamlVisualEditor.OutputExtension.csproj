@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <RootNamespace>XamlVisualEditor.OutputExtension</RootNamespace>
     <Description>Output panel extension backed by IWindow output channels</Description>
   </PropertyGroup>

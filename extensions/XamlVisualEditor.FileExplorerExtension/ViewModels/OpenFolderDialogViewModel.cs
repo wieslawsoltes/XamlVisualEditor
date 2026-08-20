@@ -1,11 +1,11 @@
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 
 namespace XamlVisualEditor.FileExplorerExtension.ViewModels;
 
-public sealed class OpenFolderDialogViewModel : ReactiveObject
+public sealed partial class OpenFolderDialogViewModel : ReactiveObject
 {
     public OpenFolderDialogViewModel(string? initialPath = null)
     {
@@ -35,7 +35,7 @@ public sealed class OpenFolderDialogViewModel : ReactiveObject
     }
 
     [Reactive]
-    public string? FolderPath { get; set; }
+    public partial string? FolderPath { get; set; }
 
     public ReactiveCommand<Unit, Unit> BrowseCommand { get; }
 

@@ -21,6 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
 
 env:
@@ -44,19 +45,29 @@ jobs:
       - name: Determine version
         id: version
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${INPUT_VERSION}"
             TAG_NAME="v${VERSION}"
-            IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+            IS_PRERELEASE="${INPUT_PRERELEASE}"
           else
             VERSION="${GITHUB_REF#refs/tags/v}"
             TAG_NAME="${GITHUB_REF#refs/tags/}"
-            if [[ "${VERSION}" == *"-"* ]]; then
-              IS_PRERELEASE="true"
-            else
-              IS_PRERELEASE="false"
-            fi
+            IS_PRERELEASE="false"
+          fi
+
+          SEMVER_PATTERN='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ ! "${VERSION}" =~ ${SEMVER_PATTERN} ]]; then
+            echo "::error::Release version '${VERSION}' is not valid SemVer."
+            exit 1
+          fi
+
+          if [[ "${VERSION}" == *"-"* ]]; then
+            IS_PRERELEASE="true"
           fi
 
           {
@@ -73,13 +84,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -100,9 +111,12 @@ jobs:
         timeout-minutes: 15
         run: dotnet test tests/XamlVisualEditor.Tests.UI/XamlVisualEditor.Tests.UI.csproj -c Release --no-build --logger "trx;LogFileName=ui.trx" --results-directory artifacts/test/ui -p:Version="${{ needs.version.outputs.version }}"
 
+      - name: Test performance
+        run: dotnet test tests/XamlVisualEditor.Tests.Performance/XamlVisualEditor.Tests.Performance.csproj -c Release --no-build --logger "trx;LogFileName=performance.trx" --results-directory artifacts/test/performance -p:Version="${{ needs.version.outputs.version }}"
+
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-test-results
           path: artifacts/test/**/*.trx
@@ -123,9 +137,18 @@ jobs:
           - id: linux-x64
             runner: ubuntu-latest
             rid: linux-x64
+          - id: linux-arm64
+            runner: ubuntu-latest
+            rid: linux-arm64
           - id: win-x64
             runner: windows-latest
             rid: win-x64
+          - id: win-arm64
+            runner: windows-latest
+            rid: win-arm64
+          - id: macos-x64
+            runner: macos-14
+            rid: osx-x64
           - id: macos-arm64
             runner: macos-14
             rid: osx-arm64
@@ -135,18 +158,56 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
       - name: Publish app
         run: dotnet publish "${{ env.APP_PROJECT }}" -c Release -r "${{ matrix.target.rid }}" --self-contained false -p:Version="${{ needs.version.outputs.version }}" -p:ContinuousIntegrationBuild=true -o "artifacts/publish/${{ env.ARTIFACT_NAME }}"
+
+      - name: Validate app archive contents
+        shell: bash
+        env:
+          TARGET_RID: ${{ matrix.target.rid }}
+        run: |
+          output="artifacts/publish/${ARTIFACT_NAME}"
+          required_files=(
+            "${output}/XamlVisualEditor.App.dll"
+            "${output}/XamlVisualEditor.App.deps.json"
+            "${output}/XamlVisualEditor.App.runtimeconfig.json"
+            "${output}/XamlVisualEditor.Designer.PreviewerHost.dll"
+            "${output}/XamlVisualEditor.Designer.PreviewerHost.deps.json"
+            "${output}/vscode-compat-host/host.js"
+            "${output}/vscode-compat-host/jsonrpc.js"
+            "${output}/README.md"
+            "${output}/LICENSE"
+            "${output}/CHANGELOG.md"
+          )
+
+          if [[ "${TARGET_RID}" == win-* ]]; then
+            required_files+=(
+              "${output}/XamlVisualEditor.App.exe"
+              "${output}/XamlVisualEditor.Designer.PreviewerHost.exe"
+            )
+          else
+            required_files+=(
+              "${output}/XamlVisualEditor.App"
+              "${output}/XamlVisualEditor.Designer.PreviewerHost"
+            )
+          fi
+
+          for required_file in "${required_files[@]}"; do
+            if [[ ! -s "${required_file}" ]]; then
+              echo "::error::Required release file is missing or empty: ${required_file}"
+              exit 1
+            fi
+          done
 
       - name: Archive app (Windows)
         if: runner.os == 'Windows'
@@ -161,7 +222,7 @@ jobs:
           zip -r "../../${ARTIFACT_NAME}.zip" .
 
       - name: Upload app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: artifacts/${{ env.ARTIFACT_NAME }}.zip
@@ -178,13 +239,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -197,8 +258,16 @@ jobs:
       - name: Pack
         run: dotnet pack "${{ env.SOLUTION_FILE }}" -c Release --no-build -p:Version="${{ needs.version.outputs.version }}" -p:ContinuousIntegrationBuild=true -o artifacts/packages
 
+      - name: Validate sample extension packages
+        run: |
+          dotnet pack tools/ExtensionSamples/HelloExtension/HelloExtension.csproj -c Release -p:ContinuousIntegrationBuild=true -o artifacts/sample-packages
+          dotnet pack tools/ExtensionSamples/LspExtension/LspExtension.csproj -c Release -p:ContinuousIntegrationBuild=true -o artifacts/sample-packages
+
+      - name: Validate release packages and README badges
+        run: ./eng/validate-release-packages.sh artifacts/packages "${{ needs.version.outputs.version }}"
+
       - name: Upload NuGet packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.PACKAGE_ARTIFACT_NAME }}
           path: |
@@ -218,13 +287,13 @@ jobs:
 
     steps:
       - name: Download NuGet packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.PACKAGE_ARTIFACT_NAME }}
           path: packages
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -232,12 +301,18 @@ jobs:
         shell: bash
         run: |
           if [ -z "${NUGET_API_KEY}" ]; then
-            echo "::notice::NUGET_API_KEY is not configured; skipping NuGet publish."
-            exit 0
+            echo "::error::NUGET_API_KEY is required for a release."
+            exit 1
           fi
 
           shopt -s nullglob
-          for package in packages/*.nupkg packages/*.snupkg; do
+          packages=(packages/*.nupkg)
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::error::No NuGet packages were downloaded."
+            exit 1
+          fi
+
+          for package in "${packages[@]}"; do
             dotnet nuget push "$package" \
               --api-key "${NUGET_API_KEY}" \
               --source https://api.nuget.org/v3/index.json \
@@ -253,23 +328,31 @@ jobs:
       - pack-nuget
       - publish-nuget
     permissions:
+      actions: read
       contents: write
 
     steps:
       - name: Download app artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          pattern: XamlVisualEditor-*
           path: release-assets
           merge-multiple: true
 
       - name: Download NuGet packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ env.PACKAGE_ARTIFACT_NAME }}
           path: release-assets
 
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum ./*.zip ./*.nupkg ./*.snupkg | sort -k 2 > SHA256SUMS
+
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
         with:
           tag_name: ${{ needs.version.outputs.tag-name }}
           target_commitish: ${{ github.sha }}
@@ -280,3 +363,4 @@ jobs:
             release-assets/*.zip
             release-assets/*.nupkg
             release-assets/*.snupkg
+            release-assets/SHA256SUMS

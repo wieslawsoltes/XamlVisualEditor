@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <IsXveExtension>true</IsXveExtension>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>XamlVisualEditor.WorkspaceExtension</RootNamespace>
     <Description>Workspace command extension</Description>

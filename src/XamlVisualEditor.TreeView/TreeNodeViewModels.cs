@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Linq;
 using ReactiveUI;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Xaml.Ast;
 
 namespace XamlVisualEditor.TreeView;
@@ -12,7 +12,7 @@ namespace XamlVisualEditor.TreeView;
 /// <summary>
 /// ViewModel for a node in the visual tree panel.
 /// </summary>
-public sealed class VisualTreeNodeViewModel : ReactiveObject
+public sealed partial class VisualTreeNodeViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the AST node ID this tree node represents.
@@ -23,13 +23,13 @@ public sealed class VisualTreeNodeViewModel : ReactiveObject
     /// Gets or sets the control type name.
     /// </summary>
     [Reactive]
-    public string TypeName { get; set; } = string.Empty;
+    public partial string TypeName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the x:Name of the element, if any.
     /// </summary>
     [Reactive]
-    public string? Name { get; set; }
+    public partial string? Name { get; set; }
 
     /// <summary>
     /// Gets the display text for this node (reactive, updates when TypeName or Name changes).
@@ -41,13 +41,13 @@ public sealed class VisualTreeNodeViewModel : ReactiveObject
     /// Gets or sets whether this node is selected.
     /// </summary>
     [Reactive]
-    public bool IsSelected { get; set; }
+    public partial bool IsSelected { get; set; }
 
     /// <summary>
     /// Gets or sets whether this node is expanded.
     /// </summary>
     [Reactive]
-    public bool IsExpanded { get; set; } = true;
+    public partial bool IsExpanded { get; set; } = true;
 
     /// <summary>
     /// Gets the child nodes.
@@ -209,7 +209,7 @@ public sealed class VisualTreeNodeViewModel : ReactiveObject
 /// <summary>
 /// ViewModel for a node in the logical tree panel.
 /// </summary>
-public sealed class LogicalTreeNodeViewModel : ReactiveObject
+public sealed partial class LogicalTreeNodeViewModel : ReactiveObject
 {
     /// <summary>
     /// Gets the AST node ID this tree node represents.
@@ -220,19 +220,19 @@ public sealed class LogicalTreeNodeViewModel : ReactiveObject
     /// Gets or sets the control type name.
     /// </summary>
     [Reactive]
-    public string TypeName { get; set; } = string.Empty;
+    public partial string TypeName { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the x:Name of the element, if any.
     /// </summary>
     [Reactive]
-    public string? Name { get; set; }
+    public partial string? Name { get; set; }
 
     /// <summary>
     /// Gets or sets a preview of the content (e.g., text content).
     /// </summary>
     [Reactive]
-    public string? ContentPreview { get; set; }
+    public partial string? ContentPreview { get; set; }
 
     /// <summary>
     /// Gets the display text for this node (reactive, updates when TypeName, Name, or ContentPreview changes).
@@ -244,13 +244,13 @@ public sealed class LogicalTreeNodeViewModel : ReactiveObject
     /// Gets or sets whether this node is selected.
     /// </summary>
     [Reactive]
-    public bool IsSelected { get; set; }
+    public partial bool IsSelected { get; set; }
 
     /// <summary>
     /// Gets or sets whether this node is expanded.
     /// </summary>
     [Reactive]
-    public bool IsExpanded { get; set; } = true;
+    public partial bool IsExpanded { get; set; } = true;
 
     /// <summary>
     /// Gets the child nodes.

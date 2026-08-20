@@ -1,6 +1,6 @@
 using System.Runtime.Serialization;
 using Dock.Model.ReactiveUI.Controls;
-using ReactiveUI.Fody.Helpers;
+using ReactiveUI.SourceGenerators;
 using XamlVisualEditor.Shell.ViewModels;
 
 namespace XamlVisualEditor.Shell;
@@ -8,7 +8,7 @@ namespace XamlVisualEditor.Shell;
 /// <summary>
 /// Dock document for the MDI canvas.
 /// </summary>
-public sealed class CanvasMdiDocument : Document
+public sealed partial class CanvasMdiDocument : Document
 {
     [IgnoreDataMember]
     public IEditorDocumentViewModel DocumentViewModel { get; }
@@ -18,7 +18,7 @@ public sealed class CanvasMdiDocument : Document
 
     [Reactive]
     [IgnoreDataMember]
-    public bool IsTransient { get; set; }
+    public partial bool IsTransient { get; set; }
 
     public string FilePath => DocumentViewModel.FilePath;
 
