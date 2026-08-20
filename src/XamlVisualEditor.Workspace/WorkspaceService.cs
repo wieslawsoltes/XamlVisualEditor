@@ -912,6 +912,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 public sealed class TypeMetadataService : ITypeMetadataService
 {
     private readonly Dictionary<string, TypeMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, Type[]> _exportedTypesCache = new();
     private readonly List<System.Reflection.Assembly> _loadedAssemblies = new();
     private readonly HashSet<string> _loadedAssemblyNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<TypeMetadataService> _logger;
@@ -985,17 +986,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
                         continue;
                     }
 
-                    Type[] exportedTypes;
-                    try
-                    {
-                        exportedTypes = asm.GetExportedTypes();
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    foreach (Type type in exportedTypes)
+                    foreach (Type type in GetExportedTypesCached(asm))
                     {
                         if (!string.Equals(type.Namespace, mapping.ClrNamespace, StringComparison.Ordinal))
                         {
@@ -1719,21 +1710,7 @@ public sealed class TypeMetadataService : ITypeMetadataService
 
         foreach (System.Reflection.Assembly asm in _loadedAssemblies)
         {
-            Type[] exportedTypes;
-            try
-            {
-                exportedTypes = asm.GetExportedTypes();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    "Failed to enumerate exported types from '{Assembly}': {Message}",
-                    asm.FullName,
-                    ex.Message);
-                continue;
-            }
-
-            foreach (Type type in exportedTypes)
+            foreach (Type type in GetExportedTypesCached(asm))
             {
                 if (string.Equals(type.Name, typeName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1744,6 +1721,29 @@ public sealed class TypeMetadataService : ITypeMetadataService
         }
 
         return false;
+    }
+
+    // GetExportedTypes exactly once per assembly: the call is expensive and fails
+    // permanently for legacy assemblies with framework references (WPF/WinForms/
+    // AspNetCore). Without the cache every hover/completion type lookup re-logs the
+    // same warnings.
+    private Type[] GetExportedTypesCached(System.Reflection.Assembly assembly)
+    {
+        return _exportedTypesCache.GetOrAdd(assembly, asm =>
+        {
+            try
+            {
+                return asm.GetExportedTypes();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    "Failed to enumerate exported types from '{Assembly}': {Message}",
+                    asm.FullName,
+                    ex.Message);
+                return Type.EmptyTypes;
+            }
+        });
     }
 
     private readonly record struct XmlnsDefinition(string XmlNamespace, string ClrNamespace, string AssemblyName);
