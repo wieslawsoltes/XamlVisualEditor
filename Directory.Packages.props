@@ -31,7 +31,7 @@
     <!-- MSBuild / Roslyn -->
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <!-- Match the Microsoft.Build runtime shipped by the selected .NET 10 SDK. -->
-    <PackageVersion Include="Microsoft.Build.Framework" Version="18.3.3" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="18.9.6" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.9.0" />
