@@ -89,13 +89,17 @@
   </ItemGroup>
 
   <Target Name="CopyPreviewerHost" AfterTargets="Build">
+    <PropertyGroup>
+      <_PreviewerHostOutputDirectory>..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\</_PreviewerHostOutputDirectory>
+      <_PreviewerHostOutputDirectory Condition="'$(RuntimeIdentifier)' != ''">$(_PreviewerHostOutputDirectory)$(RuntimeIdentifier)\</_PreviewerHostOutputDirectory>
+    </PropertyGroup>
     <MSBuild Projects="..\XamlVisualEditor.Designer.PreviewerHost\XamlVisualEditor.Designer.PreviewerHost.csproj"
              Targets="Build"
-             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);RuntimeIdentifier=$(RuntimeIdentifier)" />
     <ItemGroup>
-      <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\*.dll" />
-      <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\XamlVisualEditor.Designer.PreviewerHost.runtimeconfig.json" />
-      <_PreviewerHost Include="..\XamlVisualEditor.Designer.PreviewerHost\bin\$(Configuration)\$(TargetFramework)\XamlVisualEditor.Designer.PreviewerHost.deps.json" />
+      <_PreviewerHost Include="$(_PreviewerHostOutputDirectory)*.dll" />
+      <_PreviewerHost Include="$(_PreviewerHostOutputDirectory)XamlVisualEditor.Designer.PreviewerHost.runtimeconfig.json" />
+      <_PreviewerHost Include="$(_PreviewerHostOutputDirectory)XamlVisualEditor.Designer.PreviewerHost.deps.json" />
     </ItemGroup>
     <Copy SourceFiles="@(_PreviewerHost)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
