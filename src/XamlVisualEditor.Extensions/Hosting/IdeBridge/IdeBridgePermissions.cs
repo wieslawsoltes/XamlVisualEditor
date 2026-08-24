@@ -110,6 +110,24 @@ public sealed class IdeBridgePermissionService
 
     private async Task<IdeBridgeWorkspacePermissionState?> PromptForConsentAsync(CancellationToken ct)
     {
+        // Headless/batch clients cannot answer the GUI consent prompt. The environment switch grants
+        // access without a dialog: "readonly" (or "1"/"true") grants read-only, "full" grants full access.
+        string? autoConsent = Environment.GetEnvironmentVariable("XVE_IDEBRIDGE_AUTOCONSENT");
+        if (!string.IsNullOrWhiteSpace(autoConsent))
+        {
+            if (string.Equals(autoConsent, "full", StringComparison.OrdinalIgnoreCase))
+            {
+                return new IdeBridgeWorkspacePermissionState(CreateToken(), CreateFullCapabilities(), DateTimeOffset.UtcNow);
+            }
+
+            if (string.Equals(autoConsent, "readonly", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(autoConsent, "1", StringComparison.Ordinal)
+                || string.Equals(autoConsent, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                return new IdeBridgeWorkspacePermissionState(CreateToken(), CreateReadOnlyCapabilities(), DateTimeOffset.UtcNow);
+            }
+        }
+
         IReadOnlyList<QuickPickItem> items = new[]
         {
             new QuickPickItem("Allow read-only", "Read files and diagnostics", null),

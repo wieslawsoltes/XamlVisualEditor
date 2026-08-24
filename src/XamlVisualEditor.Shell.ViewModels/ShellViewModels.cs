@@ -6863,7 +6863,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task TryLoadWorkspaceForXamlAsync(string xamlFilePath)
     {
-        if (_workspace is not null && WorkspaceContainsFile(_workspace, xamlFilePath))
+        // Never swap an already loaded workspace: opening a XAML file that lives outside the
+        // workspace (generated output, scratch folders) must keep the current workspace so the
+        // designer resolves its types; the file is opened as a plain document instead.
+        if (_workspace is not null)
         {
             return;
         }
@@ -7072,6 +7075,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task<bool> EnsurePreviewerTrustAsync(string xamlFilePath)
     {
+        // Kopflose Bridge-Laeufe koennen den Trust-Dialog nicht bedienen; der Schalter gewaehrt
+        // den Start analog zu XVE_IDEBRIDGE_AUTOCONSENT.
+        string? autoTrust = System.Environment.GetEnvironmentVariable("XVE_PREVIEWER_AUTOTRUST");
+        if (string.Equals(autoTrust, "1", StringComparison.Ordinal)
+            || string.Equals(autoTrust, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         string root = GetPreviewerTrustRoot(xamlFilePath);
         if (_trustedPreviewerRoots.Contains(root))
         {
@@ -7092,6 +7104,169 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         return decision == PreviewerTrustDecision.AllowOnce;
+    }
+
+    /// <summary>
+    /// Startet den Previewer fuer eine geoeffnete XAML-Datei, wartet auf einen stabilen Frame
+    /// und speichert ihn als PNG. Der Previewer-Prozess wird danach beendet, damit sich bei
+    /// Serienlaeufen keine Host-Prozesse ansammeln.
+    /// </summary>
+    public async System.Threading.Tasks.Task<XamlVisualEditor.Extensions.PreviewExportResult> ExportPreviewAsync(
+        string filePath,
+        string outputPath,
+        int timeoutMs)
+    {
+        DesignerDocumentViewModel? doc = Documents
+            .OfType<DesignerDocumentViewModel>()
+            .FirstOrDefault(d => string.Equals(d.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        if (doc is null)
+        {
+            return new(false, "Document is not open as a designer document.", 0, 0, outputPath);
+        }
+
+        if (_workspace is null)
+        {
+            return new(false, "No workspace loaded.", 0, 0, outputPath);
+        }
+
+        if (!await EnsurePreviewerTrustAsync(filePath))
+        {
+            return new(false, "Previewer trust not granted.", 0, 0, outputPath);
+        }
+
+        ActiveDocument = doc;
+        PreviewerLaunchResult launch = await _previewerLaunchService.StartPreviewerAsync(
+            filePath,
+            doc.SyncEngine.CurrentText,
+            _workspace,
+            _workspacePath,
+            command => RunWorkspaceCommandAsync(command),
+            (level, message) => LogOutput(level, message));
+        if (!launch.Success)
+        {
+            return new(false, launch.ErrorMessage ?? "Previewer start failed.", 0, 0, outputPath);
+        }
+
+        if (!_previewerLaunchService.TryGetSession(filePath, out PreviewerTcpSession? session) || session is null)
+        {
+            return new(false, "No previewer session available.", 0, 0, outputPath);
+        }
+
+        doc.PreviewerSession = session;
+        try
+        {
+            Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await WaitForStableFrameAsync(session, timeoutMs);
+            if (frame is null)
+            {
+                return new(false, "No previewer frame received within timeout.", 0, 0, outputPath);
+            }
+
+            if (frame.Format != Avalonia.Remote.Protocol.Viewport.PixelFormat.Bgra8888)
+            {
+                return new(false, $"Unsupported frame format {frame.Format}.", 0, 0, outputPath);
+            }
+
+            SaveFrameAsPng(frame, outputPath);
+            return new(true, null, frame.Width, frame.Height, outputPath);
+        }
+        finally
+        {
+            doc.PreviewerSession = null;
+            _previewerLaunchService.StopPreviewer(filePath);
+        }
+    }
+
+    // Frames treffen waehrend des Aufbaus mehrfach ein (Viewport-Verhandlung); als stabil gilt
+    // der letzte Frame, wenn 1,5 s lang weder Groessenwechsel noch Resize-Anforderung kamen.
+    private static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
+        PreviewerTcpSession session,
+        int timeoutMs)
+    {
+        object gate = new();
+        Avalonia.Remote.Protocol.Viewport.FrameMessage? last = session.LastFrame;
+        DateTime lastChangeUtc = DateTime.UtcNow;
+
+        void OnFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame)
+        {
+            lock (gate)
+            {
+                if (last is null || frame.Width != last.Width || frame.Height != last.Height)
+                {
+                    lastChangeUtc = DateTime.UtcNow;
+                }
+
+                last = frame;
+            }
+        }
+
+        void OnResize(Avalonia.Remote.Protocol.Viewport.RequestViewportResizeMessage resize)
+        {
+            session.UpdateViewport(Math.Clamp(resize.Width, 1, 4096), Math.Clamp(resize.Height, 1, 4096), 96, 96);
+            lock (gate)
+            {
+                lastChangeUtc = DateTime.UtcNow;
+            }
+        }
+
+        session.FrameReceived += OnFrame;
+        session.ViewportResizeRequested += OnResize;
+        try
+        {
+            DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadlineUtc)
+            {
+                await System.Threading.Tasks.Task.Delay(250);
+                lock (gate)
+                {
+                    if (last is not null && (DateTime.UtcNow - lastChangeUtc).TotalMilliseconds > 1500)
+                    {
+                        return last;
+                    }
+                }
+            }
+
+            lock (gate)
+            {
+                return last;
+            }
+        }
+        finally
+        {
+            session.FrameReceived -= OnFrame;
+            session.ViewportResizeRequested -= OnResize;
+        }
+    }
+
+    private static void SaveFrameAsPng(Avalonia.Remote.Protocol.Viewport.FrameMessage frame, string outputPath)
+    {
+        string? directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        using Avalonia.Media.Imaging.WriteableBitmap bitmap = new(
+            new Avalonia.PixelSize(frame.Width, frame.Height),
+            new Avalonia.Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888,
+            Avalonia.Platform.AlphaFormat.Premul);
+        using (Avalonia.Platform.ILockedFramebuffer buffer = bitmap.Lock())
+        {
+            int stride = frame.Stride > 0 ? frame.Stride : frame.Width * 4;
+            int lineLength = Math.Min(frame.Width * 4, buffer.RowBytes);
+            for (int y = 0; y < frame.Height; y++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(
+                    frame.Data,
+                    y * stride,
+                    buffer.Address + y * buffer.RowBytes,
+                    lineLength);
+            }
+        }
+
+#pragma warning disable CS0618 // Save(string) schreibt PNG; die BitmapEncoderOptions-Ueberladung bietet hier keinen Mehrwert
+        bitmap.Save(outputPath);
+#pragma warning restore CS0618
     }
 
     private string GetPreviewerTrustRoot(string xamlFilePath)

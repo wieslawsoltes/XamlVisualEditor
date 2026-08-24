@@ -27,7 +27,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         Func<string, Task>? runWorkspaceCommandAsync,
         Action<string, string>? log)
     {
-        if (!TryCreateLaunchInfo(xamlFilePath, workspace, out PreviewerLaunchInfo launchInfo, out string error))
+        if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out string error))
         {
             return PreviewerLaunchResult.Fail(error);
         }
@@ -40,7 +40,7 @@ internal sealed class PreviewerLaunchService : IDisposable
                 await runWorkspaceCommandAsync("build");
             }
 
-            if (!TryCreateLaunchInfo(xamlFilePath, workspace, out launchInfo, out error))
+            if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out launchInfo, out error))
             {
                 return PreviewerLaunchResult.Fail(error);
             }
@@ -50,7 +50,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         {
             if (!string.IsNullOrWhiteSpace(xamlText))
             {
-                await SendUpdateXamlAsync(xamlFilePath, xamlText, workspace, log);
+                await SendUpdateXamlAsync(xamlFilePath, xamlText, workspace, log, workspacePath);
             }
 
             return PreviewerLaunchResult.FromProcess(existing);
@@ -102,7 +102,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             log?.Invoke("Info", $"Previewer started: {launchInfo.TargetAssemblyPath}");
             if (!string.IsNullOrWhiteSpace(xamlText))
             {
-                await SendUpdateXamlAsync(xamlFilePath, xamlText, workspace, log);
+                await SendUpdateXamlAsync(xamlFilePath, xamlText, workspace, log, workspacePath);
             }
             return PreviewerLaunchResult.FromProcess(process);
         }
@@ -117,14 +117,15 @@ internal sealed class PreviewerLaunchService : IDisposable
         string xamlFilePath,
         string xamlText,
         WorkspaceModel workspace,
-        Action<string, string>? log)
+        Action<string, string>? log,
+        string? workspacePath = null)
     {
         if (!_sessions.TryGetValue(xamlFilePath, out PreviewerTcpSession? session))
         {
             return;
         }
 
-        if (!TryCreateLaunchInfo(xamlFilePath, workspace, out PreviewerLaunchInfo launchInfo, out _))
+        if (!TryCreateLaunchInfo(xamlFilePath, workspace, workspacePath, out PreviewerLaunchInfo launchInfo, out _))
         {
             return;
         }
@@ -132,12 +133,35 @@ internal sealed class PreviewerLaunchService : IDisposable
         string projectPath = BuildXamlProjectPath(xamlFilePath, launchInfo.ProjectDirectory);
         string updatedXaml = NormalizeDesignDataContext(xamlText);
         (double? width, double? height) = TryGetDesignSize(updatedXaml);
-        await session.SendUpdateXamlAsync(updatedXaml, launchInfo.TargetAssemblyPath, projectPath, width, height);
+        await session.SendUpdateXamlAsync(updatedXaml, launchInfo.XamlAssemblyPath, projectPath, width, height);
         log?.Invoke("Info", "Previewer XAML update sent");
     }
 
     public bool TryGetSession(string xamlFilePath, out PreviewerTcpSession? session)
         => _sessions.TryGetValue(xamlFilePath, out session);
+
+    /// <summary>Beendet den Previewer-Prozess einer Datei und entsorgt die Session.</summary>
+    public void StopPreviewer(string xamlFilePath)
+    {
+        if (_processes.Remove(xamlFilePath, out Process? process))
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        if (_sessions.Remove(xamlFilePath, out PreviewerTcpSession? session))
+        {
+            session.Dispose();
+        }
+    }
 
     public void Dispose()
     {
@@ -207,6 +231,7 @@ internal sealed class PreviewerLaunchService : IDisposable
     private static bool TryCreateLaunchInfo(
         string xamlFilePath,
         WorkspaceModel workspace,
+        string? workspacePath,
         out PreviewerLaunchInfo launchInfo,
         out string error)
     {
@@ -216,17 +241,54 @@ internal sealed class PreviewerLaunchService : IDisposable
         ProjectModel? project = ProjectSelection.FindProjectForFile(workspace, xamlFilePath);
         if (project is null)
         {
+            // Dateien ausserhalb aller Projektordner (z. B. generierte XAML in einem
+            // Scratch-Verzeichnis) gegen das geladene Workspace-Projekt rendern statt
+            // den Start zu verweigern.
+            project = workspace.Projects.FirstOrDefault(p =>
+                string.Equals(p.ProjectPath, workspacePath, StringComparison.OrdinalIgnoreCase))
+                ?? ProjectSelection.SelectPreferredProject(workspace.Projects);
+        }
+
+        if (project is null)
+        {
             error = "No project found for XAML file.";
             return false;
         }
 
         string? projectDir = Path.GetDirectoryName(project.ProjectPath);
 
-        string? targetAssemblyPath = ProjectSelection.ResolveTargetAssemblyPath(project);
-        if (string.IsNullOrWhiteSpace(targetAssemblyPath) || !File.Exists(targetAssemblyPath))
+        string? xamlAssemblyPath = ProjectSelection.ResolveTargetAssemblyPath(project);
+        if (string.IsNullOrWhiteSpace(xamlAssemblyPath) || !File.Exists(xamlAssemblyPath))
         {
             error = "Project output assembly not found. Build the project first.";
             return false;
+        }
+
+        // Der PreviewerHost bootet die Ziel-Assembly als App (AppBuilder-Einstieg).
+        // Klassenbibliotheken haben keinen Einstiegspunkt; geboodet wird dann die per
+        // XVE_PREVIEWER_APP_ASSEMBLY benannte App-Assembly bzw. ein Exe-Projekt des
+        // Workspace. Die XAML wird weiterhin gegen die Projekt-Assembly aufgeloest
+        // (UpdateXamlMessage.AssemblyPath).
+        string targetAssemblyPath = xamlAssemblyPath;
+        if (!project.IsExecutable)
+        {
+            string? appOverride = Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY");
+            if (!string.IsNullOrWhiteSpace(appOverride) && File.Exists(appOverride))
+            {
+                targetAssemblyPath = appOverride;
+            }
+            else
+            {
+                ProjectModel? executable = ProjectSelection.SelectPreferredProject(
+                    workspace.Projects.Where(p => p.IsExecutable));
+                string? executablePath = executable is null
+                    ? null
+                    : ProjectSelection.ResolveTargetAssemblyPath(executable);
+                if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
+                {
+                    targetAssemblyPath = executablePath;
+                }
+            }
         }
 
         string? outputDir = Path.GetDirectoryName(targetAssemblyPath);
@@ -246,6 +308,7 @@ internal sealed class PreviewerLaunchService : IDisposable
         launchInfo = new PreviewerLaunchInfo(
             hostPath,
             targetAssemblyPath,
+            xamlAssemblyPath,
             runtimeConfigPath,
             depsFilePath,
             outputDir,
@@ -364,6 +427,12 @@ internal sealed class PreviewerLaunchService : IDisposable
                 return xamlText;
             }
 
+            // Der Runtime-Compiler des Previewers muss die x:Class-Wurzel selbst instanziieren
+            // und verlangt dafuer einen parameterlosen Konstruktor; viele Formulare haben nur
+            // parametrisierte. Die Design-Kopie laedt deshalb ohne x:Class (Inhaltsbaum unter
+            // dem schlichten Wurzelelement) - fuer die Layout-Vorschau ohne Belang.
+            doc.Root.Attribute(XName.Get("Class", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Remove();
+
             foreach (XElement element in doc.Descendants())
             {
                 if (element.Attribute("Design.DataContext") is not null)
@@ -459,6 +528,7 @@ internal sealed class PreviewerLaunchService : IDisposable
 internal readonly record struct PreviewerLaunchInfo(
     string HostPath,
     string TargetAssemblyPath,
+    string XamlAssemblyPath,
     string RuntimeConfigPath,
     string DepsFilePath,
     string WorkingDirectory,
@@ -466,11 +536,16 @@ internal readonly record struct PreviewerLaunchInfo(
     string MethodArguments,
     string? ProjectDirectory)
 {
+    // Klassenbibliotheken erzeugen keine eigene runtimeconfig.json; der Prozessstart nutzt
+    // dann die Runtime-Dateien des PreviewerHost (siehe ResolveHostRuntimeFiles).
     public bool HasRequiredAssets =>
         File.Exists(HostPath) &&
         File.Exists(TargetAssemblyPath) &&
-        File.Exists(RuntimeConfigPath) &&
-        File.Exists(DepsFilePath);
+        ((File.Exists(RuntimeConfigPath) && File.Exists(DepsFilePath)) || HasHostRuntimeFiles);
+
+    private bool HasHostRuntimeFiles =>
+        File.Exists(Path.ChangeExtension(HostPath, ".runtimeconfig.json")) &&
+        File.Exists(Path.ChangeExtension(HostPath, ".deps.json"));
 }
 
 internal readonly record struct PreviewerLaunchResult(bool Success, string? ErrorMessage, Process? Process)

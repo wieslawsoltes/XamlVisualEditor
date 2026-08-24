@@ -49,6 +49,9 @@ public sealed class IdeBridgeCoreHandler : IIdeBridgeRequestHandler
         connection.RegisterRequestHandler(IdeBridgeProtocol.WorkspaceGetActiveMethod, (_, ct) => HandleWorkspaceGetActiveAsync(connection, ct));
         connection.RegisterRequestHandler(IdeBridgeProtocol.WorkspaceFindFilesMethod, (p, ct) => HandleWorkspaceFindFilesAsync(connection, p, ct));
         connection.RegisterRequestHandler(IdeBridgeProtocol.DocumentOpenMethod, (p, ct) => HandleDocumentOpenAsync(connection, p, ct));
+        connection.RegisterRequestHandler(IdeBridgeProtocol.DocumentCloseMethod, (p, ct) => HandleDocumentCloseAsync(connection, p, ct));
+        connection.RegisterRequestHandler(IdeBridgeProtocol.EditorStatusMethod, (_, ct) => HandleEditorStatusAsync(connection, ct));
+        connection.RegisterRequestHandler(IdeBridgeProtocol.PreviewExportMethod, (p, ct) => HandlePreviewExportAsync(connection, p, ct));
         connection.RegisterRequestHandler(IdeBridgeProtocol.DocumentGetTextMethod, (p, ct) => HandleDocumentGetTextAsync(connection, p, ct));
         connection.RegisterRequestHandler(IdeBridgeProtocol.DocumentApplyEditsMethod, (p, ct) => HandleDocumentApplyEditsAsync(connection, p, ct));
         connection.RegisterRequestHandler(IdeBridgeProtocol.DocumentSaveMethod, (p, ct) => HandleDocumentSaveAsync(connection, p, ct));
@@ -210,8 +213,49 @@ public sealed class IdeBridgeCoreHandler : IIdeBridgeRequestHandler
         RequireCapability(session, c => c.Documents, "documents");
 
         DocumentOpenParams request = Deserialize<DocumentOpenParams>(parameters);
-        IEditorDocument? doc = await _editor.OpenDocumentAsync(request.FilePath, ct).ConfigureAwait(false);
+        // Document-only: a bridge client works against the workspace it initialized with; opening a
+        // file outside that workspace must not swap the loaded workspace for a nearby project.
+        IEditorDocument? doc = await _editor.OpenDocumentAsync(request.FilePath, EditorDocumentOpenBehavior.DocumentOnly, ct).ConfigureAwait(false);
         return new { filePath = doc?.FilePath ?? request.FilePath };
+    }
+
+    private async Task<object?> HandleDocumentCloseAsync(IdeBridgeJsonRpcConnection connection, JsonElement? parameters, CancellationToken ct)
+    {
+        IdeBridgeSessionInfo session = RequireSession(connection);
+        RequireCapability(session, c => c.Documents, "documents");
+
+        DocumentCloseParams request = Deserialize<DocumentCloseParams>(parameters);
+        bool closed = await _editor.CloseDocumentAsync(request.FilePath, ct).ConfigureAwait(false);
+        return new DocumentCloseResult(closed, _editor.GetOpenDocuments().Count);
+    }
+
+    private Task<object?> HandleEditorStatusAsync(IdeBridgeJsonRpcConnection connection, CancellationToken ct)
+    {
+        IdeBridgeSessionInfo session = RequireSession(connection);
+        RequireCapability(session, c => c.Documents, "documents");
+
+        IReadOnlyList<IEditorDocument> open = _editor.GetOpenDocuments();
+        using System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+        EditorStatusResult result = new(
+            open.Count,
+            open.Select(d => d.FilePath).ToArray(),
+            _editor.ActiveDocument?.FilePath,
+            GC.GetTotalMemory(false),
+            process.WorkingSet64,
+            process.PrivateMemorySize64);
+        return Task.FromResult<object?>(result);
+    }
+
+    private async Task<object?> HandlePreviewExportAsync(IdeBridgeJsonRpcConnection connection, JsonElement? parameters, CancellationToken ct)
+    {
+        IdeBridgeSessionInfo session = RequireSession(connection);
+        RequireCapability(session, c => c.Documents, "documents");
+
+        PreviewExportParams request = Deserialize<PreviewExportParams>(parameters);
+        PreviewExportResult result = await _editor
+            .ExportPreviewAsync(request.FilePath, request.OutputPath, request.TimeoutMs ?? 90_000, ct)
+            .ConfigureAwait(false);
+        return result;
     }
 
     private async Task<object?> HandleDocumentGetTextAsync(IdeBridgeJsonRpcConnection connection, JsonElement? parameters, CancellationToken ct)

@@ -49,18 +49,23 @@ public sealed class AppWindow : IWindow
         return ShowDialogAsync<string?>(dialog, cancellationToken);
     }
 
-    public Task<QuickPickItem?> ShowQuickPickAsync(
+    public async Task<QuickPickItem?> ShowQuickPickAsync(
         IReadOnlyList<QuickPickItem> items,
         QuickPickOptions options,
         CancellationToken cancellationToken)
     {
-        QuickPickDialogViewModel viewModel = new(options.Title, items);
-        QuickPickDialog dialog = new()
+        // Bridge/extension callers may invoke this off the UI thread; dialog construction and
+        // ShowDialog must run on the dispatcher (InvokeAsync unwraps the returned task).
+        return await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            DataContext = viewModel
-        };
+            QuickPickDialogViewModel viewModel = new(options.Title, items);
+            QuickPickDialog dialog = new()
+            {
+                DataContext = viewModel
+            };
 
-        return ShowDialogAsync<QuickPickItem?>(dialog, cancellationToken);
+            return ShowDialogAsync<QuickPickItem?>(dialog, cancellationToken);
+        }).ConfigureAwait(false);
     }
 
     public IOutputChannel CreateOutputChannel(string name)

@@ -38,10 +38,14 @@ public sealed partial class ExtensionManagerViewModel : ReactiveObject, IDisposa
         _subscriptions.Add(selectionSubscription);
 
         // The constructor may run inside ExtensionManager's lazy built-in package
-        // discovery (extensions are resolved from DI there). Scheduling the first
-        // refresh keeps GetInstalledAsync from re-entering that lazy initialization,
-        // and observing the task keeps failures out of the finalizer thread.
-        RxSchedulers.MainThreadScheduler.Schedule(() => _ = InitialRefreshAsync());
+        // discovery (extensions are resolved from DI there). The refresh MUST run after the
+        // current DI resolution completes: the Rx main-thread scheduler executes INLINE when
+        // already on the UI thread, which re-entered the container while MainWindowViewModel's
+        // singleton slot was still unfilled and produced a second MainWindowViewModel instance
+        // (window bound to one, services to the other). Dispatcher.Post defers for real.
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            () => _ = InitialRefreshAsync(),
+            Avalonia.Threading.DispatcherPriority.Background);
     }
 
     private async Task InitialRefreshAsync()

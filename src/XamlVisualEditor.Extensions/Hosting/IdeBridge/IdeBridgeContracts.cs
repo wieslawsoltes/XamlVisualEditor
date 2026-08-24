@@ -27,6 +27,15 @@ public static class IdeBridgeProtocol
     /// <summary>Open a document.</summary>
     public const string DocumentOpenMethod = "document.open";
 
+    /// <summary>Close a document.</summary>
+    public const string DocumentCloseMethod = "document.close";
+
+    /// <summary>Get editor status (open documents, process memory).</summary>
+    public const string EditorStatusMethod = "editor.status";
+
+    /// <summary>Export a previewer frame of an open document as PNG.</summary>
+    public const string PreviewExportMethod = "preview.export";
+
     /// <summary>Get document text.</summary>
     public const string DocumentGetTextMethod = "document.getText";
 
@@ -133,6 +142,30 @@ public sealed record WorkspaceFindFilesResult(
 /// <summary>Document open request parameters.</summary>
 public sealed record DocumentOpenParams(
     string FilePath);
+
+/// <summary>Document close request parameters.</summary>
+public sealed record DocumentCloseParams(
+    string FilePath);
+
+/// <summary>Document close response.</summary>
+public sealed record DocumentCloseResult(
+    bool Closed,
+    int OpenDocumentCount);
+
+/// <summary>Editor status response.</summary>
+public sealed record EditorStatusResult(
+    int OpenDocumentCount,
+    IReadOnlyList<string> OpenDocuments,
+    string? ActiveDocument,
+    long ManagedMemoryBytes,
+    long WorkingSetBytes,
+    long PrivateMemoryBytes);
+
+/// <summary>Preview export request parameters.</summary>
+public sealed record PreviewExportParams(
+    string FilePath,
+    string OutputPath,
+    int? TimeoutMs);
 
 /// <summary>Document text request parameters.</summary>
 public sealed record DocumentGetTextParams(
