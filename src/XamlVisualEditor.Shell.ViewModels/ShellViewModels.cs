@@ -83,7 +83,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     private readonly ILogger<DesignerDocumentViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly Dictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
-        = new(StringComparer.OrdinalIgnoreCase);
+        = new(FileSystemPathComparison.Comparer);
 
     /// <summary>
     /// Gets the file path of the XAML document.
@@ -400,7 +400,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         }
 
         IEnumerable<int> lines = _breakpointsSource.Items
-            .Where(entry => string.Equals(entry.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+            .Where(entry => FileSystemPathComparison.Equals(entry.FilePath, FilePath))
             .Select(entry => entry.Line)
             .Distinct();
 
@@ -686,7 +686,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
     private void OnDiagnosticsChanged(object? sender, LanguageDiagnosticsChangedEventArgs e)
     {
-        if (!string.Equals(e.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+        if (!FileSystemPathComparison.Equals(e.FilePath, FilePath))
         {
             return;
         }
@@ -704,7 +704,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         }
 
         IEnumerable<int> lines = _breakpointsSource.Items
-            .Where(entry => string.Equals(entry.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+            .Where(entry => FileSystemPathComparison.Equals(entry.FilePath, FilePath))
             .Select(entry => entry.Line)
             .Distinct();
 
@@ -1598,7 +1598,7 @@ public sealed partial class ReferencesViewModel : ReactiveObject
     private readonly Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> _navigateAsync;
     private readonly CompositeDisposable _groupDisposables = new();
     private readonly CompositeDisposable _lifetimeDisposables = new();
-    private readonly HashSet<string> _expandedFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _expandedFiles = new(FileSystemPathComparison.Comparer);
     private const string FilterPropertyPath = "Item.DisplayText";
 
     public ObservableCollection<ReferencesGroupViewModel> Groups { get; } = new();
@@ -2105,14 +2105,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly XamlVisualEditor.Terminal.ITerminalService? _terminalService;
-    private readonly Dictionary<string, ProjectModel> _projectLookup = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ProjectModel> _projectLookup = new(FileSystemPathComparison.Comparer);
     private System.Diagnostics.Process? _runProcess;
-    private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _trustedPreviewerRoots = new(FileSystemPathComparison.Comparer);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _autoSaveSubscriptions = new();
     private WorkspaceAssemblyResolver? _assemblyResolver;
     private WorkspaceModel? _workspace;
     private string? _workspacePath;
-    private readonly Dictionary<string, IDockable> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IDockable> _dockDocuments = new(FileSystemPathComparison.Comparer);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _dockTitleSubscriptions = new();
     private readonly Dictionary<Guid, IDisposable> _terminalTitleSubscriptions = new();
     private bool _isClosingFromDock;
@@ -2758,6 +2758,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         RefreshExtensionContributions();
         UpdateFileNewMenuEntries();
         SyncExtensionDockables();
+        DockFactory.CollapseBottomToolDock(DockLayout);
 
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
@@ -3607,7 +3608,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private static bool IsUntitledDocument(IEditorDocumentViewModel doc)
     {
         string tempRoot = System.IO.Path.GetTempPath();
-        if (!doc.FilePath.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase))
+        if (!FileSystemPathComparison.IsSameOrDescendant(doc.FilePath, tempRoot))
         {
             return false;
         }
@@ -3804,7 +3805,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             TextDocumentViewModel? openText = Documents
                 .OfType<TextDocumentViewModel>()
                 .FirstOrDefault(doc =>
-                    string.Equals(doc.FilePath, docEdit.FilePath, StringComparison.OrdinalIgnoreCase));
+                    FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
 
             if (openText is not null)
             {
@@ -3917,7 +3918,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private static bool AreLocationsEquivalent(LanguageLocation left, LanguageLocation right)
     {
-        return string.Equals(left.FilePath, right.FilePath, StringComparison.OrdinalIgnoreCase)
+        return FileSystemPathComparison.Equals(left.FilePath, right.FilePath)
             && left.Range.Start.Line == right.Range.Start.Line
             && left.Range.Start.Column == right.Range.Start.Column;
     }
@@ -5221,13 +5222,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             if (doc is DesignerDocumentViewModel designer)
             {
-                designer.CodeEditor.ExecutionLine = string.Equals(designer.FilePath, filePath, StringComparison.OrdinalIgnoreCase)
+                designer.CodeEditor.ExecutionLine = FileSystemPathComparison.Equals(designer.FilePath, filePath)
                     ? line
                     : null;
             }
             else if (doc is TextDocumentViewModel text)
             {
-                text.ExecutionLine = string.Equals(text.FilePath, filePath, StringComparison.OrdinalIgnoreCase)
+                text.ExecutionLine = FileSystemPathComparison.Equals(text.FilePath, filePath)
                     ? line
                     : null;
             }
@@ -5602,7 +5603,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         bool changed = previous is null
-                       || !string.Equals(previous.ProjectPath, project.ProjectPath, StringComparison.OrdinalIgnoreCase)
+                       || !FileSystemPathComparison.Equals(previous.ProjectPath, project.ProjectPath)
                        || !string.Equals(previous.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase);
 
         ActiveProject = project;
@@ -5651,7 +5652,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             foreach (ProjectModel candidate in _workspace.Projects)
             {
-                if (string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase)
+                if (FileSystemPathComparison.Equals(candidate.ProjectPath, projectPath)
                     && string.Equals(candidate.TargetFramework, targetFramework, StringComparison.OrdinalIgnoreCase))
                 {
                     return candidate;
@@ -5672,7 +5673,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ProjectModel? match = null;
         foreach (ProjectModel candidate in _workspace.Projects)
         {
-            if (!string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            if (!FileSystemPathComparison.Equals(candidate.ProjectPath, projectPath))
             {
                 continue;
             }
@@ -6511,7 +6512,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (string path in paths.Distinct(FileSystemPathComparison.Comparer))
         {
             await EnsureDocumentOpenAsync(path, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
         }
@@ -6617,14 +6618,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            string json = System.IO.File.ReadAllText(path);
+            string json = ReadRecentFilesText(path);
             List<string>? recent = JsonSerializer.Deserialize<List<string>>(json);
             if (recent is null)
             {
                 return;
             }
 
-            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> seen = new(FileSystemPathComparison.Comparer);
             foreach (string filePath in recent)
             {
                 if (string.IsNullOrWhiteSpace(filePath))
@@ -6671,7 +6672,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             string path = GetRecentFilesPath();
             List<string> recent = RecentFiles.Select(entry => entry.FilePath).ToList();
             string json = JsonSerializer.Serialize(recent, new JsonSerializerOptions { WriteIndented = true });
-            System.IO.File.WriteAllText(path, json);
+            WriteRecentFilesText(path, json);
         }
         catch (Exception ex)
         {
@@ -6687,11 +6688,52 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return System.IO.Path.Combine(dir, "recent-files.json");
     }
 
+    private static string ReadRecentFilesText(string path)
+    {
+        const int attempts = 3;
+        for (int attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                return reader.ReadToEnd();
+            }
+            catch (IOException) when (attempt < attempts)
+            {
+                Thread.Sleep(25);
+            }
+        }
+
+        return System.IO.File.ReadAllText(path);
+    }
+
+    private static void WriteRecentFilesText(string path, string content)
+    {
+        const int attempts = 3;
+        for (int attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                using FileStream stream = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                using StreamWriter writer = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(content);
+                return;
+            }
+            catch (IOException) when (attempt < attempts)
+            {
+                Thread.Sleep(25);
+            }
+        }
+
+        System.IO.File.WriteAllText(path, content);
+    }
+
     private int IndexOfRecentFile(string filePath)
     {
         for (int i = 0; i < RecentFiles.Count; i++)
         {
-            if (string.Equals(RecentFiles[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            if (FileSystemPathComparison.Equals(RecentFiles[i].FilePath, filePath))
             {
                 return i;
             }
@@ -6815,10 +6857,42 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
             StatusText = $"Loaded workspace {name}";
             LogOutput("Info", $"Loaded workspace: {name}");
+            StartLanguageWorkspaceWarmup();
         }
         finally
         {
             IsWorkspaceLoading = false;
+        }
+    }
+
+    private void StartLanguageWorkspaceWarmup()
+    {
+        if (_languageRegistry is null || string.IsNullOrWhiteSpace(_workspacePath))
+        {
+            return;
+        }
+
+        string workspacePath = _workspacePath;
+        foreach (ILanguageWorkspaceWarmup warmup in _languageRegistry.Services.OfType<ILanguageWorkspaceWarmup>())
+        {
+            _ = WarmLanguageWorkspaceAsync(warmup, workspacePath);
+        }
+    }
+
+    private async Task WarmLanguageWorkspaceAsync(ILanguageWorkspaceWarmup warmup, string workspacePath)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            await warmup.WarmWorkspaceAsync().ConfigureAwait(false);
+            LogOutput("Info", $"Language workspace ready: {System.IO.Path.GetFileName(workspacePath)}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Language workspace warmup failed: {Message}", ex.Message);
         }
     }
 
@@ -6877,7 +6951,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (string.Equals(_workspacePath, workspacePath, StringComparison.OrdinalIgnoreCase))
+        if (FileSystemPathComparison.Equals(_workspacePath, workspacePath))
         {
             return;
         }
@@ -6891,7 +6965,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             foreach (XamlFileModel file in project.XamlFiles)
             {
-                if (string.Equals(file.FilePath, xamlFilePath, StringComparison.OrdinalIgnoreCase))
+                if (FileSystemPathComparison.Equals(file.FilePath, xamlFilePath))
                 {
                     return true;
                 }
@@ -6909,6 +6983,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private string? FindWorkspacePathForFile(string filePath)
     {
+        string? projectSourceRoot = System.Environment.GetEnvironmentVariable("XVE_PROJECT_SOURCE_ROOT");
+        string? generatedProjectPath = GetGeneratedProjectCandidate(
+            filePath,
+            projectSourceRoot,
+            System.IO.File.Exists);
+        if (!string.IsNullOrEmpty(generatedProjectPath))
+        {
+            return generatedProjectPath;
+        }
+
         string? currentDir = System.IO.Path.GetDirectoryName(filePath);
         while (!string.IsNullOrEmpty(currentDir))
         {
@@ -6929,6 +7013,47 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             currentDir = System.IO.Path.GetDirectoryName(currentDir);
+        }
+
+        return null;
+    }
+
+    internal static string? GetGeneratedProjectCandidate(
+        string filePath,
+        string? projectSourceRoot,
+        Func<string, bool> projectFileExists)
+    {
+        if (string.IsNullOrWhiteSpace(projectSourceRoot))
+        {
+            return null;
+        }
+
+        string fullPath;
+        string fullProjectSourceRoot;
+        try
+        {
+            fullPath = System.IO.Path.GetFullPath(filePath);
+            fullProjectSourceRoot = System.IO.Path.GetFullPath(projectSourceRoot);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        System.IO.DirectoryInfo? currentDirectory = new System.IO.FileInfo(fullPath).Directory;
+        while (currentDirectory is not null)
+        {
+            string projectName = currentDirectory.Name;
+            string candidate = System.IO.Path.Combine(
+                fullProjectSourceRoot,
+                projectName,
+                projectName + ".csproj");
+            if (projectFileExists(candidate))
+            {
+                return candidate;
+            }
+
+            currentDirectory = currentDirectory.Parent;
         }
 
         return null;
@@ -7118,7 +7243,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         DesignerDocumentViewModel? doc = Documents
             .OfType<DesignerDocumentViewModel>()
-            .FirstOrDefault(d => string.Equals(d.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
         if (doc is null)
         {
             return new(false, "Document is not open as a designer document.", 0, 0, outputPath);
@@ -7681,7 +7806,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         List<string> all = new();
         List<string> preferred = new();
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> seen = new(FileSystemPathComparison.Comparer);
         hasAnyProjectOutputs = false;
         hasMissingProjectOutputs = false;
 
@@ -8366,7 +8491,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             {
                 bool matches = project is not null &&
                                (ReferenceEquals(node.Project, project)
-                                || (string.Equals(node.Project.ProjectPath, project.ProjectPath, StringComparison.OrdinalIgnoreCase)
+                                 || (FileSystemPathComparison.Equals(node.Project.ProjectPath, project.ProjectPath)
                                     && (string.IsNullOrWhiteSpace(project.TargetFramework)
                                         || string.Equals(node.Project.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase))));
                 node.IsStartupProject = matches;
@@ -8394,7 +8519,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         ProjectModel? match = EnumerateNodes(Root)
             .Select(node => node.Project)
             .FirstOrDefault(project => project is not null &&
-                                       string.Equals(project.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase));
+                                       FileSystemPathComparison.Equals(project.ProjectPath, projectPath));
         SetStartupProject(match);
     }
 

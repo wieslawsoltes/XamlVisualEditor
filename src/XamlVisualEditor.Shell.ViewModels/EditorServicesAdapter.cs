@@ -138,7 +138,7 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     private bool CloseDocumentCore(string filePath)
     {
         IEditorDocumentViewModel? document = _mainViewModel.Documents
-            .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
         if (document is null)
         {
             return false;
@@ -172,7 +172,7 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     {
         await _mainViewModel.OpenFileAsync(filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
         IEditorDocumentViewModel? document = _mainViewModel.Documents
-            .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
         return document is null ? null : GetAdapter(document);
     }
 

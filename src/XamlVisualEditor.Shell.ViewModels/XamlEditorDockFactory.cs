@@ -359,7 +359,7 @@ public sealed partial class XamlEditorDockFactory : Factory
             Id = "BottomToolDock",
             Title = "Bottom Tools",
             Proportion = 0.25,
-            ActiveDockable = outputTool,
+            ActiveDockable = null,
             VisibleDockables = CreateList<IDockable>(
                 outputTool,
                 breakpointsTool,
@@ -367,7 +367,9 @@ public sealed partial class XamlEditorDockFactory : Factory
                 localsTool,
                 watchesTool,
                 extensionManagerTool),
-            Alignment = Alignment.Bottom
+            Alignment = Alignment.Bottom,
+            AutoHide = true,
+            IsExpanded = false
         };
 
         // Document dock (center)
@@ -584,6 +586,42 @@ public sealed partial class XamlEditorDockFactory : Factory
         return null;
     }
 
+    /// <summary>
+    /// Collapses the bottom tool dock without changing its tools or saved proportion.
+    /// </summary>
+    public void CollapseBottomToolDock(IRootDock rootDock)
+    {
+        IReadOnlyList<ToolDock> bottomDocks = FindDockables<ToolDock>(rootDock)
+            .Where(dock => string.Equals(dock.Id, "BottomToolDock", StringComparison.Ordinal))
+            .ToList();
+        foreach (ToolDock bottomDock in bottomDocks)
+        {
+            List<IDockable> tools = bottomDock.VisibleDockables?.ToList()
+                ?? new List<IDockable>();
+            foreach (IDockable tool in tools)
+            {
+                PinDockable(tool);
+            }
+
+            if (double.IsFinite(bottomDock.Proportion) && bottomDock.Proportion > 0)
+            {
+                bottomDock.CollapsedProportion = bottomDock.Proportion;
+            }
+
+            bottomDock.Proportion = 0;
+            bottomDock.ActiveDockable = null;
+            bottomDock.IsActive = false;
+            bottomDock.IsExpanded = false;
+        }
+
+        if (rootDock.PinnedDock is ToolDock pinnedDock)
+        {
+            pinnedDock.ActiveDockable = null;
+            pinnedDock.IsActive = false;
+            pinnedDock.IsExpanded = false;
+        }
+    }
+
     public ExtensionTool? AddExtensionTool(IRootDock rootDock, ExtensionViewModel viewModel)
     {
         string fallbackDockId = viewModel.Location switch
@@ -662,7 +700,8 @@ public sealed partial class XamlEditorDockFactory : Factory
                 }
             }
 
-            if (toolDock.ActiveDockable is null || viewModel.ActivateByDefault)
+            bool isBottomToolDock = string.Equals(toolDock.Id, "BottomToolDock", StringComparison.Ordinal);
+            if (viewModel.ActivateByDefault || (!isBottomToolDock && toolDock.ActiveDockable is null))
             {
                 SetActiveDockable(tool);
                 SetFocusedDockable(toolDock, tool);

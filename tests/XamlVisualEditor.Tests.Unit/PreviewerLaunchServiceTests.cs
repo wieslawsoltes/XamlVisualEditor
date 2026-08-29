@@ -45,6 +45,28 @@ public sealed class PreviewerLaunchServiceTests : IDisposable
     }
 
     [Fact]
+    public void ResolveHostApplicationPath_PreservesCaseDistinctCandidatesOnCaseSensitiveSystems()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string outputDirectory = Path.Combine(_root, "output");
+        Directory.CreateDirectory(outputDirectory);
+        string xamlAssembly = CreateFile(outputDirectory, "Library.dll");
+        CreateHostApplication(outputDirectory, "SampleHost");
+        CreateHostApplication(outputDirectory, "samplehost");
+
+        string? resolved = PreviewerLaunchService.ResolveHostApplicationPath(
+            xamlAssembly,
+            Array.Empty<ProjectModel>(),
+            appOverride: null);
+
+        Assert.Null(resolved);
+    }
+
+    [Fact]
     public void PreviewerTcpSession_ReportErrorPreservesVisibleError()
     {
         using PreviewerTcpSession session = new("Sample.axaml", log: null);

@@ -51,6 +51,38 @@ public sealed class WorkspaceAssemblyDiscoveryTests : IDisposable
         Assert.Equal(Path.GetFullPath(expected), discovered);
     }
 
+    [Fact]
+    public void FindProjectOutputs_ExecutableWithoutOutputPathFindsManagedAssembly()
+    {
+        string projectDirectory = CreateDirectory("src", "Sample");
+        string expected = CreateFile(CreateDirectory("src", "Sample", "bin", "Debug", "net10.0"), "Sample.dll");
+        ProjectModel project = CreateProject(projectDirectory, outputAssemblyPath: null, isExecutable: true);
+
+        IReadOnlyList<string> outputs = WorkspaceAssemblyDiscovery.FindProjectOutputs(project);
+
+        string discovered = Assert.Single(outputs);
+        Assert.Equal(Path.GetFullPath(expected), discovered);
+    }
+
+    [Fact]
+    public void FindProjectOutputs_PreservesCaseDistinctFilesOnCaseSensitiveSystems()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string projectDirectory = CreateDirectory("src", "Sample");
+        string outputDirectory = CreateDirectory("shared-output");
+        string outputPath = CreateFile(outputDirectory, "Sample.dll");
+        CreateFile(outputDirectory, "sample.dll");
+        ProjectModel project = CreateProject(projectDirectory, outputPath);
+
+        IReadOnlyList<string> outputs = WorkspaceAssemblyDiscovery.FindProjectOutputs(project);
+
+        Assert.Equal(2, outputs.Count);
+    }
+
     [Theory]
     [InlineData("de/Sample.resources.dll")]
     [InlineData("runtimes/win/lib/net10.0/Sample.dll")]
@@ -79,7 +111,10 @@ public sealed class WorkspaceAssemblyDiscoveryTests : IDisposable
         }
     }
 
-    private ProjectModel CreateProject(string projectDirectory, string outputAssemblyPath)
+    private ProjectModel CreateProject(
+        string projectDirectory,
+        string? outputAssemblyPath,
+        bool isExecutable = false)
     {
         return new ProjectModel
         {
@@ -90,7 +125,7 @@ public sealed class WorkspaceAssemblyDiscoveryTests : IDisposable
             References = Array.Empty<AssemblyReference>(),
             OutputAssemblyPath = outputAssemblyPath,
             TargetFramework = "net10.0",
-            IsExecutable = false
+            IsExecutable = isExecutable
         };
     }
 

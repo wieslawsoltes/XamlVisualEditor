@@ -270,6 +270,11 @@ public sealed class ControlFactory
     {
         foreach (MutableAstPropertyNode prop in astNode.Properties)
         {
+            if (TryApplyGridDefinitions(control, prop))
+            {
+                continue;
+            }
+
             if (prop.Value is MutableAstTextNode textNode)
             {
                 if (TryApplyDesignProperty(control, prop.PropertyName, textNode.Text))
@@ -279,6 +284,119 @@ public sealed class ControlFactory
 
                 TrySetProperty(control, prop.PropertyName, textNode.Text);
             }
+        }
+    }
+
+    private static bool TryApplyGridDefinitions(Control control, MutableAstPropertyNode property)
+    {
+        if (control is not Grid grid)
+        {
+            return false;
+        }
+
+        bool isColumns = property.PropertyName.EndsWith(".ColumnDefinitions", StringComparison.Ordinal)
+            || property.PropertyName.Equals("ColumnDefinitions", StringComparison.Ordinal);
+        bool isRows = property.PropertyName.EndsWith(".RowDefinitions", StringComparison.Ordinal)
+            || property.PropertyName.Equals("RowDefinitions", StringComparison.Ordinal);
+        if (!isColumns && !isRows)
+        {
+            return false;
+        }
+
+        IEnumerable<MutableAstObjectNode> definitions = EnumeratePropertyObjects(property.Value);
+        if (isColumns)
+        {
+            grid.ColumnDefinitions.Clear();
+            foreach (MutableAstObjectNode definition in definitions)
+            {
+                ColumnDefinition column = new(ParseGridLength(GetPropertyText(definition, "Width"), GridLength.Star));
+                ApplyDefinitionLimits(definition, value => column.MinWidth = value, value => column.MaxWidth = value);
+                grid.ColumnDefinitions.Add(column);
+            }
+        }
+        else
+        {
+            grid.RowDefinitions.Clear();
+            foreach (MutableAstObjectNode definition in definitions)
+            {
+                RowDefinition row = new(ParseGridLength(GetPropertyText(definition, "Height"), GridLength.Star));
+                ApplyDefinitionLimits(definition, value => row.MinHeight = value, value => row.MaxHeight = value);
+                grid.RowDefinitions.Add(row);
+            }
+        }
+
+        return true;
+    }
+
+    private static IEnumerable<MutableAstObjectNode> EnumeratePropertyObjects(MutableAstNode? value)
+    {
+        if (value is not MutableAstObjectNode objectNode)
+        {
+            yield break;
+        }
+
+        if (!objectNode.TypeName.Equals("__PropertyElementChildren__", StringComparison.Ordinal))
+        {
+            yield return objectNode;
+            yield break;
+        }
+
+        foreach (MutableAstNode child in objectNode.Children)
+        {
+            if (child is MutableAstObjectNode childObject)
+            {
+                yield return childObject;
+            }
+        }
+    }
+
+    private static void ApplyDefinitionLimits(
+        MutableAstObjectNode definition,
+        Action<double> setMinimum,
+        Action<double> setMaximum)
+    {
+        if (double.TryParse(
+                GetPropertyText(definition, "MinWidth") ?? GetPropertyText(definition, "MinHeight"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out double minimum))
+        {
+            setMinimum(minimum);
+        }
+
+        if (double.TryParse(
+                GetPropertyText(definition, "MaxWidth") ?? GetPropertyText(definition, "MaxHeight"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out double maximum))
+        {
+            setMaximum(maximum);
+        }
+    }
+
+    private static string? GetPropertyText(MutableAstObjectNode node, string propertyName)
+    {
+        return node.Properties
+            .FirstOrDefault(property => property.PropertyName.Equals(propertyName, StringComparison.Ordinal))
+            ?.Value is MutableAstTextNode text
+                ? text.Text
+                : null;
+    }
+
+    private static GridLength ParseGridLength(string? value, GridLength fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        try
+        {
+            return GridLength.Parse(value);
+        }
+        catch
+        {
+            return fallback;
         }
     }
 

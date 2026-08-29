@@ -13,8 +13,8 @@ namespace XamlVisualEditor.Shell.ViewModels;
 
 internal sealed class PreviewerLaunchService : IDisposable
 {
-    private readonly Dictionary<string, Process> _processes = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, PreviewerTcpSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Process> _processes = new(FileSystemPathComparison.Comparer);
+    private readonly Dictionary<string, PreviewerTcpSession> _sessions = new(FileSystemPathComparison.Comparer);
     private readonly PreviewerTelemetryStore _telemetry = new();
 
     public event Action<PreviewerErrorInfo>? PreviewerErrorReceived;
@@ -249,7 +249,7 @@ internal sealed class PreviewerLaunchService : IDisposable
             // Scratch-Verzeichnis) gegen das geladene Workspace-Projekt rendern statt
             // den Start zu verweigern.
             project = workspace.Projects.FirstOrDefault(p =>
-                string.Equals(p.ProjectPath, workspacePath, StringComparison.OrdinalIgnoreCase))
+                FileSystemPathComparison.Equals(p.ProjectPath, workspacePath))
                 ?? ProjectSelection.SelectPreferredProject(workspace.Projects);
         }
 
@@ -362,7 +362,7 @@ internal sealed class PreviewerLaunchService : IDisposable
                 .Select(name => FindHostApplication(outputDirectory, name))
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Cast<string>()
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(FileSystemPathComparison.Comparer)
                 .ToArray();
             return candidates.Length == 1 ? candidates[0] : null;
         }

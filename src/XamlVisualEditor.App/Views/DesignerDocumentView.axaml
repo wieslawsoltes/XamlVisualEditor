@@ -44,7 +44,7 @@
             </StackPanel>
         </Border>
 
-        <Grid>
+        <Grid v:SplitterLayoutBehavior.PersistenceKey="DesignerDocument">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />

@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
+using XamlVisualEditor.Core;
 
 namespace XamlVisualEditor.CSharp.Language;
 
@@ -14,7 +15,7 @@ public sealed class CSharpWorkspaceManager : IDisposable
 {
     private readonly object _gate = new();
     private readonly ConcurrentDictionary<string, DocumentId> _documentIds =
-        new(StringComparer.OrdinalIgnoreCase);
+        new(FileSystemPathComparison.Comparer);
     private readonly ILogger<CSharpWorkspaceManager> _logger;
     private MSBuildWorkspace? _msbuildWorkspace;
     private AdhocWorkspace? _adhocWorkspace;
@@ -42,7 +43,7 @@ public sealed class CSharpWorkspaceManager : IDisposable
         CancellationTokenSource? oldLoadCancellation;
         lock (_gate)
         {
-            if (string.Equals(_workspacePath, workspacePath, StringComparison.OrdinalIgnoreCase))
+            if (FileSystemPathComparison.Equals(_workspacePath, workspacePath))
             {
                 return Task.CompletedTask;
             }
@@ -120,6 +121,11 @@ public sealed class CSharpWorkspaceManager : IDisposable
         return await AddOrUpdateAdhocDocumentAsync(filePath, text, ct).ConfigureAwait(false);
     }
 
+    public Task WarmWorkspaceAsync(CancellationToken ct)
+    {
+        return EnsureMsbuildWorkspaceAsync(ct);
+    }
+
     private async Task EnsureMsbuildWorkspaceAsync(CancellationToken ct)
     {
         Task loadTask;
@@ -182,7 +188,7 @@ public sealed class CSharpWorkspaceManager : IDisposable
             lock (_gate)
             {
                 accepted = generation == _workspaceGeneration
-                    && string.Equals(_workspacePath, workspacePath, StringComparison.OrdinalIgnoreCase);
+                    && FileSystemPathComparison.Equals(_workspacePath, workspacePath);
                 if (accepted)
                 {
                     _msbuildWorkspace = workspace;
@@ -327,7 +333,7 @@ public sealed class CSharpWorkspaceManager : IDisposable
     private static IReadOnlyList<MetadataReference> GetDefaultReferences()
     {
         List<MetadataReference> references = new();
-        HashSet<string> locations = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> locations = new(FileSystemPathComparison.Comparer);
 
         AddReferenceIfValid(references, locations, typeof(object).Assembly);
         AddReferenceIfValid(references, locations, typeof(System.Console).Assembly);

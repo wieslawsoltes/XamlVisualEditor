@@ -34,7 +34,7 @@ internal static class WorkspaceAssemblyDiscovery
             return Array.Empty<string>();
         }
 
-        string expectedFileName = GetExpectedFileName(project);
+        IReadOnlyList<string> expectedFileNames = GetExpectedFileNames(project);
         List<string> roots = new();
         if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
         {
@@ -48,8 +48,8 @@ internal static class WorkspaceAssemblyDiscovery
         roots.Add(Path.Combine(projectDirectory, "bin", "Debug"));
         roots.Add(Path.Combine(projectDirectory, "bin", "Release"));
 
-        HashSet<string> outputs = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+        HashSet<string> outputs = new(FileSystemPathComparison.Comparer);
+        foreach (string root in roots.Distinct(FileSystemPathComparison.Comparer))
         {
             if (!Directory.Exists(root))
             {
@@ -58,11 +58,14 @@ internal static class WorkspaceAssemblyDiscovery
 
             try
             {
-                foreach (string file in Directory.EnumerateFiles(root, expectedFileName, SearchOption.AllDirectories))
+                foreach (string expectedFileName in expectedFileNames)
                 {
-                    if (!IsIgnoredOutputPath(file))
+                    foreach (string file in Directory.EnumerateFiles(root, expectedFileName, SearchOption.AllDirectories))
                     {
-                        outputs.Add(Path.GetFullPath(file));
+                        if (!IsIgnoredOutputPath(file))
+                        {
+                            outputs.Add(Path.GetFullPath(file));
+                        }
                     }
                 }
             }
@@ -72,7 +75,7 @@ internal static class WorkspaceAssemblyDiscovery
             }
         }
 
-        return outputs.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+        return outputs.OrderBy(path => path, FileSystemPathComparison.Comparer).ToArray();
     }
 
     private static IReadOnlyList<string> EnumerateTopLevelAssemblies(
@@ -90,8 +93,8 @@ internal static class WorkspaceAssemblyDiscovery
                 .Where(IsAssemblyFile)
                 .Where(path => !IsIgnoredOutputPath(path))
                 .Select(Path.GetFullPath)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .Distinct(FileSystemPathComparison.Comparer)
+                .OrderBy(path => path, FileSystemPathComparison.Comparer)
                 .ToArray();
         }
         catch (Exception ex)
@@ -108,19 +111,24 @@ internal static class WorkspaceAssemblyDiscovery
             || extension.Equals(".exe", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetExpectedFileName(ProjectModel project)
+    private static IReadOnlyList<string> GetExpectedFileNames(ProjectModel project)
     {
         if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
         {
             string fileName = Path.GetFileName(project.OutputAssemblyPath);
             if (!string.IsNullOrWhiteSpace(fileName))
             {
-                return fileName;
+                return new[] { fileName };
             }
         }
 
-        string extension = project.IsExecutable ? ".exe" : ".dll";
-        return project.Name + extension;
+        List<string> fileNames = new() { project.Name + ".dll" };
+        if (project.IsExecutable && OperatingSystem.IsWindows())
+        {
+            fileNames.Add(project.Name + ".exe");
+        }
+
+        return fileNames;
     }
 
     internal static bool IsIgnoredOutputPath(string assemblyPath)

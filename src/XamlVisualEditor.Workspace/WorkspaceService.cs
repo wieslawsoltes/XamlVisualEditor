@@ -32,6 +32,7 @@ namespace XamlVisualEditor.Workspace;
 /// </summary>
 public sealed class WorkspaceService : IWorkspaceService, IDisposable
 {
+    private static readonly TimeSpan ProjectLoadTimeout = TimeSpan.FromSeconds(30);
     private MSBuildWorkspace? _workspace;
     private Solution? _solution;
     private readonly ILogger<WorkspaceService> _logger;
@@ -119,13 +120,6 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
     private async Task<WorkspaceModel> LoadSolutionCoreAsync(string solutionPath, CancellationToken ct)
     {
-        string? previousDirectory = Directory.GetCurrentDirectory();
-        string? workspaceDirectory = Path.GetDirectoryName(solutionPath);
-        if (!string.IsNullOrEmpty(workspaceDirectory))
-        {
-            Directory.SetCurrentDirectory(workspaceDirectory);
-        }
-
         IDisposable? workspaceFailed = null;
         try
         {
@@ -141,11 +135,6 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         finally
         {
             workspaceFailed?.Dispose();
-
-            if (!string.IsNullOrEmpty(previousDirectory))
-            {
-                Directory.SetCurrentDirectory(previousDirectory);
-            }
         }
 
         List<ProjectModel> projects = new();
@@ -153,8 +142,8 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
         foreach (Project project in _solution.Projects)
         {
-            Dictionary<string, XamlFileModel> xamlFiles = new(StringComparer.OrdinalIgnoreCase);
-            Dictionary<string, ProjectFileModel> files = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, XamlFileModel> xamlFiles = new(FileSystemPathComparison.Comparer);
+            Dictionary<string, ProjectFileModel> files = new(FileSystemPathComparison.Comparer);
             List<AssemblyReference> references = new();
 
             if (!string.IsNullOrWhiteSpace(project.FilePath))
@@ -222,15 +211,8 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
     private async Task<WorkspaceModel> LoadProjectCoreAsync(string projectPath, CancellationToken ct)
     {
-        string? previousDirectory = Directory.GetCurrentDirectory();
-        string? workspaceDirectory = Path.GetDirectoryName(projectPath);
-        if (!string.IsNullOrEmpty(workspaceDirectory))
-        {
-            Directory.SetCurrentDirectory(workspaceDirectory);
-        }
-
         IDisposable? workspaceFailed = null;
-        Project project;
+        Project? project = null;
         try
         {
             EnsureMSBuildRegistered();
@@ -240,66 +222,207 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             _logger.LogInformation("Loading project: {Path}", projectPath);
             Progress<ProjectLoadProgress> progress = new(p =>
                 _logger.LogInformation("Workspace load: {Progress}", FormatProgress(p)));
-            project = await _workspace.OpenProjectAsync(projectPath, progress, ct).ConfigureAwait(false);
+            using CancellationTokenSource timeout = new(ProjectLoadTimeout);
+            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+            try
+            {
+                project = await _workspace.OpenProjectAsync(projectPath, progress, linked.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "MSBuild workspace load timed out after {Seconds} seconds. Using lightweight project metadata.",
+                    ProjectLoadTimeout.TotalSeconds);
+                _workspace.Dispose();
+                _workspace = null;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    "MSBuild workspace load failed: {Message}. Using lightweight project metadata.",
+                    ex.Message);
+                _workspace.Dispose();
+                _workspace = null;
+            }
         }
         finally
         {
             workspaceFailed?.Dispose();
+        }
 
-            if (!string.IsNullOrEmpty(previousDirectory))
+        if (project is null)
+        {
+            return CreateFallbackWorkspace(projectPath);
+        }
+
+        try
+        {
+            Dictionary<string, XamlFileModel> xamlFiles = new(FileSystemPathComparison.Comparer);
+            Dictionary<string, ProjectFileModel> files = new(FileSystemPathComparison.Comparer);
+            List<AssemblyReference> references = new();
+
+            if (!string.IsNullOrWhiteSpace(project.FilePath))
             {
-                Directory.SetCurrentDirectory(previousDirectory);
+                AddProjectFile(files, project.FilePath, project.FilePath, project.Name + ".csproj");
             }
-        }
 
-        Dictionary<string, XamlFileModel> xamlFiles = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, ProjectFileModel> files = new(StringComparer.OrdinalIgnoreCase);
-        List<AssemblyReference> references = new();
-
-        if (!string.IsNullOrWhiteSpace(project.FilePath))
-        {
-            AddProjectFile(files, project.FilePath, project.FilePath, project.Name + ".csproj");
-        }
-
-        foreach (Document doc in project.Documents)
-        {
-            string filePath = doc.FilePath ?? doc.Name;
-            AddProjectFile(files, project.FilePath, filePath, doc.Name);
-            AddXamlFile(xamlFiles, filePath, doc.Name);
-        }
-
-        foreach (XamlFileModel file in LoadXamlFromProjectFile(project.FilePath))
-        {
-            AddXamlFile(xamlFiles, file.FilePath, file.RelativePath);
-            AddProjectFile(files, project.FilePath, file.FilePath, file.RelativePath);
-        }
-
-        foreach (MetadataReference metaRef in project.MetadataReferences)
-        {
-            if (metaRef is PortableExecutableReference peRef && peRef.FilePath is not null)
+            foreach (Document doc in project.Documents)
             {
-                string name = System.IO.Path.GetFileNameWithoutExtension(peRef.FilePath);
-                references.Add(new AssemblyReference { Name = name, Path = peRef.FilePath });
+                string filePath = doc.FilePath ?? doc.Name;
+                AddProjectFile(files, project.FilePath, filePath, doc.Name);
+                AddXamlFile(xamlFiles, filePath, doc.Name);
             }
+
+            foreach (XamlFileModel file in LoadXamlFromProjectFile(project.FilePath))
+            {
+                AddXamlFile(xamlFiles, file.FilePath, file.RelativePath);
+                AddProjectFile(files, project.FilePath, file.FilePath, file.RelativePath);
+            }
+
+            foreach (MetadataReference metaRef in project.MetadataReferences)
+            {
+                if (metaRef is PortableExecutableReference peRef && peRef.FilePath is not null)
+                {
+                    string name = System.IO.Path.GetFileNameWithoutExtension(peRef.FilePath);
+                    references.Add(new AssemblyReference { Name = name, Path = peRef.FilePath });
+                }
+            }
+
+            ProjectModel projectModel = new()
+            {
+                Name = project.Name,
+                ProjectPath = project.FilePath ?? string.Empty,
+                XamlFiles = xamlFiles.Values.ToList(),
+                Files = files.Values.ToList(),
+                References = references,
+                OutputAssemblyPath = project.OutputFilePath,
+                TargetFramework = TryGetTargetFrameworkFromOutputPath(project.OutputFilePath),
+                IsExecutable = IsExecutableProject(project)
+            };
+
+            return new WorkspaceModel
+            {
+                Projects = new List<ProjectModel> { projectModel },
+                ProjectFolders = new Dictionary<string, string>(FileSystemPathComparison.Comparer)
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "MSBuild project metadata read failed: {Message}. Using lightweight project metadata.",
+                ex.Message);
+            _workspace?.Dispose();
+            _workspace = null;
+            return CreateFallbackWorkspace(projectPath);
+        }
+    }
+
+    internal static WorkspaceModel CreateFallbackWorkspace(string projectPath)
+    {
+        string projectName = Path.GetFileNameWithoutExtension(projectPath);
+        string assemblyName = projectName;
+        string? targetFramework = null;
+        bool isExecutable = false;
+
+        try
+        {
+            XDocument document = XDocument.Load(projectPath, LoadOptions.None);
+            IEnumerable<XElement> properties = document.Descendants();
+            assemblyName = properties.FirstOrDefault(element => element.Name.LocalName == "AssemblyName")?.Value
+                ?.Trim() ?? projectName;
+            targetFramework = properties.FirstOrDefault(element => element.Name.LocalName == "TargetFramework")?.Value
+                ?.Trim();
+            string? outputType = properties.FirstOrDefault(element => element.Name.LocalName == "OutputType")?.Value
+                ?.Trim();
+            isExecutable = string.Equals(outputType, "Exe", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(outputType, "WinExe", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
         }
 
-        ProjectModel projectModel = new()
+        string? outputAssemblyPath = FindFallbackOutputAssembly(projectPath, assemblyName, targetFramework);
+        ProjectModel project = new()
         {
-            Name = project.Name,
-            ProjectPath = project.FilePath ?? string.Empty,
-            XamlFiles = xamlFiles.Values.ToList(),
-            Files = files.Values.ToList(),
-            References = references,
-            OutputAssemblyPath = project.OutputFilePath,
-            TargetFramework = TryGetTargetFrameworkFromOutputPath(project.OutputFilePath),
-            IsExecutable = IsExecutableProject(project)
+            Name = projectName,
+            ProjectPath = projectPath,
+            XamlFiles = Array.Empty<XamlFileModel>(),
+            Files = new[]
+            {
+                new ProjectFileModel
+                {
+                    FilePath = projectPath,
+                    RelativePath = Path.GetFileName(projectPath)
+                }
+            },
+            References = Array.Empty<AssemblyReference>(),
+            OutputAssemblyPath = outputAssemblyPath,
+            TargetFramework = targetFramework,
+            IsExecutable = isExecutable
         };
 
         return new WorkspaceModel
         {
-            Projects = new List<ProjectModel> { projectModel },
-            ProjectFolders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            Projects = new[] { project },
+            ProjectFolders = new Dictionary<string, string>(FileSystemPathComparison.Comparer)
         };
+    }
+
+    private static string? FindFallbackOutputAssembly(
+        string projectPath,
+        string assemblyName,
+        string? targetFramework)
+    {
+        string? projectDirectory = Path.GetDirectoryName(projectPath);
+        if (string.IsNullOrWhiteSpace(projectDirectory))
+        {
+            return null;
+        }
+
+        string fileName = assemblyName + ".dll";
+        if (!string.IsNullOrWhiteSpace(targetFramework))
+        {
+            foreach (string configuration in new[] { "Debug", "Release" })
+            {
+                string candidate = Path.Combine(
+                    projectDirectory,
+                    "bin",
+                    configuration,
+                    targetFramework,
+                    fileName);
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        DirectoryInfo? ancestor = new(projectDirectory);
+        for (int depth = 0; ancestor is not null && depth < 4; depth++, ancestor = ancestor.Parent)
+        {
+            string buildDirectory = Path.Combine(ancestor.FullName, "build");
+            if (!Directory.Exists(buildDirectory))
+            {
+                continue;
+            }
+
+            try
+            {
+                string? match = Directory.EnumerateFiles(buildDirectory, fileName, SearchOption.AllDirectories)
+                    .FirstOrDefault(path => !path.Contains(
+                        Path.DirectorySeparatorChar + "ref" + Path.DirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(match))
+                {
+                    return match;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -328,7 +451,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         return new WorkspaceModel
         {
             Projects = new List<ProjectModel> { project },
-            ProjectFolders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            ProjectFolders = new Dictionary<string, string>(FileSystemPathComparison.Comparer)
         };
     }
 
@@ -446,7 +569,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
     {
         if (string.IsNullOrWhiteSpace(solutionPath) || !System.IO.File.Exists(solutionPath))
         {
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, string>(FileSystemPathComparison.Comparer);
         }
 
         if (solutionPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
@@ -467,7 +590,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
         }
         catch
         {
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, string>(FileSystemPathComparison.Comparer);
         }
 
         bool inNested = false;
@@ -518,7 +641,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
             }
         }
 
-        Dictionary<string, string> result = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> result = new(FileSystemPathComparison.Comparer);
         foreach (KeyValuePair<string, string> project in projectPaths)
         {
             string projectGuid = project.Key;
@@ -544,7 +667,7 @@ public sealed class WorkspaceService : IWorkspaceService, IDisposable
 
     private static IReadOnlyDictionary<string, string> ParseSolutionFoldersFromSlnx(string solutionPath)
     {
-        Dictionary<string, string> result = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> result = new(FileSystemPathComparison.Comparer);
         string solutionDir = System.IO.Path.GetDirectoryName(solutionPath) ?? string.Empty;
 
         XDocument doc;
