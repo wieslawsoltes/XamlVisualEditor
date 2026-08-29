@@ -21,47 +21,78 @@ public sealed class CSharpWorkspaceManager : IDisposable
     private Workspace? _workspace;
     private Solution? _solution;
     private string? _workspacePath;
+    private Task? _workspaceLoadTask;
+    private CancellationTokenSource? _workspaceLoadCancellation;
+    private int _workspaceGeneration;
 
     public CSharpWorkspaceManager(ILogger<CSharpWorkspaceManager>? logger = null)
     {
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CSharpWorkspaceManager>.Instance;
     }
 
-    public async Task InitializeWorkspaceAsync(string workspacePath, CancellationToken ct)
+    public Task InitializeWorkspaceAsync(string workspacePath, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(workspacePath))
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        MSBuildWorkspace? oldMsbuildWorkspace;
+        AdhocWorkspace? oldAdhocWorkspace;
+        CancellationTokenSource? oldLoadCancellation;
         lock (_gate)
         {
             if (string.Equals(_workspacePath, workspacePath, StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                return Task.CompletedTask;
             }
 
+            oldMsbuildWorkspace = _msbuildWorkspace;
+            oldAdhocWorkspace = _adhocWorkspace;
+            oldLoadCancellation = _workspaceLoadCancellation;
+            _msbuildWorkspace = null;
+            _adhocWorkspace = null;
+            _workspace = null;
+            _solution = null;
             _workspacePath = workspacePath;
+            _workspaceLoadTask = null;
+            _workspaceLoadCancellation = null;
+            _workspaceGeneration++;
             _documentIds.Clear();
         }
 
-        await LoadMsbuildWorkspaceAsync(workspacePath, ct).ConfigureAwait(false);
+        oldLoadCancellation?.Cancel();
+        oldLoadCancellation?.Dispose();
+        oldMsbuildWorkspace?.Dispose();
+        oldAdhocWorkspace?.Dispose();
+        return Task.CompletedTask;
     }
 
     public Task ClearWorkspaceAsync(CancellationToken ct)
     {
+        MSBuildWorkspace? oldMsbuildWorkspace;
+        AdhocWorkspace? oldAdhocWorkspace;
+        CancellationTokenSource? oldLoadCancellation;
         lock (_gate)
         {
+            oldMsbuildWorkspace = _msbuildWorkspace;
+            oldAdhocWorkspace = _adhocWorkspace;
+            oldLoadCancellation = _workspaceLoadCancellation;
+            _msbuildWorkspace = null;
+            _adhocWorkspace = null;
             _workspacePath = null;
             _solution = null;
             _workspace = null;
+            _workspaceLoadTask = null;
+            _workspaceLoadCancellation = null;
+            _workspaceGeneration++;
             _documentIds.Clear();
         }
 
-        _msbuildWorkspace?.Dispose();
-        _msbuildWorkspace = null;
-        _adhocWorkspace?.Dispose();
-        _adhocWorkspace = null;
+        oldLoadCancellation?.Cancel();
+        oldLoadCancellation?.Dispose();
+        oldMsbuildWorkspace?.Dispose();
+        oldAdhocWorkspace?.Dispose();
 
         return Task.CompletedTask;
     }
@@ -72,6 +103,8 @@ public sealed class CSharpWorkspaceManager : IDisposable
         {
             return null;
         }
+
+        await EnsureMsbuildWorkspaceAsync(ct).ConfigureAwait(false);
 
         Solution? solution = _solution;
         if (solution is not null)
@@ -87,12 +120,37 @@ public sealed class CSharpWorkspaceManager : IDisposable
         return await AddOrUpdateAdhocDocumentAsync(filePath, text, ct).ConfigureAwait(false);
     }
 
-    private async Task LoadMsbuildWorkspaceAsync(string workspacePath, CancellationToken ct)
+    private async Task EnsureMsbuildWorkspaceAsync(CancellationToken ct)
     {
+        Task loadTask;
+        lock (_gate)
+        {
+            if (_solution is not null || string.IsNullOrWhiteSpace(_workspacePath))
+            {
+                return;
+            }
+
+            if (_workspaceLoadTask is null)
+            {
+                _workspaceLoadCancellation = new CancellationTokenSource();
+                _workspaceLoadTask = LoadMsbuildWorkspaceAsync(
+                    _workspacePath,
+                    _workspaceGeneration,
+                    _workspaceLoadCancellation.Token);
+            }
+
+            loadTask = _workspaceLoadTask;
+        }
+
+        await loadTask.WaitAsync(ct).ConfigureAwait(false);
+    }
+
+    private async Task LoadMsbuildWorkspaceAsync(string workspacePath, int generation, CancellationToken ct)
+    {
+        MSBuildWorkspace? workspace = null;
         try
         {
-            _msbuildWorkspace?.Dispose();
-            MSBuildWorkspace workspace = MSBuildWorkspace.Create();
+            workspace = MSBuildWorkspace.Create();
             workspace.RegisterWorkspaceFailedHandler(diagnostic =>
             {
                 if (diagnostic.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
@@ -117,20 +175,33 @@ public sealed class CSharpWorkspaceManager : IDisposable
 
             if (solution is null)
             {
-                workspace.Dispose();
                 return;
             }
 
+            bool accepted;
             lock (_gate)
             {
-                _msbuildWorkspace = workspace;
-                _workspace = workspace;
-                _solution = solution;
+                accepted = generation == _workspaceGeneration
+                    && string.Equals(_workspacePath, workspacePath, StringComparison.OrdinalIgnoreCase);
+                if (accepted)
+                {
+                    _msbuildWorkspace = workspace;
+                    _workspace = workspace;
+                    _solution = solution;
+                    workspace = null;
+                }
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Failed to load MSBuild workspace: {Message}", ex.Message);
+        }
+        finally
+        {
+            workspace?.Dispose();
         }
     }
 
@@ -295,7 +366,6 @@ public sealed class CSharpWorkspaceManager : IDisposable
 
     public void Dispose()
     {
-        _msbuildWorkspace?.Dispose();
-        _adhocWorkspace?.Dispose();
+        ClearWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult();
     }
 }

@@ -1182,6 +1182,11 @@ public sealed class TypeMetadataService : ITypeMetadataService
             return false;
         }
 
+        if (Path.GetFileName(assemblyPath).EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         string extension = Path.GetExtension(assemblyPath);
         if (!extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))

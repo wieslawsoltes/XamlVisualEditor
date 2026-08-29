@@ -7687,20 +7687,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         foreach (ProjectModel project in workspace.Projects)
         {
-            foreach (AssemblyReference reference in project.References)
-            {
-                if (!IsAssemblyPathCandidate(reference.Path))
-                {
-                    continue;
-                }
-
-                if (System.IO.File.Exists(reference.Path) && seen.Add(reference.Path))
-                {
-                    all.Add(reference.Path);
-                }
-            }
-
-            List<string> outputs = FindProjectOutputs(project).ToList();
+            IReadOnlyList<string> outputs = WorkspaceAssemblyDiscovery.FindProjectOutputs(
+                project,
+                (root, ex) => _logger.LogWarning(
+                    "Failed to enumerate outputs from '{Root}': {Message}",
+                    root,
+                    ex.Message));
             if (outputs.Count == 0)
             {
                 hasMissingProjectOutputs = true;
@@ -7720,64 +7712,29 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     hasAnyProjectOutputs = true;
                 }
             }
-        }
 
-        return new WorkspaceAssemblySet(all, preferred);
-    }
-
-    private IEnumerable<string> FindProjectOutputs(ProjectModel project)
-    {
-        if (string.IsNullOrWhiteSpace(project.ProjectPath))
-        {
-            return Array.Empty<string>();
-        }
-
-        string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
-        if (string.IsNullOrEmpty(projectDir))
-        {
-            return Array.Empty<string>();
-        }
-
-        List<string> roots = new();
-        if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
-        {
-            string? outputDir = System.IO.Path.GetDirectoryName(project.OutputAssemblyPath);
-            if (!string.IsNullOrWhiteSpace(outputDir))
-            {
-                roots.Add(outputDir);
-            }
-        }
-
-        roots.Add(System.IO.Path.Combine(projectDir, "bin", "Debug"));
-        roots.Add(System.IO.Path.Combine(projectDir, "bin", "Release"));
-
-        List<string> outputs = new();
-        foreach (string root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!System.IO.Directory.Exists(root))
+            // The built output directory is the runtime source of truth. Project references are only a
+            // fallback when no output is available; mixing both sources loads duplicate package assemblies.
+            if (outputs.Count > 0)
             {
                 continue;
             }
 
-            try
+            foreach (AssemblyReference reference in project.References)
             {
-                foreach (string file in System.IO.Directory.EnumerateFiles(root, "*.dll", System.IO.SearchOption.AllDirectories))
+                if (!IsAssemblyPathCandidate(reference.Path))
                 {
-                    outputs.Add(file);
+                    continue;
                 }
 
-                foreach (string file in System.IO.Directory.EnumerateFiles(root, "*.exe", System.IO.SearchOption.AllDirectories))
+                if (System.IO.File.Exists(reference.Path) && seen.Add(reference.Path))
                 {
-                    outputs.Add(file);
+                    all.Add(reference.Path);
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to enumerate outputs from '{Root}': {Message}", root, ex.Message);
             }
         }
 
-        return outputs;
+        return new WorkspaceAssemblySet(all, preferred);
     }
 
     private static bool IsAssemblyPathCandidate(string? assemblyPath)
@@ -7790,6 +7747,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string extension = System.IO.Path.GetExtension(assemblyPath);
         if (!extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (System.IO.Path.GetFileName(assemblyPath)
+            .EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

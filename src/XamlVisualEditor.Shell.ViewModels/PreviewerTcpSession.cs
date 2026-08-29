@@ -23,6 +23,7 @@ public sealed class PreviewerTcpSession : IDisposable
     private double _viewportWidth = 800;
     private double _viewportHeight = 600;
     private FrameMessage? _lastFrame;
+    private string? _lastError;
 
     public PreviewerTcpSession(string xamlFilePath, Action<string, string>? log)
     {
@@ -41,6 +42,17 @@ public sealed class PreviewerTcpSession : IDisposable
     public event Action<IAvaloniaRemoteTransportConnection?>? ConnectionChanged;
     public event Action<FrameMessage>? FrameReceived;
     public event Action<RequestViewportResizeMessage>? ViewportResizeRequested;
+
+    public string? LastError
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lastError;
+            }
+        }
+    }
 
     public IAvaloniaRemoteTransportConnection? Connection
     {
@@ -107,6 +119,21 @@ public sealed class PreviewerTcpSession : IDisposable
         }
     }
 
+    internal void ReportError(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _lastError = message;
+        }
+
+        ErrorReceived?.Invoke(new PreviewerErrorInfo(message, null, null, _xamlFilePath));
+    }
+
     public void UpdateViewport(double width, double height, double dpiX, double dpiY)
     {
         if (width <= 0 || height <= 0)
@@ -168,6 +195,7 @@ public sealed class PreviewerTcpSession : IDisposable
             lock (_gate)
             {
                 _lastFrame = frame;
+                _lastError = null;
             }
 
             _connection?.Send(new FrameReceivedMessage
@@ -198,6 +226,10 @@ public sealed class PreviewerTcpSession : IDisposable
             }
 
             _log?.Invoke("Info", "Previewer XAML applied");
+            lock (_gate)
+            {
+                _lastError = null;
+            }
             return;
         }
 

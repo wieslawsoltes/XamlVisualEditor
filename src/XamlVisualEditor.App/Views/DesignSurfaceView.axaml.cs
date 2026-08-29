@@ -41,6 +41,7 @@ public sealed partial class DesignSurfaceView : UserControl
     private DesignSurfaceViewModel? _currentVm;
     private bool _isLoaded;
     private bool _rebuildPending;
+    private bool _rebuildScheduled;
     private Panel? _canvas;
     private Control? _rootControl;
     private Control? _zoomSurface;
@@ -167,7 +168,7 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_rebuildPending)
         {
             _rebuildPending = false;
-            ExecuteRebuild();
+            ScheduleRebuild();
         }
     }
 
@@ -176,6 +177,7 @@ public sealed partial class DesignSurfaceView : UserControl
         // Unsubscribe from previous VM
         if (_currentVm is not null)
         {
+            _currentVm.IsRebuilding = false;
             _currentVm.RebuildRequested -= OnRebuildRequested;
             _currentVm.Selection.SelectionChanged -= OnSelectionChanged;
             _currentVm.PropertyChanged -= OnDesignSurfacePropertyChanged;
@@ -197,7 +199,7 @@ public sealed partial class DesignSurfaceView : UserControl
             // Trigger an initial rebuild if we're already loaded
             if (_isLoaded)
             {
-                ExecuteRebuild();
+                ScheduleRebuild();
             }
             else
             {
@@ -767,11 +769,33 @@ public sealed partial class DesignSurfaceView : UserControl
         // Ensure we run on the UI thread (sync events may come from background)
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            Dispatcher.UIThread.Post(ExecuteRebuild);
+            Dispatcher.UIThread.Post(ScheduleRebuild);
             return;
         }
 
-        ExecuteRebuild();
+        ScheduleRebuild();
+    }
+
+    private void ScheduleRebuild()
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        _currentVm.RebuildStatus = "Building design surface...";
+        _currentVm.IsRebuilding = true;
+        if (_rebuildScheduled)
+        {
+            return;
+        }
+
+        _rebuildScheduled = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _rebuildScheduled = false;
+            ExecuteRebuild();
+        }, DispatcherPriority.Background);
     }
 
     private void OnDragOver(object? sender, DragEventArgs e)
@@ -875,6 +899,22 @@ public sealed partial class DesignSurfaceView : UserControl
     }
 
     private void ExecuteRebuild()
+    {
+        DesignSurfaceViewModel? viewModel = _currentVm;
+        try
+        {
+            ExecuteRebuildCore();
+        }
+        finally
+        {
+            if (viewModel is not null)
+            {
+                viewModel.IsRebuilding = false;
+            }
+        }
+    }
+
+    private void ExecuteRebuildCore()
     {
         Panel? canvas = _canvas ?? this.FindControl<Panel>("DesignCanvas");
         if (canvas is null)

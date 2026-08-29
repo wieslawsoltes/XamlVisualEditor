@@ -66,18 +66,21 @@ internal sealed class PreviewerLaunchService : IDisposable
             Process process = new() { StartInfo = startInfo, EnableRaisingEvents = true };
             process.Exited += (_, _) =>
             {
+                if (process.ExitCode != 0)
+                {
+                    _telemetry.RecordCrash(process.ExitCode);
+                    if (string.IsNullOrWhiteSpace(session.LastError))
+                    {
+                        session.ReportError($"Previewer exited with code {process.ExitCode}.");
+                    }
+                }
+
+                log?.Invoke("Info", $"Previewer exited with code {process.ExitCode}");
                 _processes.Remove(xamlFilePath);
                 if (_sessions.Remove(xamlFilePath, out PreviewerTcpSession? removed))
                 {
                     removed.Dispose();
                 }
-
-                if (process.ExitCode != 0)
-                {
-                    _telemetry.RecordCrash(process.ExitCode);
-                }
-
-                log?.Invoke("Info", $"Previewer exited with code {process.ExitCode}");
             };
             process.Start();
             process.OutputDataReceived += (_, e) =>
@@ -92,6 +95,7 @@ internal sealed class PreviewerLaunchService : IDisposable
                 if (!string.IsNullOrWhiteSpace(e.Data))
                 {
                     log?.Invoke("Error", $"Previewer: {e.Data}");
+                    session.ReportError(e.Data);
                 }
             };
             process.BeginOutputReadLine();
@@ -272,23 +276,17 @@ internal sealed class PreviewerLaunchService : IDisposable
         string targetAssemblyPath = xamlAssemblyPath;
         if (!project.IsExecutable)
         {
-            string? appOverride = Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY");
-            if (!string.IsNullOrWhiteSpace(appOverride) && File.Exists(appOverride))
+            string? hostApplication = ResolveHostApplicationPath(
+                xamlAssemblyPath,
+                workspace.Projects,
+                Environment.GetEnvironmentVariable("XVE_PREVIEWER_APP_ASSEMBLY"));
+            if (string.IsNullOrWhiteSpace(hostApplication))
             {
-                targetAssemblyPath = appOverride;
+                error = "Previewer host application not found. Set XVE_PREVIEWER_APP_ASSEMBLY to an executable application assembly.";
+                return false;
             }
-            else
-            {
-                ProjectModel? executable = ProjectSelection.SelectPreferredProject(
-                    workspace.Projects.Where(p => p.IsExecutable));
-                string? executablePath = executable is null
-                    ? null
-                    : ProjectSelection.ResolveTargetAssemblyPath(executable);
-                if (!string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath))
-                {
-                    targetAssemblyPath = executablePath;
-                }
-            }
+
+            targetAssemblyPath = hostApplication;
         }
 
         string? outputDir = Path.GetDirectoryName(targetAssemblyPath);
@@ -317,6 +315,85 @@ internal sealed class PreviewerLaunchService : IDisposable
             projectDir);
 
         return true;
+    }
+
+    internal static string? ResolveHostApplicationPath(
+        string xamlAssemblyPath,
+        IEnumerable<ProjectModel> projects,
+        string? appOverride)
+    {
+        if (IsHostApplication(appOverride))
+        {
+            return Path.GetFullPath(appOverride!);
+        }
+
+        ProjectModel? executable = ProjectSelection.SelectPreferredProject(projects.Where(p => p.IsExecutable));
+        string? executablePath = executable is null
+            ? null
+            : ProjectSelection.ResolveTargetAssemblyPath(executable);
+        if (IsHostApplication(executablePath))
+        {
+            return Path.GetFullPath(executablePath!);
+        }
+
+        string? outputDirectory = Path.GetDirectoryName(xamlAssemblyPath);
+        if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+        {
+            return null;
+        }
+
+        DirectoryInfo? ancestor = new(outputDirectory);
+        for (int depth = 0; ancestor is not null && depth < 4; depth++, ancestor = ancestor.Parent)
+        {
+            string? candidate = FindHostApplication(outputDirectory, ancestor.Name);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        try
+        {
+            string[] candidates = Directory.EnumerateFiles(
+                    outputDirectory,
+                    "*.runtimeconfig.json",
+                    SearchOption.TopDirectoryOnly)
+                .Select(path => Path.GetFileName(path)[..^".runtimeconfig.json".Length])
+                .Select(name => FindHostApplication(outputDirectory, name))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return candidates.Length == 1 ? candidates[0] : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? FindHostApplication(string outputDirectory, string baseName)
+    {
+        string dllPath = Path.Combine(outputDirectory, baseName + ".dll");
+        if (IsHostApplication(dllPath))
+        {
+            return dllPath;
+        }
+
+        string exePath = Path.Combine(outputDirectory, baseName + ".exe");
+        return IsHostApplication(exePath) ? exePath : null;
+    }
+
+    private static bool IsHostApplication(string? assemblyPath)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyPath) || !File.Exists(assemblyPath))
+        {
+            return false;
+        }
+
+        string runtimeConfigPath = Path.ChangeExtension(assemblyPath, ".runtimeconfig.json");
+        string depsFilePath = Path.ChangeExtension(assemblyPath, ".deps.json");
+        return File.Exists(runtimeConfigPath) && File.Exists(depsFilePath);
     }
 
     private static void LogCompiledBindingsSetting(string assemblyPath, Action<string, string>? log)

@@ -26,6 +26,7 @@ public sealed class PreviewerSurfaceControl : Control
     private DateTimeOffset? _lastFrameAt;
     private bool _isConnected;
     private DateTimeOffset? _lastConnectionAt;
+    private string? _lastError;
 
     public PreviewerTcpSession? Session
     {
@@ -43,7 +44,7 @@ public sealed class PreviewerSurfaceControl : Control
     {
         if (_lastFrame is null || _lastFrame.Width == 0 || _lastFrame.Height == 0)
         {
-            DrawStatusOverlay(context, "Waiting for previewer frames...");
+            DrawStatusOverlay(context, _lastError ?? "Waiting for previewer frames...");
             base.Render(context);
             return;
         }
@@ -89,6 +90,7 @@ public sealed class PreviewerSurfaceControl : Control
             oldSession.ConnectionChanged -= OnConnectionChanged;
             oldSession.FrameReceived -= OnFrameReceived;
             oldSession.ViewportResizeRequested -= OnViewportResizeRequested;
+            oldSession.ErrorReceived -= OnErrorReceived;
         }
 
         if (args.NewValue is PreviewerTcpSession newSession)
@@ -96,10 +98,12 @@ public sealed class PreviewerSurfaceControl : Control
             newSession.ConnectionChanged += OnConnectionChanged;
             newSession.FrameReceived += OnFrameReceived;
             newSession.ViewportResizeRequested += OnViewportResizeRequested;
+            newSession.ErrorReceived += OnErrorReceived;
         }
 
         _session = args.NewValue as PreviewerTcpSession;
         ResetFrameState();
+        _lastError = _session?.LastError;
         _lastFrame = _session?.LastFrame;
         _lastFrameAt = _lastFrame is null ? null : DateTimeOffset.Now;
         UpdateConnectionState(_session?.Connection);
@@ -135,12 +139,22 @@ public sealed class PreviewerSurfaceControl : Control
         });
     }
 
+    private void OnErrorReceived(PreviewerErrorInfo error)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            _lastError = error.Message;
+            InvalidateVisual();
+        });
+    }
+
     private void ResetFrameState()
     {
         _lastFrame = null;
         _lastFrameAt = null;
         _isConnected = false;
         _lastConnectionAt = null;
+        _lastError = null;
         _bitmap?.Dispose();
         _bitmap = null;
     }

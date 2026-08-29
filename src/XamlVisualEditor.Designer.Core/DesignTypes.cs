@@ -326,6 +326,18 @@ public sealed partial class DesignSurfaceViewModel : ReactiveObject
     public partial bool IsEditMode { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the designer is creating the control tree.
+    /// </summary>
+    [Reactive]
+    public partial bool IsRebuilding { get; set; }
+
+    /// <summary>
+    /// Gets or sets the visible phase text for a design-surface rebuild.
+    /// </summary>
+    [Reactive]
+    public partial string RebuildStatus { get; set; } = "Building design surface...";
+
+    /// <summary>
     /// Gets or sets whether the grid is visible.
     /// </summary>
     [Reactive]
