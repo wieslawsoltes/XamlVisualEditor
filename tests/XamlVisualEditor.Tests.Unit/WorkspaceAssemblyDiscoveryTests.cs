@@ -67,7 +67,7 @@ public sealed class WorkspaceAssemblyDiscoveryTests : IDisposable
     [Fact]
     public void FindProjectOutputs_PreservesCaseDistinctFilesOnCaseSensitiveSystems()
     {
-        if (OperatingSystem.IsWindows())
+        if (!FileSystemCasing.IsCaseSensitive(_root))
         {
             return;
         }
