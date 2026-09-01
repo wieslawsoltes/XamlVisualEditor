@@ -15,6 +15,12 @@ public static class DesignCanvasSizing
     public const double DefaultHeight = 600;
 
     /// <summary>
+    /// Extra artboard space beyond the document size, so border strokes on the
+    /// document edge stay visible instead of ending on the clip boundary.
+    /// </summary>
+    public const double ArtboardPadding = 10;
+
+    /// <summary>
     /// Resolves the artboard size: an explicit size (DesignWidth/DesignHeight or
     /// Width/Height) wins unchanged; otherwise the declared minimum (or the default)
     /// grows to the measured content size when one is available.
