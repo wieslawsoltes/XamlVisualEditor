@@ -17,7 +17,7 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
     private IDisposable? _activeDocumentSubscription;
     private IDisposable? _diagnosticsSubscription;
     private IDisposable? _documentsSubscription;
-    private readonly Dictionary<TextDocumentViewModel, IDisposable> _documentDiagnosticsSubscriptions = new();
+    private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _documentDiagnosticsSubscriptions = new();
     private TextDocumentViewModel? _activeDocument;
     private IReadOnlyList<DiagnosticsChannelInfo> _lastChannels = EmptyChannels;
 
@@ -107,33 +107,15 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
 
     private IReadOnlyList<LanguageDiagnostic> GetDiagnosticsCore(string? filePath, string? channelId)
     {
-        TextDocumentViewModel? document = _activeDocument ?? _mainViewModel.ActiveTextDocument;
+        IEditorDocumentViewModel? document = string.IsNullOrWhiteSpace(filePath)
+            ? _mainViewModel.ActiveDocument
+            : FindDocument(filePath);
         if (document is null)
         {
             return Array.Empty<LanguageDiagnostic>();
         }
 
-        if (string.IsNullOrWhiteSpace(filePath) || string.Equals(document.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-        {
-            List<LanguageDiagnostic> diagnostics = document.Diagnostics.ToList();
-            if (string.IsNullOrWhiteSpace(channelId))
-            {
-                return diagnostics;
-            }
-
-            List<LanguageDiagnostic> filtered = new();
-            foreach (LanguageDiagnostic diagnostic in diagnostics)
-            {
-                if (string.Equals(GetChannelId(diagnostic.Source), channelId, StringComparison.OrdinalIgnoreCase))
-                {
-                    filtered.Add(diagnostic);
-                }
-            }
-
-            return filtered;
-        }
-
-        return Array.Empty<LanguageDiagnostic>();
+        return FilterDiagnostics(GetDocumentDiagnostics(document), channelId);
     }
 
     private IReadOnlyList<DiagnosticsChannelInfo> GetChannelsCore()
@@ -241,13 +223,13 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
         List<DiagnosticsDocumentSnapshot> snapshots = new();
         if (!string.IsNullOrWhiteSpace(query.FilePath))
         {
-            TextDocumentViewModel? doc = FindDocument(query.FilePath);
+            IEditorDocumentViewModel? doc = FindDocument(query.FilePath);
             if (doc is null)
             {
                 return Array.Empty<DiagnosticsDocumentSnapshot>();
             }
 
-            IReadOnlyList<LanguageDiagnostic> diagnostics = FilterDiagnostics(doc.Diagnostics.ToList(), query.ChannelId);
+            IReadOnlyList<LanguageDiagnostic> diagnostics = FilterDiagnostics(GetDocumentDiagnostics(doc), query.ChannelId);
             if (diagnostics.Count == 0)
             {
                 return Array.Empty<DiagnosticsDocumentSnapshot>();
@@ -257,9 +239,9 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
             return snapshots;
         }
 
-        foreach (TextDocumentViewModel doc in GetDocuments())
+        foreach (IEditorDocumentViewModel doc in _mainViewModel.Documents)
         {
-            IReadOnlyList<LanguageDiagnostic> diagnostics = FilterDiagnostics(doc.Diagnostics.ToList(), query.ChannelId);
+            IReadOnlyList<LanguageDiagnostic> diagnostics = FilterDiagnostics(GetDocumentDiagnostics(doc), query.ChannelId);
             if (diagnostics.Count == 0)
             {
                 continue;
@@ -274,9 +256,9 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
     private IReadOnlyList<LanguageDiagnostic> GetAllDiagnostics()
     {
         List<LanguageDiagnostic> all = new();
-        foreach (TextDocumentViewModel doc in GetDocuments())
+        foreach (IEditorDocumentViewModel doc in _mainViewModel.Documents)
         {
-            all.AddRange(doc.Diagnostics);
+            all.AddRange(GetDocumentDiagnostics(doc));
         }
 
         return all;
@@ -305,8 +287,8 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
 
     private void SyncDocumentSubscriptions()
     {
-        HashSet<TextDocumentViewModel> active = new(GetDocuments());
-        foreach (TextDocumentViewModel existing in _documentDiagnosticsSubscriptions.Keys.ToList())
+        HashSet<IEditorDocumentViewModel> active = new(_mainViewModel.Documents);
+        foreach (IEditorDocumentViewModel existing in _documentDiagnosticsSubscriptions.Keys.ToList())
         {
             if (!active.Contains(existing))
             {
@@ -315,43 +297,76 @@ public sealed class DiagnosticsServiceAdapter : IDiagnosticsService, IDisposable
             }
         }
 
-        foreach (TextDocumentViewModel doc in active)
+        foreach (IEditorDocumentViewModel doc in active)
         {
             if (_documentDiagnosticsSubscriptions.ContainsKey(doc))
             {
                 continue;
             }
 
+            INotifyCollectionChanged? diagnosticsCollection = GetDiagnosticsCollection(doc);
+            if (diagnosticsCollection is null)
+            {
+                continue;
+            }
+
             IDisposable subscription = Observable.FromEventPattern<NotifyCollectionChangedEventHandler, NotifyCollectionChangedEventArgs>(
-                    h => doc.Diagnostics.CollectionChanged += h,
-                    h => doc.Diagnostics.CollectionChanged -= h)
+                    h => diagnosticsCollection.CollectionChanged += h,
+                    h => diagnosticsCollection.CollectionChanged -= h)
                 .Subscribe(_ =>
                 {
                     PublishSnapshotDiagnostics();
-                    PublishChannelDiagnostics(doc.FilePath, doc.Diagnostics.ToList());
+                    PublishChannelDiagnostics(doc.FilePath, GetDocumentDiagnostics(doc));
                 });
 
             _documentDiagnosticsSubscriptions[doc] = subscription;
         }
     }
 
-    private IReadOnlyList<TextDocumentViewModel> GetDocuments()
+    private static INotifyCollectionChanged? GetDiagnosticsCollection(IEditorDocumentViewModel document)
     {
-        List<TextDocumentViewModel> documents = new();
-        foreach (IEditorDocumentViewModel doc in _mainViewModel.Documents)
+        return document switch
         {
-            if (doc is TextDocumentViewModel textDoc)
-            {
-                documents.Add(textDoc);
-            }
-        }
-
-        return documents;
+            TextDocumentViewModel text => text.Diagnostics,
+            DesignerDocumentViewModel designer => designer.CodeEditor.Diagnostics,
+            _ => null,
+        };
     }
 
-    private TextDocumentViewModel? FindDocument(string filePath)
+    private static IReadOnlyList<LanguageDiagnostic> GetDocumentDiagnostics(IEditorDocumentViewModel document)
     {
-        foreach (TextDocumentViewModel doc in GetDocuments())
+        return document switch
+        {
+            TextDocumentViewModel text => text.Diagnostics.ToList(),
+            DesignerDocumentViewModel designer => MapDesignerDiagnostics(designer),
+            _ => Array.Empty<LanguageDiagnostic>(),
+        };
+    }
+
+    private static IReadOnlyList<LanguageDiagnostic> MapDesignerDiagnostics(DesignerDocumentViewModel designer)
+    {
+        List<XamlDiagnostic> source = designer.CodeEditor.Diagnostics.ToList();
+        List<LanguageDiagnostic> diagnostics = new(source.Count);
+        foreach (XamlDiagnostic diagnostic in source)
+        {
+            LanguageTextPosition start = new(diagnostic.Line, diagnostic.Column);
+            LanguageTextPosition end = new(diagnostic.Line, diagnostic.Column + Math.Max(1, diagnostic.Length));
+            diagnostics.Add(new LanguageDiagnostic
+            {
+                FilePath = designer.FilePath,
+                Message = diagnostic.Message,
+                Severity = diagnostic.Severity,
+                Range = new LanguageTextRange(start, end),
+                Source = "XAML"
+            });
+        }
+
+        return diagnostics;
+    }
+
+    private IEditorDocumentViewModel? FindDocument(string filePath)
+    {
+        foreach (IEditorDocumentViewModel doc in _mainViewModel.Documents)
         {
             if (string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
             {

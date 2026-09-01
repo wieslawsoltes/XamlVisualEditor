@@ -31,6 +31,7 @@ uses Semantic Versioning.
 ### Fixed
 
 - Fixed the test suites reading and overwriting the user's persisted layout files: the dock factory settings root is now overridable, and every test bootstrap points it at an isolated temporary directory.
+- Fixed `diagnostics.get` on the IDE bridge returning nothing for designer documents: the diagnostics service now resolves any open document by path (not just the active text document) and maps designer XAML diagnostics into the language diagnostics it reports, publishes, and snapshots.
 - Fixed the collapsed bottom dock expanding on every start: loading treated the persisted zero proportion as damage and reset it, and extension views registering after startup added and activated their tool over the restored layout. Zero now stays collapsed, and late extension tools go to the pin strip instead of activating.
 - Fixed closed tool panels reappearing on every start: the shell recreates missing default and extension tools, so closed tools are now remembered in a persisted list, removed from loaded layouts, skipped by the recreation paths, and revived only through the view menu (a layout reset clears the list).
 - Fixed designer selection picking a container instead of the clicked child: hit-testing now walks the real visual tree in z-order (templated controls included) and maps the hit to the nearest design item, instead of probing the logical structure only.
