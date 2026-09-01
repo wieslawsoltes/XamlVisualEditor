@@ -7,7 +7,7 @@ using XamlVisualEditor.Shell;
 using XamlVisualEditor.Shell.ViewModels;
 using Xunit;
 
-namespace XamlVisualEditor.Tests.Integration;
+namespace XamlVisualEditor.Tests.Unit;
 
 public sealed class DockLayoutPersistenceTests
 {
