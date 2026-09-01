@@ -28,6 +28,9 @@ public sealed class UiLayoutStateStoreTests
         {
             WindowWidth = 1512,
             WindowHeight = 976,
+            WindowX = -120,
+            WindowY = 64,
+            WindowMaximized = true,
             Splitters =
             {
                 ["DesignerDocument"] = new SplitterLayoutState
@@ -42,8 +45,32 @@ public sealed class UiLayoutStateStoreTests
 
         Assert.Equal(1512, restored.WindowWidth);
         Assert.Equal(976, restored.WindowHeight);
+        Assert.Equal(-120, restored.WindowX);
+        Assert.Equal(64, restored.WindowY);
+        Assert.True(restored.WindowMaximized);
         Assert.Equal(0.62, restored.Splitters["DesignerDocument"].ColumnRatio);
         Assert.Equal(0.71, restored.Splitters["DesignerDocument"].RowRatio);
+    }
+
+    [Fact]
+    public void Deserialize_WithoutPositionFields_LeavesPositionUnset()
+    {
+        UiLayoutState restored = UiLayoutStateStore.Deserialize(
+            """{"WindowWidth":1200,"WindowHeight":800}""");
+
+        Assert.Null(restored.WindowX);
+        Assert.Null(restored.WindowY);
+        Assert.False(restored.WindowMaximized);
+    }
+
+    [Fact]
+    public void Deserialize_WithIncompletePosition_DropsBothCoordinates()
+    {
+        UiLayoutState restored = UiLayoutStateStore.Deserialize(
+            """{"WindowWidth":1200,"WindowHeight":800,"WindowX":40}""");
+
+        Assert.Null(restored.WindowX);
+        Assert.Null(restored.WindowY);
     }
 
     [Theory]

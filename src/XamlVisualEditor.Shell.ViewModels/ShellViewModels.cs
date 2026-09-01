@@ -4951,6 +4951,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             string toolId = ExtensionTool.BuildId(view.ViewId);
+            if (DockFactory.IsToolClosed(toolId))
+            {
+                continue;
+            }
+
             ExtensionTool? existing = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, toolId);
             if (existing is not null)
             {
@@ -5005,6 +5010,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IsWatchesVisible = true;
         IsExtensionsManagerVisible = false;
 
+        DockFactory.ClearClosedTools();
         IRootDock layout = DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
@@ -6185,6 +6191,25 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 _activeExtensionViewId = null;
             }
         }
+
+        // The shell recreates missing tools on every start, so a closed tool must
+        // be remembered or it reappears on the next run. Closing a pinned tool
+        // also has to leave the pinned lists, or the pin strip keeps showing it.
+        if (e.Dockable is Tool closedTool
+            && closedTool is not TerminalTool
+            && !string.IsNullOrWhiteSpace(closedTool.Id))
+        {
+            DockFactory.MarkToolClosed(closedTool.Id);
+
+            if (DockLayout is not null)
+            {
+                DockLayout.HiddenDockables?.Remove(closedTool);
+                DockLayout.LeftPinnedDockables?.Remove(closedTool);
+                DockLayout.RightPinnedDockables?.Remove(closedTool);
+                DockLayout.TopPinnedDockables?.Remove(closedTool);
+                DockLayout.BottomPinnedDockables?.Remove(closedTool);
+            }
+        }
     }
 
     private void RemoveTerminalSession(TerminalViewModel terminalVm)
@@ -6214,7 +6239,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             {
                 return;
             }
+
+            // A closed built-in tool was removed from the layout; showing it again
+            // means recreating it.
+            if (isVisible && DockFactory.ReopenBuiltInTool(DockLayout, id) is { } reopened)
+            {
+                DockFactory.SetActiveDockable(reopened);
+            }
+
             return;
+        }
+
+        if (isVisible)
+        {
+            DockFactory.MarkToolReopened(id);
         }
 
         if (isVisible)
@@ -6331,6 +6369,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
+        if (isVisible)
+        {
+            DockFactory.MarkToolReopened(ExtensionTool.BuildId(viewId));
+        }
+
         if (!_extensionTools.TryGetValue(viewId, out ExtensionTool? tool))
         {
             tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
@@ -6338,7 +6381,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         if (tool is null)
         {
-            return false;
+            // A closed tool was removed from the layout; showing it again means
+            // recreating it.
+            if (!isVisible || !_extensionViews.TryGetValue(viewId, out ExtensionViewModel? viewModel))
+            {
+                return false;
+            }
+
+            tool = DockFactory.AddExtensionTool(DockLayout, viewModel);
+            if (tool is null)
+            {
+                return false;
+            }
+
+            _extensionTools[viewId] = tool;
+            DockFactory.SetActiveDockable(tool);
+            UpdateActiveExtensionViewFocus(viewId);
+            RaiseExtensionViewVisibilityChanged(viewId, true);
+            return true;
         }
 
         bool wasVisible = tool.Owner is IDock beforeDock

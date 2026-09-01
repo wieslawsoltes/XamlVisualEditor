@@ -1,7 +1,10 @@
+using System;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Reactive.Concurrency;
 using ReactiveUI;
 using ReactiveUI.Builder;
+using XamlVisualEditor.Shell;
 
 namespace XamlVisualEditor.Tests.Integration;
 
@@ -23,5 +26,10 @@ internal static class ReactiveUiBootstrap
         // Upstream tests relied on RxApp's inline scheduling; keep that behavior
         // deterministic instead of depending on the platform scheduler.
         RxSchedulers.MainThreadScheduler = CurrentThreadScheduler.Instance;
+
+        // Tests build real shell view models; without an isolated settings root
+        // they read and overwrite the user's persisted layout files.
+        XamlEditorDockFactory.SettingsRootOverride = Path.Combine(
+            Path.GetTempPath(), "xve-tests-layout", Guid.NewGuid().ToString("N"));
     }
 }

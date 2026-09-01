@@ -30,6 +30,13 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- Fixed the test suites reading and overwriting the user's persisted layout files: the dock factory settings root is now overridable, and every test bootstrap points it at an isolated temporary directory.
+- Fixed the collapsed bottom dock expanding on every start: loading treated the persisted zero proportion as damage and reset it, and extension views registering after startup added and activated their tool over the restored layout. Zero now stays collapsed, and late extension tools go to the pin strip instead of activating.
+- Fixed closed tool panels reappearing on every start: the shell recreates missing default and extension tools, so closed tools are now remembered in a persisted list, removed from loaded layouts, skipped by the recreation paths, and revived only through the view menu (a layout reset clears the list).
+- Fixed the saved dock layout never loading back: it was serialized polymorphically but deserialized against the concrete root type, and persisted open documents and the pinned dock made the file unreadable, so every start silently deleted it and rebuilt the default layout.
+- Fixed a restored layout rendering as empty: the serializer materializes Active-/Default-/FocusedDockable references as duplicate subtrees, so the shell rendered an unwired copy while panels were added to the visible tree; loading now repoints these references into the visible tree by id.
+- Fixed pinned tools multiplying across restarts: the layout search helpers now cover the pinned and hidden dockable lists, and loading prunes duplicates that earlier versions accumulated.
+- Fixed the main window forgetting its screen position and maximized state; both are now persisted and restored, and a stored position on a disconnected monitor falls back to the default placement.
 - Fixed attribute-form `RowDefinitions`/`ColumnDefinitions` being cleared instead of parsed, which collapsed every grid child into one implicit cell.
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed workspace access errors caused by changes to the process-wide current directory.
