@@ -3,10 +3,13 @@
 All notable changes to XamlVisualEditor are documented in this file. The project
 uses Semantic Versioning.
 
-## [Unreleased]
+## [0.2.0] - 2026-09-01
 
 ### Added
 
+- Added design-surface theming from the workspace application's `App.axaml`; `XVE_DESIGN_APP_XAML` names the application for library workspaces without one.
+- Added the `IDesignPreviewHook` extension point: extensions can take over control instantiation for the design preview or post-process finished nodes.
+- Added activation of enabled installed extension packages: the archive is extracted, the manifest's main assembly is loaded, and its extension entry types are activated.
 - Added `--mcp` to start the local HTTP MCP server from the command line.
 - Added MCP command-line options for the transport, HTTP port, and HTTP path.
 - Added per-user persistence for the main-window size and designer/code splitter ratios.
@@ -16,6 +19,8 @@ uses Semantic Versioning.
 
 ### Changed
 
+- The design preview now materializes property elements that carry control content and applies attributes outside its built-in list through registered Avalonia or writable CLR properties.
+- The design artboard now sizes to the document: an explicit size wins, otherwise the declared minimum grows to the measured content instead of clipping at the default size.
 - The C# language workspace now warms in the background after the initial workspace load.
 - XVE now reads assemblies from a shared build output instead of unrelated output trees.
 - Generated AXAML can select a matching source project through `XVE_PROJECT_SOURCE_ROOT`.
@@ -25,6 +30,7 @@ uses Semantic Versioning.
 
 ### Fixed
 
+- Fixed attribute-form `RowDefinitions`/`ColumnDefinitions` being cleared instead of parsed, which collapsed every grid child into one implicit cell.
 - Fixed indefinite project loading when MSBuild stalls or fails during metadata extraction.
 - Fixed workspace access errors caused by changes to the process-wide current directory.
 - Fixed preview startup for library projects that do not contain an application entry point.

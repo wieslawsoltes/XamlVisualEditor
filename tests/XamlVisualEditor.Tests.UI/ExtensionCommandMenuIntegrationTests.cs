@@ -235,7 +235,12 @@ public sealed class ExtensionCommandMenuIntegrationTests
                 new PropertyEditorRegistry(),
                 _terminalBridge,
                 _viewHost,
-                new InMemorySettingsStore());
+                new InMemorySettingsStore(),
+                new ExtensionPackageStore(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+                    new ExtensionPackageLoader()),
+                new FileExtensionStateStore(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json")));
         }
 
         public MainWindowViewModel ViewModel { get; }

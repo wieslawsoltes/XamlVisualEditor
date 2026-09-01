@@ -40,6 +40,27 @@ public sealed class ControlFactory
     /// </summary>
     public Control? CreateControlTree(MutableAstObjectNode astNode)
     {
+        Control? result = CreateControlTreeCore(astNode);
+        if (result is not null)
+        {
+            foreach (IDesignPreviewHook hook in DesignPreviewHookRegistry.Hooks)
+            {
+                try
+                {
+                    hook.PostProcess(result, astNode);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Design preview hook post-process failed: {Message}", ex.Message);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private Control? CreateControlTreeCore(MutableAstObjectNode astNode)
+    {
         Control? preview = TryCreateDesignPreview(astNode);
         if (preview is not null)
         {
@@ -210,6 +231,22 @@ public sealed class ControlFactory
 
     private Control? InstantiateControl(MutableAstObjectNode astNode)
     {
+        foreach (IDesignPreviewHook hook in DesignPreviewHookRegistry.Hooks)
+        {
+            try
+            {
+                Control? hooked = hook.TryCreateControl(astNode, CreateControlTree);
+                if (hooked is not null)
+                {
+                    return hooked;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Design preview hook create failed: {Message}", ex.Message);
+            }
+        }
+
         if (TryCreateBuiltInControl(astNode.TypeName, out Control? builtIn))
         {
             return builtIn;
@@ -264,7 +301,8 @@ public sealed class ControlFactory
     }
 
     /// <summary>
-    /// Applies AST properties to an existing control, including attached properties.
+    /// Applies AST properties to an existing control, including attached properties and
+    /// property elements that carry control content (e.g. custom content surfaces).
     /// </summary>
     public void ApplyProperties(Control control, MutableAstObjectNode astNode)
     {
@@ -283,13 +321,110 @@ public sealed class ControlFactory
                 }
 
                 TrySetProperty(control, prop.PropertyName, textNode.Text);
+                continue;
+            }
+
+            if (prop.Value is MutableAstObjectNode)
+            {
+                TrySetObjectProperty(control, astNode, prop);
             }
         }
+    }
+
+    /// <summary>
+    /// Materializes a property element whose value is object content: the child tree is
+    /// instantiated and assigned to the matching control-typed member. Covers custom
+    /// content surfaces that are neither Panel children nor ContentControl content.
+    /// </summary>
+    private void TrySetObjectProperty(Control control, MutableAstObjectNode astNode, MutableAstPropertyNode property)
+    {
+        string? memberName = ResolveOwnPropertyName(astNode.TypeName, property.PropertyName);
+        if (memberName is null)
+        {
+            return;
+        }
+
+        List<Control> children = new();
+        foreach (MutableAstObjectNode childNode in EnumeratePropertyObjects(property.Value))
+        {
+            Control? child = CreateControlTree(childNode);
+            if (child is not null)
+            {
+                children.Add(child);
+            }
+        }
+
+        if (children.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            AvaloniaProperty? styledProperty = AvaloniaPropertyRegistry.Instance.FindRegistered(control, memberName);
+            if (styledProperty is not null && typeof(Control).IsAssignableFrom(styledProperty.PropertyType))
+            {
+                control.SetValue(styledProperty, children[0]);
+                return;
+            }
+
+            System.Reflection.PropertyInfo? clrProperty = control.GetType()
+                .GetProperty(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (clrProperty is null)
+            {
+                return;
+            }
+
+            if (clrProperty.CanWrite && typeof(Control).IsAssignableFrom(clrProperty.PropertyType))
+            {
+                clrProperty.SetValue(control, children[0]);
+                return;
+            }
+
+            if (clrProperty.GetValue(control) is System.Collections.IList list)
+            {
+                foreach (Control child in children)
+                {
+                    list.Add(child);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Design-time content property '{Property}' failed: {Message}", memberName, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Maps a property-element name to the member on the element's own type: "Body" stays
+    /// "Body", "GBoxMS_Standard.Body" maps to "Body" only when the prefix is the element's
+    /// type. Foreign prefixes (attached properties such as "Grid.Row") return null.
+    /// </summary>
+    private static string? ResolveOwnPropertyName(string elementTypeName, string propertyName)
+    {
+        int dotIndex = propertyName.LastIndexOf('.');
+        if (dotIndex < 0)
+        {
+            return propertyName;
+        }
+
+        string prefix = propertyName.Substring(0, dotIndex);
+        return string.Equals(prefix, elementTypeName, StringComparison.Ordinal)
+            ? propertyName.Substring(dotIndex + 1)
+            : null;
     }
 
     private static bool TryApplyGridDefinitions(Control control, MutableAstPropertyNode property)
     {
         if (control is not Grid grid)
+        {
+            return false;
+        }
+
+        // Only property elements carry definition objects. The attribute form
+        // (RowDefinitions="Auto,*") is a text value and must reach the regular property
+        // handling; consuming it here cleared the definitions and collapsed the grid.
+        if (property.Value is MutableAstTextNode)
         {
             return false;
         }
@@ -666,12 +801,138 @@ public sealed class ControlFactory
                 case "Value" when control is RangeBase rb3 && double.TryParse(value, out double val):
                     rb3.Value = val;
                     break;
+                default:
+                    TrySetDynamicProperty(control, propertyName, value);
+                    break;
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Design-time property set failed: {Message}", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Fallback for properties outside the built-in list: resolves a registered Avalonia
+    /// property or a writable CLR property on the control type and converts the text value
+    /// to its type. Custom workspace controls carry members that are unknown at compile
+    /// time, so this is the only way their markup properties reach the design preview.
+    /// </summary>
+    private void TrySetDynamicProperty(Control control, string propertyName, string value)
+    {
+        if (propertyName.Contains('.'))
+        {
+            // Attached properties of foreign owners are handled by the explicit list only.
+            return;
+        }
+
+        if (LooksLikeMarkupExtension(value))
+        {
+            // Bindings and other markup extensions have no design-time value to assign.
+            return;
+        }
+
+        AvaloniaProperty? styledProperty = AvaloniaPropertyRegistry.Instance.FindRegistered(control, propertyName);
+        if (styledProperty is not null && !styledProperty.IsReadOnly
+            && TryConvertValue(styledProperty.PropertyType, value, out object? styledValue))
+        {
+            control.SetValue(styledProperty, styledValue);
+            return;
+        }
+
+        System.Reflection.PropertyInfo? clrProperty = control.GetType()
+            .GetProperty(propertyName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        if (clrProperty is { CanWrite: true }
+            && TryConvertValue(clrProperty.PropertyType, value, out object? clrValue))
+        {
+            clrProperty.SetValue(control, clrValue);
+        }
+    }
+
+    /// <summary>
+    /// Converts XAML attribute text to common property types. Returns false for types the
+    /// design preview does not need to materialize (bindings, templates, complex objects).
+    /// </summary>
+    private static bool TryConvertValue(Type targetType, string text, out object? converted)
+    {
+        converted = null;
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        if (effectiveType == typeof(string) || effectiveType == typeof(object))
+        {
+            converted = text;
+            return true;
+        }
+
+        if (effectiveType.IsEnum)
+        {
+            if (Enum.TryParse(effectiveType, text, ignoreCase: true, out object? enumValue))
+            {
+                converted = enumValue;
+                return true;
+            }
+
+            return false;
+        }
+
+        try
+        {
+            if (effectiveType == typeof(bool) && bool.TryParse(text, out bool boolValue))
+            {
+                converted = boolValue;
+                return true;
+            }
+
+            if (effectiveType == typeof(int) && int.TryParse(text, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out int intValue))
+            {
+                converted = intValue;
+                return true;
+            }
+
+            if (effectiveType == typeof(double) && double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double doubleValue))
+            {
+                converted = doubleValue;
+                return true;
+            }
+
+            if (effectiveType == typeof(Thickness))
+            {
+                converted = ParseThickness(text);
+                return true;
+            }
+
+            if (effectiveType == typeof(CornerRadius))
+            {
+                converted = ParseCornerRadius(text);
+                return true;
+            }
+
+            if (effectiveType == typeof(GridLength))
+            {
+                converted = GridLength.Parse(text);
+                return true;
+            }
+
+            if (effectiveType == typeof(Color) && Color.TryParse(text, out Color colorValue))
+            {
+                converted = colorValue;
+                return true;
+            }
+
+            if (typeof(IBrush).IsAssignableFrom(effectiveType))
+            {
+                converted = Brush.Parse(text);
+                return true;
+            }
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private static bool TryApplyDesignProperty(Control control, string propertyName, string value)

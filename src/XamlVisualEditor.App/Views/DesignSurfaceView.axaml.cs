@@ -960,6 +960,8 @@ public sealed partial class DesignSurfaceView : UserControl
         canvas.Children.Add(tree);
         _rootControl = tree;
 
+        UpdateCanvasSizeFromRoot(docVm, doc.Root, tree);
+
         ApplyEditMode();
 
         if (_adornerLayer is not null)
@@ -1029,7 +1031,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
     }
 
-    private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root)
+    private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root, Control? rootControl = null)
     {
         if (_currentVm is null)
         {
@@ -1054,8 +1056,28 @@ public sealed partial class DesignSurfaceView : UserControl
             designHeight = GetNumericProperty(root, "Height");
         }
 
-        _currentVm.CanvasWidth = designWidth ?? 800;
-        _currentVm.CanvasHeight = designHeight ?? 600;
+        // Documents without an explicit size (MinWidth/MinHeight only, or nothing) grow
+        // with their measured content: the artboard clips, so a too-small canvas cuts
+        // the preview off. Measuring after the tree joined the canvas lets styles and
+        // control templates participate in the desired size.
+        double? measuredWidth = null;
+        double? measuredHeight = null;
+        if (rootControl is not null && (!designWidth.HasValue || !designHeight.HasValue))
+        {
+            rootControl.Measure(Size.Infinity);
+            measuredWidth = rootControl.DesiredSize.Width;
+            measuredHeight = rootControl.DesiredSize.Height;
+        }
+
+        (double width, double height) = DesignCanvasSizing.Compute(
+            designWidth,
+            designHeight,
+            GetNumericProperty(root, "MinWidth"),
+            GetNumericProperty(root, "MinHeight"),
+            measuredWidth,
+            measuredHeight);
+        _currentVm.CanvasWidth = width;
+        _currentVm.CanvasHeight = height;
     }
 
     private static void TryGetDesignSizeFromText(string? text, ref double? designWidth, ref double? designHeight)

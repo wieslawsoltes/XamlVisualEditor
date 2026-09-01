@@ -1,13 +1,20 @@
 using System.Reflection;
+using System.Runtime.Loader;
+using Microsoft.Extensions.Logging;
 
 namespace XamlVisualEditor.Extensions.Hosting;
 
 /// <summary>
-/// Activates in-proc extensions registered via DI.
+/// Activates in-proc extensions registered via DI and enabled installed extension
+/// packages (their manifest's main assembly is loaded into the default load context so
+/// contract types unify with the editor's own).
 /// </summary>
 public sealed class BuiltInExtensionHost : IDisposable
 {
     private readonly IEnumerable<IXveExtension> _extensions;
+    private readonly IExtensionPackageStore _packageStore;
+    private readonly IExtensionStateStore _stateStore;
+    private readonly ILogger<BuiltInExtensionHost> _logger;
     private readonly ICommands _commands;
     private readonly ICommandMetadataRegistry _commandMetadata;
     private readonly IExtensionContributionRegistry _contributions;
@@ -66,9 +73,15 @@ public sealed class BuiltInExtensionHost : IDisposable
         IPropertyEditorRegistry propertyEditors,
         ITerminalBridge terminal,
         IExtensionViewHost viewHost,
-        ISettings settings)
+        ISettings settings,
+        IExtensionPackageStore packageStore,
+        IExtensionStateStore stateStore,
+        ILogger<BuiltInExtensionHost>? logger = null)
     {
         _extensions = extensions;
+        _packageStore = packageStore;
+        _stateStore = stateStore;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<BuiltInExtensionHost>.Instance;
         _commands = commands;
         _commandMetadata = commandMetadata;
         _contributions = contributions;
@@ -108,8 +121,62 @@ public sealed class BuiltInExtensionHost : IDisposable
         _activated = true;
         foreach (IXveExtension extension in _extensions)
         {
-            ExtensionContext context = CreateContext(extension);
+            ExtensionContext context = CreateContext(ResolveExtensionId(extension), ResolveExtensionPath(extension));
             await extension.ActivateAsync(context, cancellationToken).ConfigureAwait(false);
+        }
+
+        await ActivateInstalledPackagesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ActivateInstalledPackagesAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ExtensionPackageInfo> installed;
+        try
+        {
+            installed = await _packageStore.GetInstalledAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Installed extension packages could not be listed");
+            return;
+        }
+
+        foreach (ExtensionPackageInfo package in installed)
+        {
+            string extensionId = package.Manifest.ExtensionId;
+            try
+            {
+                bool enabled = await _stateStore.GetEnabledAsync(extensionId, cancellationToken).ConfigureAwait(false);
+                if (!enabled || string.IsNullOrWhiteSpace(package.Manifest.Main))
+                {
+                    continue;
+                }
+
+                string contentDirectory = InstalledExtensionPackages.ExtractContent(package.PackagePath);
+                string? mainAssemblyPath = InstalledExtensionPackages.ResolveMainAssemblyPath(contentDirectory, package.Manifest.Main);
+                if (mainAssemblyPath is null)
+                {
+                    _logger.LogWarning("Extension package {ExtensionId}: main assembly '{Main}' not found", extensionId, package.Manifest.Main);
+                    continue;
+                }
+
+                Assembly assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(mainAssemblyPath);
+                foreach (Type type in InstalledExtensionPackages.FindExtensionTypes(assembly))
+                {
+                    if (Activator.CreateInstance(type) is not IXveExtension extension)
+                    {
+                        continue;
+                    }
+
+                    ExtensionContext context = CreateContext(extensionId, contentDirectory);
+                    await extension.ActivateAsync(context, cancellationToken).ConfigureAwait(false);
+                    _logger.LogInformation("Activated extension package {ExtensionId} ({Type})", extensionId, type.FullName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Extension package {ExtensionId} failed to activate", extensionId);
+            }
         }
     }
 
@@ -126,10 +193,8 @@ public sealed class BuiltInExtensionHost : IDisposable
         _extensionSubscriptions.Clear();
     }
 
-    private ExtensionContext CreateContext(IXveExtension extension)
+    private ExtensionContext CreateContext(string extensionId, string extensionPath)
     {
-        string extensionId = ResolveExtensionId(extension);
-        string extensionPath = ResolveExtensionPath(extension);
         List<IDisposable> subscriptions = new();
         _extensionSubscriptions.Add(subscriptions);
 

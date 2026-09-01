@@ -7732,18 +7732,25 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // App.axaml so instantiated controls get the target app's themes and resources.
     private void UpdateWorkspaceDesignThemes(WorkspaceModel workspace)
     {
-        string? appXamlPath = FindApplicationXamlPath(workspace);
+        // Library workspaces have no application of their own; the override names the
+        // App.axaml whose themes the design surface should apply in that case.
+        string? overridePath = WorkspaceDesignThemeLoader.GetApplicationXamlOverridePath();
+        string? appXamlPath = overridePath ?? FindApplicationXamlPath(workspace);
         if (appXamlPath is null)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace");
+            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace"
+                + $" (set {WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable} to use another application's themes)");
             return;
         }
 
         try
         {
             IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(appXamlPath);
-            LogOutput("Info", $"Design themes from {appXamlPath}: {string.Join("; ", details)}");
+            string sourceLabel = overridePath is null
+                ? appXamlPath
+                : $"{appXamlPath} ({WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable})";
+            LogOutput("Info", $"Design themes from {sourceLabel}: {string.Join("; ", details)}");
         }
         catch (Exception ex)
         {
