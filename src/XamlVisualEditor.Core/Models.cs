@@ -102,7 +102,7 @@ public sealed class WorkspaceModel
 
     /// <summary>Gets the solution folder path for each project (if any).</summary>
     public IReadOnlyDictionary<string, string> ProjectFolders { get; init; }
-        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        = new Dictionary<string, string>(FileSystemPathComparison.Comparer);
 }
 
 /// <summary>

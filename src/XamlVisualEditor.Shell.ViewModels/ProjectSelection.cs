@@ -58,7 +58,7 @@ internal static class ProjectSelection
 
     public static IReadOnlyList<ProjectModel> DeduplicateProjectsByPath(IEnumerable<ProjectModel> projects)
     {
-        Dictionary<string, ProjectModel> byPath = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, ProjectModel> byPath = new(FileSystemPathComparison.Comparer);
         List<ProjectModel> withoutPath = new();
 
         foreach (ProjectModel project in projects)
@@ -136,7 +136,7 @@ internal static class ProjectSelection
 
                 string normalizedDir = Path.GetFullPath(projectDir)
                     .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-                if (fullPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase)
+                if (fullPath.StartsWith(normalizedDir, FileSystemPathComparison.Comparison)
                     && normalizedDir.Length > bestMatchLength)
                 {
                     bestMatchLength = normalizedDir.Length;
@@ -250,7 +250,7 @@ internal static class ProjectSelection
     {
         foreach (XamlFileModel file in project.XamlFiles)
         {
-            if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            if (FileSystemPathComparison.Equals(file.FilePath, filePath))
             {
                 return true;
             }
@@ -258,7 +258,7 @@ internal static class ProjectSelection
 
         foreach (ProjectFileModel file in project.Files)
         {
-            if (string.Equals(file.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            if (FileSystemPathComparison.Equals(file.FilePath, filePath))
             {
                 return true;
             }

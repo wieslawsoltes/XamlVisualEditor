@@ -33,6 +33,9 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="XamlVisualEditor.Tests.Unit" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="..\..\README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\..\LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" CopyToPublishDirectory="PreserveNewest" />

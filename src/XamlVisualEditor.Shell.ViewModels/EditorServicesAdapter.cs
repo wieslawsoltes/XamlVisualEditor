@@ -92,6 +92,62 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
         return result;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> CloseDocumentAsync(string filePath, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return false;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return CloseDocumentCore(filePath);
+        }
+
+        bool result = false;
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            result = CloseDocumentCore(filePath);
+        }, DispatcherPriority.Background, ct);
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public async Task<PreviewExportResult> ExportPreviewAsync(string filePath, string outputPath, int timeoutMs, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || string.IsNullOrWhiteSpace(outputPath))
+        {
+            return new PreviewExportResult(false, "filePath and outputPath are required.", 0, 0, outputPath ?? string.Empty);
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs);
+        }
+
+        // Kein async-Lambda an die Action-Ueberladung geben (liefe als async void und kehrte
+        // beim ersten await zurueck); stattdessen die Task des VM-Aufrufs explizit abwarten.
+        Task<PreviewExportResult> inner = await Dispatcher.UIThread.InvokeAsync<Task<PreviewExportResult>>(
+            () => _mainViewModel.ExportPreviewAsync(filePath, outputPath, timeoutMs),
+            DispatcherPriority.Background);
+        return await inner;
+    }
+
+    private bool CloseDocumentCore(string filePath)
+    {
+        IEditorDocumentViewModel? document = _mainViewModel.Documents
+            .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
+        if (document is null)
+        {
+            return false;
+        }
+
+        _mainViewModel.CloseDocument(document);
+        return true;
+    }
+
     public async Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct)
     {
         if (location is null || string.IsNullOrWhiteSpace(location.FilePath))
@@ -116,7 +172,7 @@ public sealed class EditorServicesAdapter : IEditorServices, IDisposable
     {
         await _mainViewModel.OpenFileAsync(filePath, allowWorkspaceLoad: behavior == EditorDocumentOpenBehavior.AllowWorkspaceLoad);
         IEditorDocumentViewModel? document = _mainViewModel.Documents
-            .FirstOrDefault(doc => string.Equals(doc.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(doc => FileSystemPathComparison.Equals(doc.FilePath, filePath));
         return document is null ? null : GetAdapter(document);
     }
 

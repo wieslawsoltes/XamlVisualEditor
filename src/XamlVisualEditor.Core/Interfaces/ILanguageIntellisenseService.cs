@@ -134,6 +134,15 @@ public interface ILanguageIntellisenseService
 }
 
 /// <summary>
+/// Provides optional background initialization for a language workspace.
+/// </summary>
+public interface ILanguageWorkspaceWarmup
+{
+    /// <summary>Starts or joins background workspace initialization.</summary>
+    System.Threading.Tasks.Task WarmWorkspaceAsync(CancellationToken ct = default);
+}
+
+/// <summary>
 /// Resolves language services for a given document.
 /// </summary>
 public interface ILanguageIntellisenseRegistry

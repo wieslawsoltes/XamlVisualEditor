@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Xml.Linq;
@@ -48,6 +49,39 @@ public static class WorkspaceDesignThemeRegistry
 /// </summary>
 public static class WorkspaceDesignThemeLoader
 {
+    /// <summary>
+    /// Name of the environment variable that names the application XAML file whose styles
+    /// and resources the design surface should apply. It takes precedence over the
+    /// workspace scan, which finds nothing for library workspaces: their application
+    /// (and with it the control themes) lives outside the loaded project graph.
+    /// </summary>
+    public const string ApplicationXamlOverrideVariable = "XVE_DESIGN_APP_XAML";
+
+    /// <summary>
+    /// Resolves the application XAML override from the environment. Returns the full
+    /// path when the variable is set and the file exists; otherwise null.
+    /// </summary>
+    public static string? GetApplicationXamlOverridePath()
+    {
+        string? value = Environment.GetEnvironmentVariable(ApplicationXamlOverrideVariable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(value.Trim());
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return File.Exists(fullPath) ? fullPath : null;
+    }
+
     /// <summary>
     /// Loads styles and resource includes from the given App.axaml into the registry.
     /// Returns human-readable detail lines for the output log.

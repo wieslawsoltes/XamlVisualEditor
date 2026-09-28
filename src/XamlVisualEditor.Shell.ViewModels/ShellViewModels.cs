@@ -83,7 +83,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
     private readonly ILogger<DesignerDocumentViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly Dictionary<string, (DateTime LastWriteUtc, string? ClassName)> _xamlClassCache
-        = new(StringComparer.OrdinalIgnoreCase);
+        = new(FileSystemPathComparison.Comparer);
 
     /// <summary>
     /// Gets the file path of the XAML document.
@@ -400,7 +400,7 @@ public sealed partial class DesignerDocumentViewModel : ReactiveObject, IEditorD
         }
 
         IEnumerable<int> lines = _breakpointsSource.Items
-            .Where(entry => string.Equals(entry.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+            .Where(entry => FileSystemPathComparison.Equals(entry.FilePath, FilePath))
             .Select(entry => entry.Line)
             .Distinct();
 
@@ -686,7 +686,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
 
     private void OnDiagnosticsChanged(object? sender, LanguageDiagnosticsChangedEventArgs e)
     {
-        if (!string.Equals(e.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+        if (!FileSystemPathComparison.Equals(e.FilePath, FilePath))
         {
             return;
         }
@@ -704,7 +704,7 @@ public sealed partial class TextDocumentViewModel : ReactiveObject, IEditorDocum
         }
 
         IEnumerable<int> lines = _breakpointsSource.Items
-            .Where(entry => string.Equals(entry.FilePath, FilePath, StringComparison.OrdinalIgnoreCase))
+            .Where(entry => FileSystemPathComparison.Equals(entry.FilePath, FilePath))
             .Select(entry => entry.Line)
             .Distinct();
 
@@ -1598,7 +1598,7 @@ public sealed partial class ReferencesViewModel : ReactiveObject
     private readonly Func<ReferenceLocationViewModel, System.Threading.Tasks.Task> _navigateAsync;
     private readonly CompositeDisposable _groupDisposables = new();
     private readonly CompositeDisposable _lifetimeDisposables = new();
-    private readonly HashSet<string> _expandedFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _expandedFiles = new(FileSystemPathComparison.Comparer);
     private const string FilterPropertyPath = "Item.DisplayText";
 
     public ObservableCollection<ReferencesGroupViewModel> Groups { get; } = new();
@@ -2105,14 +2105,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly XamlVisualEditor.Terminal.ITerminalService? _terminalService;
-    private readonly Dictionary<string, ProjectModel> _projectLookup = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ProjectModel> _projectLookup = new(FileSystemPathComparison.Comparer);
     private System.Diagnostics.Process? _runProcess;
-    private readonly HashSet<string> _trustedPreviewerRoots = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _trustedPreviewerRoots = new(FileSystemPathComparison.Comparer);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _autoSaveSubscriptions = new();
     private WorkspaceAssemblyResolver? _assemblyResolver;
     private WorkspaceModel? _workspace;
     private string? _workspacePath;
-    private readonly Dictionary<string, IDockable> _dockDocuments = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IDockable> _dockDocuments = new(FileSystemPathComparison.Comparer);
     private readonly Dictionary<IEditorDocumentViewModel, IDisposable> _dockTitleSubscriptions = new();
     private readonly Dictionary<Guid, IDisposable> _terminalTitleSubscriptions = new();
     private bool _isClosingFromDock;
@@ -2758,6 +2758,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         RefreshExtensionContributions();
         UpdateFileNewMenuEntries();
         SyncExtensionDockables();
+        DockFactory.CollapseBottomToolDock(DockLayout);
 
         LoadRecentFiles();
         RecentFiles.CollectionChanged += (_, _) => SaveRecentFiles();
@@ -3607,7 +3608,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     private static bool IsUntitledDocument(IEditorDocumentViewModel doc)
     {
         string tempRoot = System.IO.Path.GetTempPath();
-        if (!doc.FilePath.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase))
+        if (!FileSystemPathComparison.IsSameOrDescendant(doc.FilePath, tempRoot))
         {
             return false;
         }
@@ -3804,7 +3805,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             TextDocumentViewModel? openText = Documents
                 .OfType<TextDocumentViewModel>()
                 .FirstOrDefault(doc =>
-                    string.Equals(doc.FilePath, docEdit.FilePath, StringComparison.OrdinalIgnoreCase));
+                    FileSystemPathComparison.Equals(doc.FilePath, docEdit.FilePath));
 
             if (openText is not null)
             {
@@ -3917,7 +3918,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private static bool AreLocationsEquivalent(LanguageLocation left, LanguageLocation right)
     {
-        return string.Equals(left.FilePath, right.FilePath, StringComparison.OrdinalIgnoreCase)
+        return FileSystemPathComparison.Equals(left.FilePath, right.FilePath)
             && left.Range.Start.Line == right.Range.Start.Line
             && left.Range.Start.Column == right.Range.Start.Column;
     }
@@ -4950,6 +4951,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             string toolId = ExtensionTool.BuildId(view.ViewId);
+            if (DockFactory.IsToolClosed(toolId))
+            {
+                continue;
+            }
+
             ExtensionTool? existing = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, toolId);
             if (existing is not null)
             {
@@ -5004,6 +5010,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         IsWatchesVisible = true;
         IsExtensionsManagerVisible = false;
 
+        DockFactory.ClearClosedTools();
         IRootDock layout = DockFactory.CreateDefaultLayout();
         XamlEditorDockFactory.EnsureLayoutDefaults(layout);
         DockFactory.InitLayout(layout);
@@ -5221,13 +5228,13 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             if (doc is DesignerDocumentViewModel designer)
             {
-                designer.CodeEditor.ExecutionLine = string.Equals(designer.FilePath, filePath, StringComparison.OrdinalIgnoreCase)
+                designer.CodeEditor.ExecutionLine = FileSystemPathComparison.Equals(designer.FilePath, filePath)
                     ? line
                     : null;
             }
             else if (doc is TextDocumentViewModel text)
             {
-                text.ExecutionLine = string.Equals(text.FilePath, filePath, StringComparison.OrdinalIgnoreCase)
+                text.ExecutionLine = FileSystemPathComparison.Equals(text.FilePath, filePath)
                     ? line
                     : null;
             }
@@ -5602,7 +5609,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         bool changed = previous is null
-                       || !string.Equals(previous.ProjectPath, project.ProjectPath, StringComparison.OrdinalIgnoreCase)
+                       || !FileSystemPathComparison.Equals(previous.ProjectPath, project.ProjectPath)
                        || !string.Equals(previous.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase);
 
         ActiveProject = project;
@@ -5651,7 +5658,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             foreach (ProjectModel candidate in _workspace.Projects)
             {
-                if (string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase)
+                if (FileSystemPathComparison.Equals(candidate.ProjectPath, projectPath)
                     && string.Equals(candidate.TargetFramework, targetFramework, StringComparison.OrdinalIgnoreCase))
                 {
                     return candidate;
@@ -5672,7 +5679,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         ProjectModel? match = null;
         foreach (ProjectModel candidate in _workspace.Projects)
         {
-            if (!string.Equals(candidate.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            if (!FileSystemPathComparison.Equals(candidate.ProjectPath, projectPath))
             {
                 continue;
             }
@@ -6184,6 +6191,25 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 _activeExtensionViewId = null;
             }
         }
+
+        // The shell recreates missing tools on every start, so a closed tool must
+        // be remembered or it reappears on the next run. Closing a pinned tool
+        // also has to leave the pinned lists, or the pin strip keeps showing it.
+        if (e.Dockable is Tool closedTool
+            && closedTool is not TerminalTool
+            && !string.IsNullOrWhiteSpace(closedTool.Id))
+        {
+            DockFactory.MarkToolClosed(closedTool.Id);
+
+            if (DockLayout is not null)
+            {
+                DockLayout.HiddenDockables?.Remove(closedTool);
+                DockLayout.LeftPinnedDockables?.Remove(closedTool);
+                DockLayout.RightPinnedDockables?.Remove(closedTool);
+                DockLayout.TopPinnedDockables?.Remove(closedTool);
+                DockLayout.BottomPinnedDockables?.Remove(closedTool);
+            }
+        }
     }
 
     private void RemoveTerminalSession(TerminalViewModel terminalVm)
@@ -6213,7 +6239,20 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             {
                 return;
             }
+
+            // A closed built-in tool was removed from the layout; showing it again
+            // means recreating it.
+            if (isVisible && DockFactory.ReopenBuiltInTool(DockLayout, id) is { } reopened)
+            {
+                DockFactory.SetActiveDockable(reopened);
+            }
+
             return;
+        }
+
+        if (isVisible)
+        {
+            DockFactory.MarkToolReopened(id);
         }
 
         if (isVisible)
@@ -6330,6 +6369,11 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return false;
         }
 
+        if (isVisible)
+        {
+            DockFactory.MarkToolReopened(ExtensionTool.BuildId(viewId));
+        }
+
         if (!_extensionTools.TryGetValue(viewId, out ExtensionTool? tool))
         {
             tool = XamlEditorDockFactory.FindDockable<ExtensionTool>(DockLayout, ExtensionTool.BuildId(viewId));
@@ -6337,7 +6381,24 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
         if (tool is null)
         {
-            return false;
+            // A closed tool was removed from the layout; showing it again means
+            // recreating it.
+            if (!isVisible || !_extensionViews.TryGetValue(viewId, out ExtensionViewModel? viewModel))
+            {
+                return false;
+            }
+
+            tool = DockFactory.AddExtensionTool(DockLayout, viewModel);
+            if (tool is null)
+            {
+                return false;
+            }
+
+            _extensionTools[viewId] = tool;
+            DockFactory.SetActiveDockable(tool);
+            UpdateActiveExtensionViewFocus(viewId);
+            RaiseExtensionViewVisibilityChanged(viewId, true);
+            return true;
         }
 
         bool wasVisible = tool.Owner is IDock beforeDock
@@ -6511,7 +6572,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        foreach (string path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (string path in paths.Distinct(FileSystemPathComparison.Comparer))
         {
             await EnsureDocumentOpenAsync(path, addRecent: true, updateStatus: false, allowWorkspaceLoad: false);
         }
@@ -6617,14 +6678,14 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                 return;
             }
 
-            string json = System.IO.File.ReadAllText(path);
+            string json = ReadRecentFilesText(path);
             List<string>? recent = JsonSerializer.Deserialize<List<string>>(json);
             if (recent is null)
             {
                 return;
             }
 
-            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> seen = new(FileSystemPathComparison.Comparer);
             foreach (string filePath in recent)
             {
                 if (string.IsNullOrWhiteSpace(filePath))
@@ -6671,7 +6732,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             string path = GetRecentFilesPath();
             List<string> recent = RecentFiles.Select(entry => entry.FilePath).ToList();
             string json = JsonSerializer.Serialize(recent, new JsonSerializerOptions { WriteIndented = true });
-            System.IO.File.WriteAllText(path, json);
+            WriteRecentFilesText(path, json);
         }
         catch (Exception ex)
         {
@@ -6687,11 +6748,52 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         return System.IO.Path.Combine(dir, "recent-files.json");
     }
 
+    private static string ReadRecentFilesText(string path)
+    {
+        const int attempts = 3;
+        for (int attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                return reader.ReadToEnd();
+            }
+            catch (IOException) when (attempt < attempts)
+            {
+                Thread.Sleep(25);
+            }
+        }
+
+        return System.IO.File.ReadAllText(path);
+    }
+
+    private static void WriteRecentFilesText(string path, string content)
+    {
+        const int attempts = 3;
+        for (int attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                using FileStream stream = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                using StreamWriter writer = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(content);
+                return;
+            }
+            catch (IOException) when (attempt < attempts)
+            {
+                Thread.Sleep(25);
+            }
+        }
+
+        System.IO.File.WriteAllText(path, content);
+    }
+
     private int IndexOfRecentFile(string filePath)
     {
         for (int i = 0; i < RecentFiles.Count; i++)
         {
-            if (string.Equals(RecentFiles[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            if (FileSystemPathComparison.Equals(RecentFiles[i].FilePath, filePath))
             {
                 return i;
             }
@@ -6815,10 +6917,42 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
             StatusText = $"Loaded workspace {name}";
             LogOutput("Info", $"Loaded workspace: {name}");
+            StartLanguageWorkspaceWarmup();
         }
         finally
         {
             IsWorkspaceLoading = false;
+        }
+    }
+
+    private void StartLanguageWorkspaceWarmup()
+    {
+        if (_languageRegistry is null || string.IsNullOrWhiteSpace(_workspacePath))
+        {
+            return;
+        }
+
+        string workspacePath = _workspacePath;
+        foreach (ILanguageWorkspaceWarmup warmup in _languageRegistry.Services.OfType<ILanguageWorkspaceWarmup>())
+        {
+            _ = WarmLanguageWorkspaceAsync(warmup, workspacePath);
+        }
+    }
+
+    private async Task WarmLanguageWorkspaceAsync(ILanguageWorkspaceWarmup warmup, string workspacePath)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            await warmup.WarmWorkspaceAsync().ConfigureAwait(false);
+            LogOutput("Info", $"Language workspace ready: {System.IO.Path.GetFileName(workspacePath)}");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Language workspace warmup failed: {Message}", ex.Message);
         }
     }
 
@@ -6863,7 +6997,10 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task TryLoadWorkspaceForXamlAsync(string xamlFilePath)
     {
-        if (_workspace is not null && WorkspaceContainsFile(_workspace, xamlFilePath))
+        // Never swap an already loaded workspace: opening a XAML file that lives outside the
+        // workspace (generated output, scratch folders) must keep the current workspace so the
+        // designer resolves its types; the file is opened as a plain document instead.
+        if (_workspace is not null)
         {
             return;
         }
@@ -6874,7 +7011,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             return;
         }
 
-        if (string.Equals(_workspacePath, workspacePath, StringComparison.OrdinalIgnoreCase))
+        if (FileSystemPathComparison.Equals(_workspacePath, workspacePath))
         {
             return;
         }
@@ -6888,7 +7025,7 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         {
             foreach (XamlFileModel file in project.XamlFiles)
             {
-                if (string.Equals(file.FilePath, xamlFilePath, StringComparison.OrdinalIgnoreCase))
+                if (FileSystemPathComparison.Equals(file.FilePath, xamlFilePath))
                 {
                     return true;
                 }
@@ -6906,6 +7043,16 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private string? FindWorkspacePathForFile(string filePath)
     {
+        string? projectSourceRoot = System.Environment.GetEnvironmentVariable("XVE_PROJECT_SOURCE_ROOT");
+        string? generatedProjectPath = GetGeneratedProjectCandidate(
+            filePath,
+            projectSourceRoot,
+            System.IO.File.Exists);
+        if (!string.IsNullOrEmpty(generatedProjectPath))
+        {
+            return generatedProjectPath;
+        }
+
         string? currentDir = System.IO.Path.GetDirectoryName(filePath);
         while (!string.IsNullOrEmpty(currentDir))
         {
@@ -6926,6 +7073,47 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
             }
 
             currentDir = System.IO.Path.GetDirectoryName(currentDir);
+        }
+
+        return null;
+    }
+
+    internal static string? GetGeneratedProjectCandidate(
+        string filePath,
+        string? projectSourceRoot,
+        Func<string, bool> projectFileExists)
+    {
+        if (string.IsNullOrWhiteSpace(projectSourceRoot))
+        {
+            return null;
+        }
+
+        string fullPath;
+        string fullProjectSourceRoot;
+        try
+        {
+            fullPath = System.IO.Path.GetFullPath(filePath);
+            fullProjectSourceRoot = System.IO.Path.GetFullPath(projectSourceRoot);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        System.IO.DirectoryInfo? currentDirectory = new System.IO.FileInfo(fullPath).Directory;
+        while (currentDirectory is not null)
+        {
+            string projectName = currentDirectory.Name;
+            string candidate = System.IO.Path.Combine(
+                fullProjectSourceRoot,
+                projectName,
+                projectName + ".csproj");
+            if (projectFileExists(candidate))
+            {
+                return candidate;
+            }
+
+            currentDirectory = currentDirectory.Parent;
         }
 
         return null;
@@ -7072,6 +7260,15 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
 
     private async System.Threading.Tasks.Task<bool> EnsurePreviewerTrustAsync(string xamlFilePath)
     {
+        // Kopflose Bridge-Laeufe koennen den Trust-Dialog nicht bedienen; der Schalter gewaehrt
+        // den Start analog zu XVE_IDEBRIDGE_AUTOCONSENT.
+        string? autoTrust = System.Environment.GetEnvironmentVariable("XVE_PREVIEWER_AUTOTRUST");
+        if (string.Equals(autoTrust, "1", StringComparison.Ordinal)
+            || string.Equals(autoTrust, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         string root = GetPreviewerTrustRoot(xamlFilePath);
         if (_trustedPreviewerRoots.Contains(root))
         {
@@ -7092,6 +7289,169 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         }
 
         return decision == PreviewerTrustDecision.AllowOnce;
+    }
+
+    /// <summary>
+    /// Startet den Previewer fuer eine geoeffnete XAML-Datei, wartet auf einen stabilen Frame
+    /// und speichert ihn als PNG. Der Previewer-Prozess wird danach beendet, damit sich bei
+    /// Serienlaeufen keine Host-Prozesse ansammeln.
+    /// </summary>
+    public async System.Threading.Tasks.Task<XamlVisualEditor.Extensions.PreviewExportResult> ExportPreviewAsync(
+        string filePath,
+        string outputPath,
+        int timeoutMs)
+    {
+        DesignerDocumentViewModel? doc = Documents
+            .OfType<DesignerDocumentViewModel>()
+            .FirstOrDefault(d => FileSystemPathComparison.Equals(d.FilePath, filePath));
+        if (doc is null)
+        {
+            return new(false, "Document is not open as a designer document.", 0, 0, outputPath);
+        }
+
+        if (_workspace is null)
+        {
+            return new(false, "No workspace loaded.", 0, 0, outputPath);
+        }
+
+        if (!await EnsurePreviewerTrustAsync(filePath))
+        {
+            return new(false, "Previewer trust not granted.", 0, 0, outputPath);
+        }
+
+        ActiveDocument = doc;
+        PreviewerLaunchResult launch = await _previewerLaunchService.StartPreviewerAsync(
+            filePath,
+            doc.SyncEngine.CurrentText,
+            _workspace,
+            _workspacePath,
+            command => RunWorkspaceCommandAsync(command),
+            (level, message) => LogOutput(level, message));
+        if (!launch.Success)
+        {
+            return new(false, launch.ErrorMessage ?? "Previewer start failed.", 0, 0, outputPath);
+        }
+
+        if (!_previewerLaunchService.TryGetSession(filePath, out PreviewerTcpSession? session) || session is null)
+        {
+            return new(false, "No previewer session available.", 0, 0, outputPath);
+        }
+
+        doc.PreviewerSession = session;
+        try
+        {
+            Avalonia.Remote.Protocol.Viewport.FrameMessage? frame = await WaitForStableFrameAsync(session, timeoutMs);
+            if (frame is null)
+            {
+                return new(false, "No previewer frame received within timeout.", 0, 0, outputPath);
+            }
+
+            if (frame.Format != Avalonia.Remote.Protocol.Viewport.PixelFormat.Bgra8888)
+            {
+                return new(false, $"Unsupported frame format {frame.Format}.", 0, 0, outputPath);
+            }
+
+            SaveFrameAsPng(frame, outputPath);
+            return new(true, null, frame.Width, frame.Height, outputPath);
+        }
+        finally
+        {
+            doc.PreviewerSession = null;
+            _previewerLaunchService.StopPreviewer(filePath);
+        }
+    }
+
+    // Frames treffen waehrend des Aufbaus mehrfach ein (Viewport-Verhandlung); als stabil gilt
+    // der letzte Frame, wenn 1,5 s lang weder Groessenwechsel noch Resize-Anforderung kamen.
+    private static async System.Threading.Tasks.Task<Avalonia.Remote.Protocol.Viewport.FrameMessage?> WaitForStableFrameAsync(
+        PreviewerTcpSession session,
+        int timeoutMs)
+    {
+        object gate = new();
+        Avalonia.Remote.Protocol.Viewport.FrameMessage? last = session.LastFrame;
+        DateTime lastChangeUtc = DateTime.UtcNow;
+
+        void OnFrame(Avalonia.Remote.Protocol.Viewport.FrameMessage frame)
+        {
+            lock (gate)
+            {
+                if (last is null || frame.Width != last.Width || frame.Height != last.Height)
+                {
+                    lastChangeUtc = DateTime.UtcNow;
+                }
+
+                last = frame;
+            }
+        }
+
+        void OnResize(Avalonia.Remote.Protocol.Viewport.RequestViewportResizeMessage resize)
+        {
+            session.UpdateViewport(Math.Clamp(resize.Width, 1, 4096), Math.Clamp(resize.Height, 1, 4096), 96, 96);
+            lock (gate)
+            {
+                lastChangeUtc = DateTime.UtcNow;
+            }
+        }
+
+        session.FrameReceived += OnFrame;
+        session.ViewportResizeRequested += OnResize;
+        try
+        {
+            DateTime deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadlineUtc)
+            {
+                await System.Threading.Tasks.Task.Delay(250);
+                lock (gate)
+                {
+                    if (last is not null && (DateTime.UtcNow - lastChangeUtc).TotalMilliseconds > 1500)
+                    {
+                        return last;
+                    }
+                }
+            }
+
+            lock (gate)
+            {
+                return last;
+            }
+        }
+        finally
+        {
+            session.FrameReceived -= OnFrame;
+            session.ViewportResizeRequested -= OnResize;
+        }
+    }
+
+    private static void SaveFrameAsPng(Avalonia.Remote.Protocol.Viewport.FrameMessage frame, string outputPath)
+    {
+        string? directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        using Avalonia.Media.Imaging.WriteableBitmap bitmap = new(
+            new Avalonia.PixelSize(frame.Width, frame.Height),
+            new Avalonia.Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888,
+            Avalonia.Platform.AlphaFormat.Premul);
+        using (Avalonia.Platform.ILockedFramebuffer buffer = bitmap.Lock())
+        {
+            int stride = frame.Stride > 0 ? frame.Stride : frame.Width * 4;
+            int lineLength = Math.Min(frame.Width * 4, buffer.RowBytes);
+            for (int y = 0; y < frame.Height; y++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(
+                    frame.Data,
+                    y * stride,
+                    buffer.Address + y * buffer.RowBytes,
+                    lineLength);
+            }
+        }
+
+#pragma warning disable CS0618 // Save(string) schreibt PNG; die BitmapEncoderOptions-Ueberladung bietet hier keinen Mehrwert
+        bitmap.Save(outputPath);
+#pragma warning restore CS0618
     }
 
     private string GetPreviewerTrustRoot(string xamlFilePath)
@@ -7432,18 +7792,25 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     // App.axaml so instantiated controls get the target app's themes and resources.
     private void UpdateWorkspaceDesignThemes(WorkspaceModel workspace)
     {
-        string? appXamlPath = FindApplicationXamlPath(workspace);
+        // Library workspaces have no application of their own; the override names the
+        // App.axaml whose themes the design surface should apply in that case.
+        string? overridePath = WorkspaceDesignThemeLoader.GetApplicationXamlOverridePath();
+        string? appXamlPath = overridePath ?? FindApplicationXamlPath(workspace);
         if (appXamlPath is null)
         {
             WorkspaceDesignThemeRegistry.Clear();
-            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace");
+            LogOutput("Info", "Design themes: no App.axaml/App.xaml found in workspace"
+                + $" (set {WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable} to use another application's themes)");
             return;
         }
 
         try
         {
             IReadOnlyList<string> details = WorkspaceDesignThemeLoader.LoadFromApplicationXaml(appXamlPath);
-            LogOutput("Info", $"Design themes from {appXamlPath}: {string.Join("; ", details)}");
+            string sourceLabel = overridePath is null
+                ? appXamlPath
+                : $"{appXamlPath} ({WorkspaceDesignThemeLoader.ApplicationXamlOverrideVariable})";
+            LogOutput("Info", $"Design themes from {sourceLabel}: {string.Join("; ", details)}");
         }
         catch (Exception ex)
         {
@@ -7506,26 +7873,18 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
     {
         List<string> all = new();
         List<string> preferred = new();
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> seen = new(FileSystemPathComparison.Comparer);
         hasAnyProjectOutputs = false;
         hasMissingProjectOutputs = false;
 
         foreach (ProjectModel project in workspace.Projects)
         {
-            foreach (AssemblyReference reference in project.References)
-            {
-                if (!IsAssemblyPathCandidate(reference.Path))
-                {
-                    continue;
-                }
-
-                if (System.IO.File.Exists(reference.Path) && seen.Add(reference.Path))
-                {
-                    all.Add(reference.Path);
-                }
-            }
-
-            List<string> outputs = FindProjectOutputs(project).ToList();
+            IReadOnlyList<string> outputs = WorkspaceAssemblyDiscovery.FindProjectOutputs(
+                project,
+                (root, ex) => _logger.LogWarning(
+                    "Failed to enumerate outputs from '{Root}': {Message}",
+                    root,
+                    ex.Message));
             if (outputs.Count == 0)
             {
                 hasMissingProjectOutputs = true;
@@ -7545,64 +7904,29 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
                     hasAnyProjectOutputs = true;
                 }
             }
-        }
 
-        return new WorkspaceAssemblySet(all, preferred);
-    }
-
-    private IEnumerable<string> FindProjectOutputs(ProjectModel project)
-    {
-        if (string.IsNullOrWhiteSpace(project.ProjectPath))
-        {
-            return Array.Empty<string>();
-        }
-
-        string? projectDir = System.IO.Path.GetDirectoryName(project.ProjectPath);
-        if (string.IsNullOrEmpty(projectDir))
-        {
-            return Array.Empty<string>();
-        }
-
-        List<string> roots = new();
-        if (!string.IsNullOrWhiteSpace(project.OutputAssemblyPath))
-        {
-            string? outputDir = System.IO.Path.GetDirectoryName(project.OutputAssemblyPath);
-            if (!string.IsNullOrWhiteSpace(outputDir))
-            {
-                roots.Add(outputDir);
-            }
-        }
-
-        roots.Add(System.IO.Path.Combine(projectDir, "bin", "Debug"));
-        roots.Add(System.IO.Path.Combine(projectDir, "bin", "Release"));
-
-        List<string> outputs = new();
-        foreach (string root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!System.IO.Directory.Exists(root))
+            // The built output directory is the runtime source of truth. Project references are only a
+            // fallback when no output is available; mixing both sources loads duplicate package assemblies.
+            if (outputs.Count > 0)
             {
                 continue;
             }
 
-            try
+            foreach (AssemblyReference reference in project.References)
             {
-                foreach (string file in System.IO.Directory.EnumerateFiles(root, "*.dll", System.IO.SearchOption.AllDirectories))
+                if (!IsAssemblyPathCandidate(reference.Path))
                 {
-                    outputs.Add(file);
+                    continue;
                 }
 
-                foreach (string file in System.IO.Directory.EnumerateFiles(root, "*.exe", System.IO.SearchOption.AllDirectories))
+                if (System.IO.File.Exists(reference.Path) && seen.Add(reference.Path))
                 {
-                    outputs.Add(file);
+                    all.Add(reference.Path);
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Failed to enumerate outputs from '{Root}': {Message}", root, ex.Message);
             }
         }
 
-        return outputs;
+        return new WorkspaceAssemblySet(all, preferred);
     }
 
     private static bool IsAssemblyPathCandidate(string? assemblyPath)
@@ -7615,6 +7939,12 @@ public sealed partial class MainWindowViewModel : ReactiveObject, IDisposable, I
         string extension = System.IO.Path.GetExtension(assemblyPath);
         if (!extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (System.IO.Path.GetFileName(assemblyPath)
+            .EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -8228,7 +8558,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
             {
                 bool matches = project is not null &&
                                (ReferenceEquals(node.Project, project)
-                                || (string.Equals(node.Project.ProjectPath, project.ProjectPath, StringComparison.OrdinalIgnoreCase)
+                                 || (FileSystemPathComparison.Equals(node.Project.ProjectPath, project.ProjectPath)
                                     && (string.IsNullOrWhiteSpace(project.TargetFramework)
                                         || string.Equals(node.Project.TargetFramework, project.TargetFramework, StringComparison.OrdinalIgnoreCase))));
                 node.IsStartupProject = matches;
@@ -8256,7 +8586,7 @@ public sealed partial class SolutionExplorerViewModel : ReactiveObject, ISolutio
         ProjectModel? match = EnumerateNodes(Root)
             .Select(node => node.Project)
             .FirstOrDefault(project => project is not null &&
-                                       string.Equals(project.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase));
+                                       FileSystemPathComparison.Equals(project.ProjectPath, projectPath));
         SetStartupProject(match);
     }
 

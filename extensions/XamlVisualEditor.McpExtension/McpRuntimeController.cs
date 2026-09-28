@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using XamlVisualEditor.Extensions;
@@ -150,7 +151,8 @@ public sealed class McpRuntimeController : IAsyncDisposable
     private McpSettings LoadSettings()
     {
         McpSettings? settings = _settings.Get<McpSettings>(SettingsSection);
-        return settings ?? new McpSettings();
+        string[] args = Environment.GetCommandLineArgs().Skip(1).ToArray();
+        return McpStartupArgs.Apply(settings ?? new McpSettings(), args);
     }
 
     private void OnConfigurationChanged(object? sender, ConfigurationChangedEventArgs args)

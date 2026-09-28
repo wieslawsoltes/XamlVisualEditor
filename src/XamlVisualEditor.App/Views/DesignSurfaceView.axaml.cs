@@ -41,8 +41,11 @@ public sealed partial class DesignSurfaceView : UserControl
     private DesignSurfaceViewModel? _currentVm;
     private bool _isLoaded;
     private bool _rebuildPending;
+    private bool _rebuildScheduled;
     private Panel? _canvas;
     private Control? _rootControl;
+    private double _canvasBaseWidth;
+    private double _canvasBaseHeight;
     private Control? _zoomSurface;
     private TopLevel? _topLevel;
     private const double MinZoom = 0.1;
@@ -167,7 +170,7 @@ public sealed partial class DesignSurfaceView : UserControl
         if (_rebuildPending)
         {
             _rebuildPending = false;
-            ExecuteRebuild();
+            ScheduleRebuild();
         }
     }
 
@@ -176,6 +179,7 @@ public sealed partial class DesignSurfaceView : UserControl
         // Unsubscribe from previous VM
         if (_currentVm is not null)
         {
+            _currentVm.IsRebuilding = false;
             _currentVm.RebuildRequested -= OnRebuildRequested;
             _currentVm.Selection.SelectionChanged -= OnSelectionChanged;
             _currentVm.PropertyChanged -= OnDesignSurfacePropertyChanged;
@@ -197,7 +201,7 @@ public sealed partial class DesignSurfaceView : UserControl
             // Trigger an initial rebuild if we're already loaded
             if (_isLoaded)
             {
-                ExecuteRebuild();
+                ScheduleRebuild();
             }
             else
             {
@@ -416,6 +420,14 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
+        // The handler sits on the TopLevel (tunnel + handled events): without this
+        // guard, arrow keys typed into the code editor nudge the design selection
+        // and never reach the editor caret.
+        if (!IsFocusInsideSurface())
+        {
+            return;
+        }
+
         if (HandleZoomShortcuts(e))
         {
             return;
@@ -481,6 +493,19 @@ public sealed partial class DesignSurfaceView : UserControl
                 e.Handled = true;
                 break;
         }
+    }
+
+    private bool IsFocusInsideSurface()
+    {
+        if (_topLevel?.FocusManager?.GetFocusedElement() is not Visual focused)
+        {
+            // Without a known focus target (e.g. right after opening), keep the
+            // previous behavior.
+            return true;
+        }
+
+        return ReferenceEquals(focused, this)
+            || Avalonia.VisualTree.VisualExtensions.IsVisualAncestorOf(this, focused);
     }
 
     private void OnKeyUp(object? sender, KeyEventArgs e)
@@ -767,11 +792,33 @@ public sealed partial class DesignSurfaceView : UserControl
         // Ensure we run on the UI thread (sync events may come from background)
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            Dispatcher.UIThread.Post(ExecuteRebuild);
+            Dispatcher.UIThread.Post(ScheduleRebuild);
             return;
         }
 
-        ExecuteRebuild();
+        ScheduleRebuild();
+    }
+
+    private void ScheduleRebuild()
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        _currentVm.RebuildStatus = "Building design surface...";
+        _currentVm.IsRebuilding = true;
+        if (_rebuildScheduled)
+        {
+            return;
+        }
+
+        _rebuildScheduled = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _rebuildScheduled = false;
+            ExecuteRebuild();
+        }, DispatcherPriority.Background);
     }
 
     private void OnDragOver(object? sender, DragEventArgs e)
@@ -819,8 +866,6 @@ public sealed partial class DesignSurfaceView : UserControl
         {
             return;
         }
-
-        UpdateCanvasSizeFromRoot(docVm, doc.Root);
 
         UpdateCanvasSizeFromRoot(docVm, doc.Root);
 
@@ -876,6 +921,22 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private void ExecuteRebuild()
     {
+        DesignSurfaceViewModel? viewModel = _currentVm;
+        try
+        {
+            ExecuteRebuildCore();
+        }
+        finally
+        {
+            if (viewModel is not null)
+            {
+                viewModel.IsRebuilding = false;
+            }
+        }
+    }
+
+    private void ExecuteRebuildCore()
+    {
         Panel? canvas = _canvas ?? this.FindControl<Panel>("DesignCanvas");
         if (canvas is null)
         {
@@ -883,6 +944,11 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         _zoomSurface ??= this.FindControl<Control>("ZoomSurface");
+
+        if (_rootControl is not null)
+        {
+            _rootControl.SizeChanged -= OnRootControlSizeChanged;
+        }
 
         canvas.Children.Clear();
 
@@ -919,6 +985,9 @@ public sealed partial class DesignSurfaceView : UserControl
 
         canvas.Children.Add(tree);
         _rootControl = tree;
+        tree.SizeChanged += OnRootControlSizeChanged;
+
+        UpdateCanvasSizeFromRoot(docVm, doc.Root, tree);
 
         ApplyEditMode();
 
@@ -989,7 +1058,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
     }
 
-    private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root)
+    private void UpdateCanvasSizeFromRoot(DesignerDocumentViewModel docVm, MutableAstObjectNode root, Control? rootControl = null)
     {
         if (_currentVm is null)
         {
@@ -1014,8 +1083,71 @@ public sealed partial class DesignSurfaceView : UserControl
             designHeight = GetNumericProperty(root, "Height");
         }
 
-        _currentVm.CanvasWidth = designWidth ?? 800;
-        _currentVm.CanvasHeight = designHeight ?? 600;
+        (double width, double height) = DesignCanvasSizing.Compute(
+            designWidth,
+            designHeight,
+            GetNumericProperty(root, "MinWidth"),
+            GetNumericProperty(root, "MinHeight"),
+            null,
+            null);
+
+        // The document sits at the artboard origin and sizes itself: an explicit
+        // size is fixed, otherwise the computed size is only a minimum and the
+        // rendered bounds win. Templates and deferred content change the size after
+        // the first layout pass, so the artboard follows the actual root bounds
+        // (OnRootControlSizeChanged) instead of freezing an early measurement.
+        if (rootControl is not null)
+        {
+            rootControl.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left;
+            rootControl.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top;
+
+            if (designWidth.HasValue)
+            {
+                rootControl.Width = designWidth.Value;
+            }
+            else
+            {
+                rootControl.Width = double.NaN;
+                rootControl.MinWidth = width;
+            }
+
+            if (designHeight.HasValue)
+            {
+                rootControl.Height = designHeight.Value;
+            }
+            else
+            {
+                rootControl.Height = double.NaN;
+                rootControl.MinHeight = height;
+            }
+        }
+
+        _canvasBaseWidth = width;
+        _canvasBaseHeight = height;
+        SetCanvasSize(width, height);
+    }
+
+    private void SetCanvasSize(double width, double height)
+    {
+        if (_currentVm is null)
+        {
+            return;
+        }
+
+        _currentVm.CanvasWidth = width + DesignCanvasSizing.ArtboardPadding;
+        _currentVm.CanvasHeight = height + DesignCanvasSizing.ArtboardPadding;
+    }
+
+    private void OnRootControlSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, _rootControl))
+        {
+            return;
+        }
+
+        SetCanvasSize(
+            Math.Max(_canvasBaseWidth, e.NewSize.Width),
+            Math.Max(_canvasBaseHeight, e.NewSize.Height));
     }
 
     private static void TryGetDesignSizeFromText(string? text, ref double? designWidth, ref double? designHeight)
@@ -1087,6 +1219,50 @@ public sealed partial class DesignSurfaceView : UserControl
         return false;
     }
 
+    /// <summary>
+    /// Hit-tests the preview through the real visual tree (correct z-order,
+    /// templated controls included) and maps the result to the nearest ancestor
+    /// that belongs to a design item. The preview is hit-test-invisible in edit
+    /// mode, so the visual hit-test runs with a visibility-only filter; the
+    /// structural hit-test remains as fallback for controls the visual pass
+    /// cannot see (not yet arranged, zero size).
+    /// </summary>
+    private Control? HitTestDesignControl(Point rootPoint)
+    {
+        if (_rootControl is null || _currentVm is null)
+        {
+            return null;
+        }
+
+        foreach (Visual visual in _rootControl.GetVisualsAt(rootPoint, v => v.IsVisible))
+        {
+            if (FindMappedAncestor(visual) is { } mapped)
+            {
+                return mapped;
+            }
+        }
+
+        return FindMappedAncestor(ControlFactory.HitTest(_rootControl, rootPoint));
+    }
+
+    private Control? FindMappedAncestor(Visual? visual)
+    {
+        for (Visual? current = visual; current is not null; current = current.GetVisualParent())
+        {
+            if (current is Control control && _currentVm?.ControlMap.ContainsKey(control) == true)
+            {
+                return control;
+            }
+
+            if (ReferenceEquals(current, _rootControl))
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
     private void OnCanvasPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_currentVm is null || _rootControl is null || _canvas is null)
@@ -1127,7 +1303,7 @@ public sealed partial class DesignSurfaceView : UserControl
 
         Point canvasPoint = e.GetPosition(_canvas);
         Point rootPoint = e.GetPosition(_rootControl);
-        Control? hit = ControlFactory.HitTest(_rootControl, rootPoint);
+        Control? hit = HitTestDesignControl(rootPoint);
         if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
         {
             ApplySelection(item, e.KeyModifiers);
@@ -1475,6 +1651,11 @@ public sealed partial class DesignSurfaceView : UserControl
 
         if (item.VisualElement?.Parent is Grid grid)
         {
+            // A grid without explicit definitions has one implicit row/column: the
+            // upper bound must never drop below zero, or the nudge writes -1 and
+            // Grid.SetRow/SetColumn throws.
+            int maxRow = Math.Max(0, grid.RowDefinitions.Count - 1);
+            int maxColumn = Math.Max(0, grid.ColumnDefinitions.Count - 1);
             int row = GetAttachedInt(item, "Grid.Row");
             int column = GetAttachedInt(item, "Grid.Column");
             if (dy < 0)
@@ -1483,7 +1664,7 @@ public sealed partial class DesignSurfaceView : UserControl
             }
             else if (dy > 0)
             {
-                row = Math.Min(grid.RowDefinitions.Count - 1, row + 1);
+                row = Math.Min(maxRow, row + 1);
             }
 
             if (dx < 0)
@@ -1492,7 +1673,7 @@ public sealed partial class DesignSurfaceView : UserControl
             }
             else if (dx > 0)
             {
-                column = Math.Min(grid.ColumnDefinitions.Count - 1, column + 1);
+                column = Math.Min(maxColumn, column + 1);
             }
 
             SetAttachedInt(item, "Grid.Row", row);
@@ -1599,7 +1780,7 @@ public sealed partial class DesignSurfaceView : UserControl
             return;
         }
 
-        Control? hit = ControlFactory.HitTest(_rootControl!, surfacePoint);
+        Control? hit = HitTestDesignControl(surfacePoint);
         IDesignItem? hover = null;
         if (hit is not null && _currentVm.ControlMap.TryGetValue(hit, out DesignItem? item) && item is not null)
         {
@@ -1850,7 +2031,7 @@ public sealed partial class DesignSurfaceView : UserControl
         }
 
         Point rootPoint = TranslateToRoot(currentPoint);
-        Control? hit = ControlFactory.HitTest(_rootControl!, rootPoint);
+        Control? hit = HitTestDesignControl(rootPoint);
         if (hit is null || !_currentVm.ControlMap.TryGetValue(hit, out DesignItem? target) || target is null)
         {
             _adornerLayer?.UpdateDropTarget(null, null);
@@ -2543,6 +2724,9 @@ public sealed partial class DesignSurfaceView : UserControl
 
     private static void SetAttachedInt(DesignItem item, string propertyName, int value)
     {
+        // Grid.Row/Grid.Column reject negative values with an exception that would
+        // take down the application from an input event handler.
+        value = Math.Max(0, value);
         item.AstNode.SetPropertyValue(propertyName, value.ToString(CultureInfo.InvariantCulture));
 
         if (item.VisualElement is Control control)

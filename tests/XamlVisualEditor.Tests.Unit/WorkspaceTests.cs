@@ -11,6 +11,33 @@ namespace XamlVisualEditor.Tests.Unit;
 public sealed class WorkspaceTests
 {
     [Fact]
+    public void GetGeneratedProjectCandidate_MapsGeneratedOutputToConfiguredSourceRoot()
+    {
+        string testRoot = Path.Combine(
+            Path.GetTempPath(),
+            "XveGeneratedProject",
+            Path.GetRandomFileName());
+        string generatedXaml = Path.Combine(
+            testRoot,
+            "generated",
+            "Sample.Product",
+            "Views",
+            "SampleView.axaml");
+        string projectSourceRoot = Path.Combine(testRoot, "src");
+        string expectedProjectPath = Path.Combine(
+            projectSourceRoot,
+            "Sample.Product",
+            "Sample.Product.csproj");
+
+        string? projectPath = MainWindowViewModel.GetGeneratedProjectCandidate(
+            generatedXaml,
+            projectSourceRoot,
+            candidate => FileSystemPathComparison.Equals(candidate, expectedProjectPath));
+
+        Assert.Equal(expectedProjectPath, projectPath);
+    }
+
+    [Fact]
     public void LoadAssembly_LoadsTypesFromAssembly()
     {
         TypeMetadataService service = new();
@@ -106,7 +133,7 @@ public sealed class WorkspaceTests
             Assert.False(hasMissingOutputs);
             Assert.Contains(outputPath, preferred);
             Assert.Contains(outputPath, all);
-            Assert.Contains(normalRefPath, all);
+            Assert.DoesNotContain(normalRefPath, all);
             Assert.DoesNotContain(refPath, all);
         }
         finally

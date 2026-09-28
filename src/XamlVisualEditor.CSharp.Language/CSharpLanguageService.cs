@@ -15,7 +15,7 @@ namespace XamlVisualEditor.CSharp.Language;
 /// <summary>
 /// Roslyn-based C# language service.
 /// </summary>
-public sealed class CSharpLanguageService : ILanguageIntellisenseService, IDisposable
+public sealed class CSharpLanguageService : ILanguageIntellisenseService, ILanguageWorkspaceWarmup, IDisposable
 {
     private readonly CSharpWorkspaceManager _workspaceManager;
 
@@ -45,6 +45,11 @@ public sealed class CSharpLanguageService : ILanguageIntellisenseService, IDispo
     public Task ClearWorkspaceAsync(CancellationToken ct = default)
     {
         return _workspaceManager.ClearWorkspaceAsync(ct);
+    }
+
+    public Task WarmWorkspaceAsync(CancellationToken ct = default)
+    {
+        return _workspaceManager.WarmWorkspaceAsync(ct);
     }
 
     public async Task<IReadOnlyList<CompletionItem>> GetCompletionsAsync(

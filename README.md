@@ -217,3 +217,148 @@ solution, run the relevant test projects, validate packages, and build the docs.
 ## License
 
 XamlVisualEditor is licensed under the [MIT License](LICENSE).
+
+## Command-line and automation
+
+The examples use the framework-dependent application command:
+
+```bash
+dotnet XamlVisualEditor.App.dll
+```
+
+If you use a packaged build, use the platform executable instead.
+
+### Open a document or workspace
+
+Use `--open` to open a XAML document:
+
+```bash
+dotnet XamlVisualEditor.App.dll --open ./Views/MainView.axaml
+```
+
+Use `--workspace` to open a project or solution:
+
+```bash
+dotnet XamlVisualEditor.App.dll --workspace ./Sample.slnx
+```
+
+### Map generated AXAML to source projects
+
+If generated AXAML is outside the source tree, set `XVE_PROJECT_SOURCE_ROOT`.
+XVE walks the parent folders of the generated file and uses a matching project folder.
+
+This example maps `generated/Sample.App` to `src/Sample.App/Sample.App.csproj` on Linux or macOS:
+
+```bash
+export XVE_PROJECT_SOURCE_ROOT="$PWD/src"
+dotnet XamlVisualEditor.App.dll --open "$PWD/generated/Sample.App/Views/MainView.axaml"
+```
+
+This PowerShell example uses the same folder layout on Windows:
+
+```powershell
+$env:XVE_PROJECT_SOURCE_ROOT = Join-Path $PWD "src"
+dotnet XamlVisualEditor.App.dll --open (Join-Path $PWD "generated/Sample.App/Views/MainView.axaml")
+```
+
+The project folder name and the project file name must match the generated project folder name.
+
+### Start the MCP server
+
+Use `--mcp` to start the local HTTP MCP server:
+
+```bash
+dotnet XamlVisualEditor.App.dll --mcp
+```
+
+The default endpoint is `http://127.0.0.1:4712/mcp/`.
+
+Use these options to change the transport or HTTP endpoint:
+
+| Option | Values | Default with `--mcp` |
+| --- | --- | --- |
+| `--mcp-transport` | `stdio`, `http`, or `both` | `http` |
+| `--mcp-port` | `1` through `65535` | `4712` |
+| `--mcp-path` | An HTTP path | `/mcp/` |
+
+This example starts an HTTP server on a different endpoint:
+
+```bash
+dotnet XamlVisualEditor.App.dll --mcp --mcp-port 4812 --mcp-path /editor/
+```
+
+You can also select a transport with the short form:
+
+```bash
+dotnet XamlVisualEditor.App.dll --mcp=stdio
+```
+
+Use HTTP for a normal desktop process. If the MCP client owns the standard streams, use stdio.
+
+The first MCP connection requests workspace access. The initialize result contains a session token for later requests.
+
+### Configure the previewer
+
+If a library workspace needs a separate application assembly, set `XVE_PREVIEWER_APP_ASSEMBLY`:
+
+```bash
+export XVE_PREVIEWER_APP_ASSEMBLY="$PWD/bin/Debug/net10.0/Sample.App.dll"
+```
+
+```powershell
+$env:XVE_PREVIEWER_APP_ASSEMBLY = Join-Path $PWD "bin/Debug/net10.0/Sample.App.dll"
+```
+
+Use the full path of the application assembly. The assembly directory must contain its runtime configuration and dependency files.
+
+Set `XVE_PREVIEWER_AUTOTRUST=1` to skip the previewer trust prompt:
+
+```bash
+export XVE_PREVIEWER_AUTOTRUST=1
+```
+
+```powershell
+$env:XVE_PREVIEWER_AUTOTRUST = "1"
+```
+
+CAUTION: Use automatic trust only for a workspace that you trust. The previewer runs workspace code in another process.
+
+### Use the IDE bridge
+
+The IDE bridge uses JSON-RPC 2.0 messages with `Content-Length` framing.
+Initialize the bridge before you send document or preview requests.
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"bridge.initialize","params":{"sessionToken":null,"workspaceId":null,"clientName":"automation","clientVersion":"1"}}
+```
+
+Use `XVE_IDEBRIDGE_AUTOCONSENT=readonly` for unattended read-only sessions:
+
+```bash
+export XVE_IDEBRIDGE_AUTOCONSENT=readonly
+```
+
+```powershell
+$env:XVE_IDEBRIDGE_AUTOCONSENT = "readonly"
+```
+
+The value `full` also permits write operations.
+
+CAUTION: Use `full` only for a trusted local client. This value skips the normal permission prompt.
+
+The bridge provides these automation methods:
+
+| Method | Purpose |
+| --- | --- |
+| `document.close` | Close an open document without saving it. |
+| `editor.status` | Return the active document, open-document count, and process memory values. |
+| `preview.export` | Render an open AXAML document and save the preview frame as a PNG file. |
+
+Open the document before you export its preview:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"document.open","params":{"filePath":"./Views/MainView.axaml"}}
+{"jsonrpc":"2.0","id":3,"method":"preview.export","params":{"filePath":"./Views/MainView.axaml","outputPath":"./artifacts/MainView.png","timeoutMs":90000}}
+{"jsonrpc":"2.0","id":4,"method":"document.close","params":{"filePath":"./Views/MainView.axaml"}}
+{"jsonrpc":"2.0","id":5,"method":"editor.status"}
+```

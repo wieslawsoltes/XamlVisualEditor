@@ -11,6 +11,7 @@
     input:DragDrop.AllowDrop="True"
     v:FileDropBehavior.OpenFileCommand="{CompiledBinding OpenPathCommand}"
     v:FileDropBehavior.OpenPathsCommand="{CompiledBinding OpenPathsCommand}"
+    v:WindowLayoutBehavior.IsEnabled="True"
         Width="1400"
         Height="900"
         WindowStartupLocation="CenterScreen"

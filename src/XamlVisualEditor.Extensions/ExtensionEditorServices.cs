@@ -20,9 +20,29 @@ public interface IEditorServices
     /// <summary>Opens a document and navigates to a location.</summary>
     Task<bool> OpenLocationAsync(LanguageLocation location, CancellationToken ct);
 
+    /// <summary>Closes an open document without saving; returns false when it is not open.</summary>
+    Task<bool> CloseDocumentAsync(string filePath, CancellationToken ct)
+    {
+        return Task.FromResult(false);
+    }
+
+    /// <summary>Renders an open designer document in the previewer and saves the frame as PNG.</summary>
+    Task<PreviewExportResult> ExportPreviewAsync(string filePath, string outputPath, int timeoutMs, CancellationToken ct)
+    {
+        return Task.FromResult(new PreviewExportResult(false, "Preview export is not supported.", 0, 0, outputPath));
+    }
+
     /// <summary>Raised when the active document changes.</summary>
     event EventHandler<EditorActiveDocumentChangedEventArgs>? ActiveDocumentChanged;
 }
+
+/// <summary>Result of a previewer frame export.</summary>
+public sealed record PreviewExportResult(
+    bool Success,
+    string? Error,
+    int Width,
+    int Height,
+    string OutputPath);
 
 /// <summary>Specifies how documents are opened.</summary>
 public enum EditorDocumentOpenBehavior

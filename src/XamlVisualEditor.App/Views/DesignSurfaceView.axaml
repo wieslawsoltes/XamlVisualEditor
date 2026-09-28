@@ -116,7 +116,7 @@
                              Guides="{CompiledBinding HorizontalGuides}"
                              IsVisible="{CompiledBinding ShowRulers}" />
 
-                    <ScrollViewer Name="SurfaceScrollViewer"
+            <ScrollViewer Name="SurfaceScrollViewer"
                           Grid.Row="1" Grid.Column="1"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
@@ -166,6 +166,26 @@
                     </Border>
                 </ThemeVariantScope>
             </ScrollViewer>
+
+            <Border Grid.Row="1"
+                    Grid.Column="1"
+                    ZIndex="1000"
+                    Background="#D01E1E1E"
+                    IsHitTestVisible="False"
+                    IsVisible="{CompiledBinding IsRebuilding}">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12">
+                    <ProgressBar Width="280" IsIndeterminate="True" />
+                    <TextBlock Text="{CompiledBinding RebuildStatus}"
+                               Foreground="White"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="Control constructors run on the UI thread."
+                               Foreground="#BFFFFFFF"
+                               FontSize="11"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
         </Grid>
     </DockPanel>
 
